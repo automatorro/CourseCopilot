@@ -109,7 +109,8 @@ const CourseWorkspacePage: React.FC = () => {
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectionRef = useRef<{ start: number, end: number }>({ start: 0, end: 0 });
-  const aiActionsRef = useRef<HTMLDivElement>(null);
+  const aiActionsDesktopRef = useRef<HTMLDivElement>(null);
+  const aiActionsMobileRef = useRef<HTMLDivElement>(null);
   
 
   // Helper functions for image token system
@@ -222,7 +223,9 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         const targetNode = event.target as Node;
-        if (aiActionsRef.current && !aiActionsRef.current.contains(targetNode)) {
+        const insideDesktop = aiActionsDesktopRef.current ? aiActionsDesktopRef.current.contains(targetNode) : false;
+        const insideMobile = aiActionsMobileRef.current ? aiActionsMobileRef.current.contains(targetNode) : false;
+        if (!insideDesktop && !insideMobile) {
             setIsAiActionsOpen(false);
         }
     };
@@ -334,6 +337,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     if (!course || !course.steps) return;
     setIsAiActionsOpen(false);
     setIsProposingChanges(true);
+    showToast('Rafinare în curs...', 'info');
 
     try {
       const currentStep = course.steps[activeStepIndex];
@@ -355,9 +359,13 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
       }
 
       const refinedText = await refineCourseContent(course, currentStep, payloadMd, selectedText, actionType);
+      if (!refinedText || refinedText.trim().length === 0) {
+        throw new Error('Serviciul de AI nu a returnat conținut. Încearcă din nou.');
+      }
       const refinedHtml = marked.parse(refinedText || '', { breaks: true }) as string;
       setOriginalForProposal(editedContent);
       setProposedContent(refinedHtml);
+      showToast('Propunere generată. Verifică și acceptă modificarea.', 'success');
     } catch (e: any) {
       showToast(e?.message || 'Rafinarea a eșuat.', 'error');
     } finally {
@@ -782,7 +790,8 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
   const isCourseComplete = (course.steps ?? []).every(s => s.is_completed);
   const isBusy = isGenerating || isProposingChanges;
   const canEdit = !isBusy;
-  const canGenerateOrRefine = canEdit && !currentStep.is_completed;
+  const canGenerate = canEdit && !currentStep.is_completed;
+  const canRefine = canEdit && !!editedContent;
 
 
   
@@ -853,7 +862,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
         <nav>
           <ul>
             {(course.steps ?? []).map((step, index) => (
-              <li key={step.id}>
+              <li key={step.id || `${index}-${step.title_key}` }>
                 <button 
                   onClick={() => setActiveStepIndex(index)}
                   disabled={index > 0 && !((course.steps ?? [])[index - 1]?.is_completed)}
@@ -910,7 +919,27 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
             {activeTab === 'editor' ? (
                 <div className="flex-1 flex flex-col">
                         <div className="flex-1 relative min-h-0 pb-40 sm:pb-28">
-                            <TinyEditor key={`${currentStep.id}-${activeTab}`} value={editedContent} refreshSignal={editorRefreshTick} onChange={setEditedContent} onSelectionChange={(text) => setSelectedText(text)} />
+                            <TinyEditor
+                              key={`${currentStep.id}-${activeTab}`}
+                              value={editedContent}
+                              refreshSignal={editorRefreshTick}
+                              onChange={setEditedContent}
+                              onSelectionChange={(text) => {
+                                setSelectedText(text);
+                                const html = editedContent || '';
+                                const trimmed = (text || '').trim();
+                                if (trimmed.length === 0) {
+                                  selectionRef.current = { start: 0, end: 0 };
+                                  return;
+                                }
+                                const idx = html.indexOf(trimmed);
+                                if (idx >= 0) {
+                                  selectionRef.current = { start: idx, end: idx + trimmed.length };
+                                } else {
+                                  selectionRef.current = { start: 0, end: 0 };
+                                }
+                              }}
+                            />
                         </div>
                 </div>
             ) : (
@@ -930,17 +959,17 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
                 <div className="flex gap-2 flex-wrap">
                     <button
                         onClick={handleGenerate}
-                        disabled={!canGenerateOrRefine}
+                        disabled={!canGenerate}
                         className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
                     >
                         <Sparkles size={16}/>
                         {t('course.generate')}
                     </button>
                     
-                    <div ref={aiActionsRef} className="relative">
+                    <div ref={aiActionsDesktopRef} className="relative">
                         <button
                             onClick={() => setIsAiActionsOpen(prev => !prev)}
-                            disabled={!canGenerateOrRefine || !editedContent}
+                            disabled={!canRefine}
                             className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50"
                             title={t('course.refine.tooltip')}
                         >
@@ -1000,20 +1029,20 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
       </main>
       {/* Sticky mobile actions bar */}
       <div id="mobile-actions-bar" className="sm:hidden fixed bottom-0 left-0 right-0 z-40 border-t dark:border-gray-700 bg-white/90 dark:bg-gray-800/80 backdrop-blur-sm shadow-lg safe-area-bottom">
-        <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <div className="px-3 py-2 flex items-center justify-between gap-2">
           <div className="flex gap-2 flex-1">
             <button
               onClick={handleGenerate}
-              disabled={!canGenerateOrRefine}
+              disabled={!canGenerate}
               className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
             >
               <Sparkles size={16}/>
               {t('course.generate')}
             </button>
-            <div ref={aiActionsRef} className="relative flex-1">
+            <div ref={aiActionsMobileRef} className="relative flex-1">
               <button
                 onClick={() => setIsAiActionsOpen(prev => !prev)}
-                disabled={!canGenerateOrRefine || !editedContent}
+                disabled={!canRefine}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50"
                 title={t('course.refine.tooltip')}
               >
@@ -1134,7 +1163,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
               <nav>
                 <ul>
                   {(course?.steps ?? []).map((step, index) => (
-                    <li key={step.id}>
+                    <li key={step.id || `${index}-${step.title_key}` }>
                       <button
                         onClick={() => { setActiveStepIndex(index); setIsSidebarOpen(false); }}
                         disabled={index > 0 && !((course?.steps ?? [])[index - 1]?.is_completed)}

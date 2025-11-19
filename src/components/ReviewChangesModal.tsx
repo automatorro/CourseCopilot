@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from '../contexts/I18nContext';
 import { X, Check, GitPullRequestArrow } from 'lucide-react';
 
@@ -16,6 +16,8 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
   onReject,
 }) => {
   const { t } = useTranslation();
+  const [view, setView] = useState<'render' | 'text'>('render');
+  const toText = (s: string) => (s || '').replace(/<[^>]+>/g, '').trim();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s' }}>
@@ -26,9 +28,25 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
             <GitPullRequestArrow className="text-primary-600 dark:text-primary-400" size={24} />
             <h2 className="text-xl font-bold">{t('course.reviewModal.title')}</h2>
           </div>
-          <button onClick={onReject} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-            <X size={24} />
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="rounded-md border dark:border-gray-700 overflow-hidden">
+              <button
+                onClick={() => setView('render')}
+                className={`px-3 py-1 text-sm ${view === 'render' ? 'bg-primary-600 text-white' : 'bg-transparent'} hover:bg-primary-600 hover:text-white`}
+              >
+                Previzualizare
+              </button>
+              <button
+                onClick={() => setView('text')}
+                className={`px-3 py-1 text-sm ${view === 'text' ? 'bg-primary-600 text-white' : 'bg-transparent'} hover:bg-primary-600 hover:text-white`}
+              >
+                Text
+              </button>
+            </div>
+            <button onClick={onReject} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <X size={24} />
+            </button>
+          </div>
         </div>
 
         {/* Content Comparison */}
@@ -38,11 +56,11 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
             <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-b dark:border-gray-700">
               <h3 className="font-semibold text-gray-700 dark:text-gray-300">{t('course.reviewModal.original')}</h3>
             </div>
-            <textarea
-              readOnly
-              value={originalContent}
-              className="flex-1 w-full p-4 text-sm bg-transparent border-none focus:ring-0 resize-none font-mono"
-            />
+            {view === 'render' ? (
+              <div className="flex-1 overflow-auto p-4 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: originalContent }} />
+            ) : (
+              <textarea readOnly value={toText(originalContent)} className="flex-1 w-full p-4 text-sm bg-transparent border-none focus:ring-0 resize-none font-mono" />
+            )}
           </div>
 
           {/* Proposed Content */}
@@ -50,11 +68,11 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
             <div className="p-3 bg-primary-50 dark:bg-primary-900/50 border-b border-primary-200 dark:border-primary-800">
               <h3 className="font-semibold text-primary-800 dark:text-primary-200">{t('course.reviewModal.proposed')}</h3>
             </div>
-            <textarea
-              readOnly
-              value={proposedContent}
-              className="flex-1 w-full p-4 text-sm bg-transparent border-none focus:ring-0 resize-none font-mono"
-            />
+            {view === 'render' ? (
+              <div className="flex-1 overflow-auto p-4 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: proposedContent }} />
+            ) : (
+              <textarea readOnly value={toText(proposedContent)} className="flex-1 w-full p-4 text-sm bg-transparent border-none focus:ring-0 resize-none font-mono" />
+            )}
           </div>
         </div>
 
