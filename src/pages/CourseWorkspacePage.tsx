@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { marked } from 'marked';
-import TurndownService from 'turndown';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
+import { marked } from 'marked';
+
+// @ts-ignore
+import * as turndownPluginGfm from 'turndown-plugin-gfm';
+const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
+import TurndownService from 'turndown';
+
 import { Course, CourseStep } from '../types';
+
 import { generateCourseContent, refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo } from 'lucide-react';
@@ -18,41 +24,41 @@ import MarkdownPreview from '../components/MarkdownPreview';
 import TinyEditor from '../components/editor/TinyEditor';
 
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-    const { t } = useTranslation();
-    const helpItems = [
-        { title: t('course.helpModal.step1.title'), desc: t('course.helpModal.step1.desc'), icon: BookOpen },
-        { title: t('course.helpModal.step2.title'), desc: t('course.helpModal.step2.desc'), icon: Sparkles },
-        { title: t('course.helpModal.step3.title'), desc: t('course.helpModal.step3.desc'), icon: Wand },
-    ];
+  const { t } = useTranslation();
+  const helpItems = [
+    { title: t('course.helpModal.step1.title'), desc: t('course.helpModal.step1.desc'), icon: BookOpen },
+    { title: t('course.helpModal.step2.title'), desc: t('course.helpModal.step2.desc'), icon: Sparkles },
+    { title: t('course.helpModal.step3.title'), desc: t('course.helpModal.step3.desc'), icon: Wand },
+  ];
 
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s'}}>
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all">
-                <div className="p-6 text-center border-b dark:border-gray-700">
-                    <h2 className="text-2xl font-bold">{t('course.helpModal.title')}</h2>
-                    <p className="text-gray-500 dark:text-gray-400 mt-1">{t('course.helpModal.intro')}</p>
-                </div>
-                <div className="p-8 space-y-6">
-                    {helpItems.map((item, index) => (
-                        <div key={index} className="flex items-start gap-4">
-                            <div className="flex-shrink-0 bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-300 rounded-full h-10 w-10 flex items-center justify-center">
-                                <item.icon size={20} />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold">{item.title}</h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{item.desc}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="p-6 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end">
-                    <button onClick={onClose} className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 flex items-center gap-2">
-                        {t('course.helpModal.button')} <ChevronRight size={16} />
-                    </button>
-                </div>
-            </div>
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s' }}>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all">
+        <div className="p-6 text-center border-b dark:border-gray-700">
+          <h2 className="text-2xl font-bold">{t('course.helpModal.title')}</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">{t('course.helpModal.intro')}</p>
         </div>
-    );
+        <div className="p-8 space-y-6">
+          {helpItems.map((item, index) => (
+            <div key={index} className="flex items-start gap-4">
+              <div className="flex-shrink-0 bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-300 rounded-full h-10 w-10 flex items-center justify-center">
+                <item.icon size={20} />
+              </div>
+              <div>
+                <h3 className="font-semibold">{item.title}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="p-6 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end">
+          <button onClick={onClose} className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 flex items-center gap-2">
+            {t('course.helpModal.button')} <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 
@@ -77,7 +83,7 @@ const CourseWorkspacePage: React.FC = () => {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [proposedContent, setProposedContent] = useState<string | null>(null);
   const [originalForProposal, setOriginalForProposal] = useState<string | null>(null);
-  
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showImageStudio, setShowImageStudio] = useState(false);
   const [imageMap, setImageMap] = useState<Record<string, { previewUrl?: string; publicUrl?: string; alt?: string }>>({});
@@ -100,18 +106,18 @@ const CourseWorkspacePage: React.FC = () => {
     void linkUrl; void linkText; void imageUrl; void imageAlt; void linkUrlValid; void imageUrlValid; void tableRows; void tableCols; void localImageFile; void localImageError;
     void setLinkUrl; void setLinkText; void setImageUrl; void setImageAlt; void setTableRows; void setTableCols;
   }, []);
-  
+
 
   // Import document state (DOCX/TXT/PDF prototype)
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectionRef = useRef<{ start: number, end: number }>({ start: 0, end: 0 });
   const aiActionsDesktopRef = useRef<HTMLDivElement>(null);
   const aiActionsMobileRef = useRef<HTMLDivElement>(null);
-  
+
 
   // Helper functions for image token system
   const genImageId = useCallback(() => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, []);
@@ -132,15 +138,15 @@ const CourseWorkspacePage: React.FC = () => {
   const processImageTokensForSave = useCallback(async (md: string) => {
     let processed = md;
     const tokenMatches = [...md.matchAll(/!\[([^\]]*)\]\(@img\{([^}]+)\}\)/g)];
-    
+
     for (const match of tokenMatches) {
       const [fullMatch, altText, tokenId] = match;
       const entry = imageMap[tokenId];
-      
+
       if (entry?.previewUrl && !entry.publicUrl) {
         try {
           let blob: Blob;
-          
+
           if (entry.previewUrl.startsWith('data:')) {
             // Convert data URL to blob
             const parts = entry.previewUrl.split(',');
@@ -158,16 +164,16 @@ const CourseWorkspacePage: React.FC = () => {
           } else {
             continue;
           }
-          
+
           // Upload to storage
           const publicUrl = await uploadBlobToStorage(blob, user?.id || null, course?.id || null, altText);
-          
+
           // Update imageMap with public URL
           setImageMap(prev => ({
             ...prev,
             [tokenId]: { ...prev[tokenId], publicUrl }
           }));
-          
+
           // Replace token with public URL in content
           processed = processed.replace(fullMatch, `![${altText || entry.alt || 'Image'}](${publicUrl})`);
         } catch (error) {
@@ -179,25 +185,25 @@ const CourseWorkspacePage: React.FC = () => {
         processed = processed.replace(fullMatch, `![${altText || entry.alt || 'Image'}](${entry.publicUrl})`);
       }
     }
-    
+
     return processed;
   }, [imageMap, user?.id, course?.id]);
 
-const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','image/webp'];
+  const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
   const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
 
   const fetchCourseData = useCallback(async () => {
     if (!id || !user) return null;
     const { data, error } = await supabase
-        .from('courses')
-        .select(`*, steps:course_steps(*)`)
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single();
+      .from('courses')
+      .select(`*, steps:course_steps(*)`)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single();
     if (error) {
-        console.error('Error fetching course data:', error);
-        showToast('Failed to load course data.', 'error');
-        return null;
+      console.error('Error fetching course data:', error);
+      showToast('Failed to load course data.', 'error');
+      return null;
     }
     const sortedSteps = (data?.steps || []).sort((a: CourseStep, b: CourseStep) => a.step_order - b.step_order);
     return { ...data, steps: sortedSteps } as Course;
@@ -219,15 +225,15 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     };
     loadUserCourses();
   }, [user]);
-  
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-        const targetNode = event.target as Node;
-        const insideDesktop = aiActionsDesktopRef.current ? aiActionsDesktopRef.current.contains(targetNode) : false;
-        const insideMobile = aiActionsMobileRef.current ? aiActionsMobileRef.current.contains(targetNode) : false;
-        if (!insideDesktop && !insideMobile) {
-            setIsAiActionsOpen(false);
-        }
+      const targetNode = event.target as Node;
+      const insideDesktop = aiActionsDesktopRef.current ? aiActionsDesktopRef.current.contains(targetNode) : false;
+      const insideMobile = aiActionsMobileRef.current ? aiActionsMobileRef.current.contains(targetNode) : false;
+      if (!insideDesktop && !insideMobile) {
+        setIsAiActionsOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -240,12 +246,12 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     void handleLocalImageChange;
     void handleSubmitTable;
   }, []);
-  
+
   useEffect(() => {
-      const hasSeenHelp = localStorage.getItem('hasSeenWorkspaceHelp');
-      if (hasSeenHelp !== 'true') {
-          setIsHelpModalOpen(true);
-      }
+    const hasSeenHelp = localStorage.getItem('hasSeenWorkspaceHelp');
+    if (hasSeenHelp !== 'true') {
+      setIsHelpModalOpen(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -253,10 +259,10 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
       setEditorRefreshTick((n) => n + 1);
     }
   }, [activeTab]);
-  
+
   const handleCloseHelpModal = () => {
-      setIsHelpModalOpen(false);
-      localStorage.setItem('hasSeenWorkspaceHelp', 'true');
+    setIsHelpModalOpen(false);
+    localStorage.setItem('hasSeenWorkspaceHelp', 'true');
   };
 
   useEffect(() => {
@@ -270,12 +276,12 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
         const firstIncompleteStep = stepsArr.findIndex((s: CourseStep) => !s.is_completed);
         setActiveStepIndex(firstIncompleteStep >= 0 ? firstIncompleteStep : 0);
       }
-      if(isMounted) setIsLoading(false);
+      if (isMounted) setIsLoading(false);
     };
     loadCourse();
     return () => { isMounted = false; };
   }, [fetchCourseData]);
-  
+
   const originalContentForStep = course?.steps?.[activeStepIndex]?.content ?? '';
 
   useEffect(() => {
@@ -317,7 +323,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
       if (saved && saved.length > 0) {
         setEditedContent(saved);
       }
-    } catch {}
+    } catch { }
   }, [course, activeStepIndex]);
 
   useEffect(() => {
@@ -328,7 +334,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     const interval = setInterval(() => {
       try {
         localStorage.setItem(key, editedContent || '');
-      } catch {}
+      } catch { }
     }, 7000);
     return () => clearInterval(interval);
   }, [course, activeStepIndex, editedContent]);
@@ -374,31 +380,31 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
   };
 
   const handleAcceptChanges = () => {
-      if (proposedContent === null) return;
-      
-      if (selectedText && selectionRef.current.end > selectionRef.current.start) {
-          const { start, end } = selectionRef.current;
-          const newContent = editedContent.substring(0, start) + proposedContent + editedContent.substring(end);
-          setEditedContent(newContent);
-      } else {
-          setEditedContent(proposedContent);
-      }
-      
-      setProposedContent(null);
-      setOriginalForProposal(null);
-      setSelectedText('');
-      selectionRef.current = { start: 0, end: 0 };
+    if (proposedContent === null) return;
+
+    if (selectedText && selectionRef.current.end > selectionRef.current.start) {
+      const { start, end } = selectionRef.current;
+      const newContent = editedContent.substring(0, start) + proposedContent + editedContent.substring(end);
+      setEditedContent(newContent);
+    } else {
+      setEditedContent(proposedContent);
+    }
+
+    setProposedContent(null);
+    setOriginalForProposal(null);
+    setSelectedText('');
+    selectionRef.current = { start: 0, end: 0 };
   };
 
   const handleRejectChanges = () => {
-      setProposedContent(null);
-      setOriginalForProposal(null);
+    setProposedContent(null);
+    setOriginalForProposal(null);
   };
 
   const handleSaveChanges = async (andContinue = false) => {
     if (!course || !course.steps) return;
     setIsSaving(true);
-    
+
     const currentStep = course.steps[activeStepIndex];
     const isCompletingStep = andContinue && !currentStep.is_completed;
 
@@ -409,18 +415,18 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     const contentWithProcessedTokens = await processImageTokensForSave(mdContent);
     const processedContent = await replaceBlobUrlsWithPublic(contentWithProcessedTokens, user?.id || null, course?.id || null);
 
-    const stepUpdatePayload: { content: string, is_completed?: boolean } = { 
-        content: processedContent 
+    const stepUpdatePayload: { content: string, is_completed?: boolean } = {
+      content: processedContent
     };
     if (isCompletingStep) {
-        stepUpdatePayload.is_completed = true;
+      stepUpdatePayload.is_completed = true;
     }
 
     const { error: stepError } = await supabase
       .from('course_steps')
       .update(stepUpdatePayload)
       .eq('id', currentStep.id);
-      
+
     if (stepError) {
       console.error("Error updating step:", stepError);
       showToast('Failed to save changes.', 'error');
@@ -432,28 +438,28 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     const html = marked.parse(processedContent || '', { breaks: true }) as string;
     setEditedContent(html);
     showToast('Changes saved successfully!', 'success');
-    
+
     const updatedCourseData = await fetchCourseData();
     if (updatedCourseData) {
-        setCourse(updatedCourseData);
-        // Actualizează progresul cursului în funcție de pașii completați
-        const total = (updatedCourseData.steps ?? []).length;
-        const done = (updatedCourseData.steps ?? []).filter(s => s.is_completed).length;
-        const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
-        try {
-          await supabase
-            .from('courses')
-            .update({ progress: progressPct })
-            .eq('id', updatedCourseData.id);
-          // Reflectă progresul și local
-          setCourse(prev => prev ? { ...prev, progress: progressPct } : prev);
-        } catch (e) {
-          console.warn('Progress update failed:', e);
-        }
+      setCourse(updatedCourseData);
+      // Actualizează progresul cursului în funcție de pașii completați
+      const total = (updatedCourseData.steps ?? []).length;
+      const done = (updatedCourseData.steps ?? []).filter((s: CourseStep) => s.is_completed).length;
+      const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
+      try {
+        await supabase
+          .from('courses')
+          .update({ progress: progressPct })
+          .eq('id', updatedCourseData.id);
+        // Reflectă progresul și local
+        setCourse((prev: Course | null) => prev ? { ...prev, progress: progressPct } : prev);
+      } catch (e) {
+        console.warn('Progress update failed:', e);
+      }
     }
-    
+
     if (isCompletingStep && activeStepIndex < course.steps.length - 1) {
-      setActiveStepIndex(prev => prev + 1);
+      setActiveStepIndex((prev: number) => prev + 1);
     }
     setIsSaving(false);
   };
@@ -462,11 +468,11 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     if (!course) return;
     setIsDownloading(true);
     try {
-        await exportCourseAsZip(course, t);
+      await exportCourseAsZip(course, t);
     } catch (error) {
-        console.error("Failed to export course:", error);
+      console.error("Failed to export course:", error);
     } finally {
-        setIsDownloading(false);
+      setIsDownloading(false);
     }
   };
 
@@ -479,37 +485,37 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     let newContent = editedContent;
 
     if (formatType === 'bold' || formatType === 'italic' || formatType === 'strike' || formatType === 'code') {
-        const syntax = formatType === 'bold' ? '**' : formatType === 'italic' ? '*' : formatType === 'strike' ? '~~' : '`';
-        newContent = `${editedContent.substring(0, start)}${syntax}${selected}${syntax}${editedContent.substring(end)}`;
+      const syntax = formatType === 'bold' ? '**' : formatType === 'italic' ? '*' : formatType === 'strike' ? '~~' : '`';
+      newContent = `${editedContent.substring(0, start)}${syntax}${selected}${syntax}${editedContent.substring(end)}`;
     } else {
-        const lineStartIdx = editedContent.lastIndexOf('\n', start - 1) + 1;
-        const lineEndIdx = editedContent.indexOf('\n', end);
-        const effectiveEnd = lineEndIdx === -1 ? editedContent.length : lineEndIdx;
-        const linesText = editedContent.substring(lineStartIdx, effectiveEnd);
-        const lines = linesText.split('\n');
+      const lineStartIdx = editedContent.lastIndexOf('\n', start - 1) + 1;
+      const lineEndIdx = editedContent.indexOf('\n', end);
+      const effectiveEnd = lineEndIdx === -1 ? editedContent.length : lineEndIdx;
+      const linesText = editedContent.substring(lineStartIdx, effectiveEnd);
+      const lines = linesText.split('\n');
 
-        let formatted = '';
-        if (formatType === 'h1' || formatType === 'h2') {
-            const prefix = formatType === 'h1' ? '# ' : '## ';
-            formatted = prefix + lines[0];
-            if (lines.length > 1) formatted += '\n' + lines.slice(1).join('\n');
-        } else if (formatType === 'ul') {
-            formatted = lines.map(line => `* ${line}`).join('\n');
-        } else if (formatType === 'ol') {
-            formatted = lines.map((line, idx) => `${idx + 1}. ${line}`).join('\n');
-        } else if (formatType === 'task') {
-            formatted = lines.map(line => `- [ ] ${line}`).join('\n');
-        } else if (formatType === 'blockquote') {
-            formatted = lines.map(line => `> ${line}`).join('\n');
-        } else if (formatType === 'codeblock') {
-            formatted = '```\n' + lines.join('\n') + '\n```';
-        } else if (formatType === 'hr') {
-            formatted = '---';
-        } else if (formatType === 'underline') {
-            // Markdown nu are underline nativ; folosim tag HTML
-            formatted = `<u>${lines.join('\n')}</u>`;
-        }
-        newContent = `${editedContent.substring(0, lineStartIdx)}${formatted}${editedContent.substring(effectiveEnd)}`;
+      let formatted = '';
+      if (formatType === 'h1' || formatType === 'h2') {
+        const prefix = formatType === 'h1' ? '# ' : '## ';
+        formatted = prefix + lines[0];
+        if (lines.length > 1) formatted += '\n' + lines.slice(1).join('\n');
+      } else if (formatType === 'ul') {
+        formatted = lines.map((line: string) => `* ${line}`).join('\n');
+      } else if (formatType === 'ol') {
+        formatted = lines.map((line: string, idx: number) => `${idx + 1}. ${line}`).join('\n');
+      } else if (formatType === 'task') {
+        formatted = lines.map((line: string) => `- [ ] ${line}`).join('\n');
+      } else if (formatType === 'blockquote') {
+        formatted = lines.map((line: string) => `> ${line}`).join('\n');
+      } else if (formatType === 'codeblock') {
+        formatted = '```\n' + lines.join('\n') + '\n```';
+      } else if (formatType === 'hr') {
+        formatted = '---';
+      } else if (formatType === 'underline') {
+        // Markdown nu are underline nativ; folosim tag HTML
+        formatted = `<u>${lines.join('\n')}</u>`;
+      }
+      newContent = `${editedContent.substring(0, lineStartIdx)}${formatted}${editedContent.substring(effectiveEnd)}`;
     }
     setEditedContent(newContent);
     setTimeout(() => textarea.focus(), 0);
@@ -559,10 +565,10 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     const end = textarea.selectionEnd;
     const safeAlt = alt?.trim() || 'Image';
     let insert = '';
-    
+
     if (url.startsWith('data:') || url.startsWith('blob:')) {
       const id = genImageId();
-      setImageMap(prev => ({ ...prev, [id]: { previewUrl: url, alt: safeAlt } }));
+      setImageMap((prev: Record<string, { previewUrl?: string; publicUrl?: string; alt?: string }>) => ({ ...prev, [id]: { previewUrl: url, alt: safeAlt } }));
       insert = `![${safeAlt}](@img{${id}})`;
     } else {
       insert = `![${safeAlt}](${url})`;
@@ -572,7 +578,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     setTimeout(() => textarea.focus(), 0);
   };
 
-  
+
 
   const handleLocalImageChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0] || null;
@@ -650,24 +656,63 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
 
       if (steps.length === 0) throw new Error('Nu s-au identificat pași din document.');
 
+      // Calculate insertion index: exactly at current active step position
+      // If no steps exist, start at 1.
+      // If steps exist, insert at activeStepIndex.
+      const currentSteps = course.steps || [];
+      // If we are at the start or want to insert before the current step
+
+      const currentStepOrder = currentSteps[activeStepIndex]?.step_order || 1;
+      // If we are inserting AT the current position, the new step takes the current order
+      // and the current step (and all following) must be shifted down.
+      const newStepOrder = currentStepOrder;
+
+      // Shift existing steps
+      if (currentSteps.length > 0) {
+        // Fetch all steps that need shifting (>= newStepOrder)
+        const { data: allSteps } = await supabase
+          .from('course_steps')
+          .select('id, step_order')
+          .eq('course_id', course.id)
+          .gte('step_order', newStepOrder);
+
+        if (allSteps && allSteps.length > 0) {
+          // Sort by order descending to avoid unique constraint issues if any (though upsert handles it)
+          // Actually, just incrementing is fine.
+          const updates = allSteps.map((s: any) => ({
+            id: s.id,
+            step_order: s.step_order + 1
+          }));
+          const { error: updateError } = await supabase.from('course_steps').upsert(updates);
+          if (updateError) console.error('Failed to shift steps:', updateError);
+        }
+      }
+
       const newStepsPayload = steps.map((s, idx) => ({
         course_id: course.id,
         user_id: user.id,
         title_key: s.title_key,
         content: s.content,
         is_completed: false,
-        step_order: (course.steps?.length || 0) + idx + 1,
+        step_order: newStepOrder + idx,
       }));
 
       const { error: stepsError } = await supabase.from('course_steps').insert(newStepsPayload);
       if (stepsError) throw stepsError;
 
-      showToast('Import reușit: pașii au fost adăugați.', 'success');
+      showToast('Import reușit: pasul a fost adăugat după cel curent.', 'success');
       setImportFile(null);
-      setCourse(prev => prev ? {
-        ...prev,
-        steps: [...(prev.steps || []), ...newStepsPayload.map(s => ({ ...s, id: '', created_at: new Date().toISOString() }))],
-      } : prev);
+
+      // Reload course to get fresh order
+      const updatedCourse = await fetchCourseData();
+      if (updatedCourse) {
+        setCourse(updatedCourse);
+        // Optionally jump to the new step? 
+        // User said: "pastreaza decizia de blocare". 
+        // If current step is NOT completed, the new step (at activeIndex + 1) will be locked.
+        // So we stay on current step.
+      }
+
     } catch (err: any) {
       console.error('Import error:', err);
       setImportError(err.message || 'A apărut o eroare la import.');
@@ -680,10 +725,24 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
   const parseDocxToSteps = async (arrayBuffer: ArrayBuffer): Promise<{ title_key: string; content: string }[]> => {
     try {
       const mammothLib: any = await import('mammoth');
+      // Mammoth converts images to base64 by default
       const result = await mammothLib.convertToHtml({ arrayBuffer });
       const html: string = result.value || '';
-      const md = htmlToSimpleMarkdown(html);
-      return splitMarkdownIntoSteps(md, 'course.steps.manual');
+
+      // Use TurndownService to preserve images and better formatting
+      const turndownService = new TurndownService({
+        headingStyle: 'atx',
+        codeBlockStyle: 'fenced'
+      });
+      // Use GFM plugin for tables
+      turndownService.use(gfm);
+      // Keep images
+      turndownService.keep(['img']);
+
+      const md = turndownService.turndown(html);
+
+      // Return single step
+      return [{ title_key: 'course.steps.manual', content: md }];
     } catch (e) {
       console.warn('DOCX parse fallback:', e);
       const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
@@ -701,28 +760,26 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
           pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
         }
       } catch { /* best-effort; continue */ }
+
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
       const pdf = await loadingTask.promise;
-      const steps: { title_key: string; content: string }[] = [];
+
+      let fullContent = '';
+
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((i: any) => (i.str || '')).join(' ').replace(/\s+/g, ' ').trim();
-        const chunkSize = 5000;
-        if (pageText.length <= chunkSize) {
-          const content = `# Slide ${p}\n\n${pageText}`;
-          steps.push({ title_key: 'course.steps.slides', content });
-        } else {
-          let idx = 0; let chunkIndex = 1;
-          while (idx < pageText.length) {
-            const chunk = pageText.slice(idx, idx + chunkSize);
-            const content = `# Slide ${p} • Parte ${chunkIndex}\n\n${chunk}`;
-            steps.push({ title_key: 'course.steps.slides', content });
-            idx += chunkSize; chunkIndex += 1;
-          }
+
+        // Join items with space and clean up excessive whitespace
+        const pageText = textContent.items.map((i: any) => (i.str || '')).join(' ');
+        const cleanText = pageText.replace(/\s{2,}/g, ' ').trim();
+
+        if (cleanText.length > 0) {
+          fullContent += `# Slide ${p}\n\n${cleanText}\n\n---\n\n`;
         }
       }
-      return steps;
+
+      return [{ title_key: 'course.steps.slides', content: fullContent }];
     } catch (e) {
       console.warn('PDF parse failed:', e);
       throw new Error('Nu am potut procesa PDF-ul. Verifică fișierul sau încearcă altul.');
@@ -730,11 +787,8 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
   };
 
   const parseTxtToSteps = (text: string): { title_key: string; content: string }[] => {
-    const sections = text.split(/\n(?=##\s)/g).filter(s => s.trim().length > 0);
-    if (sections.length === 0) {
-      return [{ title_key: 'course.steps.manual', content: text }];
-    }
-    return sections.map(s => ({ title_key: 'course.steps.manual', content: s }));
+    // Return single step instead of splitting
+    return [{ title_key: 'course.steps.manual', content: text }];
   };
 
   const htmlToSimpleMarkdown = (html: string): string => {
@@ -755,11 +809,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
       .trim();
   };
 
-  const splitMarkdownIntoSteps = (md: string, titleKey: string): { title_key: string; content: string }[] => {
-    const parts = md.split(/\n(?=##\s)/g).filter(p => p.trim().length > 0);
-    if (parts.length === 0) return [{ title_key: titleKey, content: md }];
-    return parts.map(p => ({ title_key: titleKey, content: p }));
-  };
+
 
   const handleSubmitTable = () => {
     if (!textareaRef.current) return;
@@ -777,35 +827,35 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
     setShowTablePanel(false);
     setTimeout(() => textarea.focus(), 0);
   };
-  
-  
-  
+
+
+
   const currentStep = course?.steps?.[activeStepIndex];
 
   if (isLoading || !course || !currentStep) {
-    return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-primary-500" size={32}/></div>;
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-primary-500" size={32} /></div>;
   }
-  
+
   const isLastStep = activeStepIndex === ((course.steps?.length ?? 0) - 1);
-  const isCourseComplete = (course.steps ?? []).every(s => s.is_completed);
+  const isCourseComplete = (course.steps ?? []).every((s: CourseStep) => s.is_completed);
   const isBusy = isGenerating || isProposingChanges;
   const canEdit = !isBusy;
   const canGenerate = canEdit && !currentStep.is_completed;
   const canRefine = canEdit && !!editedContent;
 
 
-  
+
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] overflow-x-hidden">
       {isHelpModalOpen && <HelpModal onClose={handleCloseHelpModal} />}
       {proposedContent !== null && originalForProposal !== null && (
-          <ReviewChangesModal 
-              originalContent={originalForProposal}
-              proposedContent={proposedContent}
-              onAccept={handleAcceptChanges}
-              onReject={handleRejectChanges}
-          />
+        <ReviewChangesModal
+          originalContent={originalForProposal}
+          proposedContent={proposedContent}
+          onAccept={handleAcceptChanges}
+          onReject={handleRejectChanges}
+        />
       )}
       {showImageStudio && (
         <ImageStudioModal
@@ -830,7 +880,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
               }}
               className="w-full px-3 py-2 text-sm rounded border dark:border-gray-700 bg-white dark:bg-gray-900"
             >
-              {userCourses.map(c => (
+              {userCourses.map((c: { id: string; title: string }) => (
                 <option key={c.id} value={c.id}>{c.title}</option>
               ))}
             </select>
@@ -856,23 +906,28 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
             >
               {importing ? 'Import în curs...' : 'Importă în pași'}
             </button>
-            <div className="text-[11px] text-gray-500 dark:text-gray-400">Acceptă .docx, .txt (secțiuni "## "), .pdf (prototip).</div>
+            <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-800 dark:text-amber-200">
+              <strong>Notă:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li><strong>DOCX:</strong> Recomandat pentru imagini și tabele.</li>
+                <li><strong>PDF:</strong> Importă doar text simplu.</li>
+              </ul>
+            </div>
           </div>
         </div>
         <nav>
           <ul>
-            {(course.steps ?? []).map((step, index) => (
-              <li key={step.id || `${index}-${step.title_key}` }>
-                <button 
+            {(course.steps ?? []).map((step: CourseStep, index: number) => (
+              <li key={step.id || `${index}-${step.title_key}`}>
+                <button
                   onClick={() => setActiveStepIndex(index)}
                   disabled={index > 0 && !((course.steps ?? [])[index - 1]?.is_completed)}
-                  className={`w-full text-left p-3 my-1 rounded-lg flex items-center gap-3 transition-colors ${
-                    activeStepIndex === index 
-                      ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300' 
-                      : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed'
-                  }`}
+                  className={`w-full text-left p-3 my-1 rounded-lg flex items-center gap-3 transition-colors ${activeStepIndex === index
+                    ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed'
+                    }`}
                 >
-                  {step.is_completed ? <CheckCircle className="text-green-500" size={20}/> : <Circle className="text-gray-400" size={20} />}
+                  {step.is_completed ? <CheckCircle className="text-green-500" size={20} /> : <Circle className="text-gray-400" size={20} />}
                   <span className="font-medium">{t(step.title_key)}</span>
                 </button>
               </li>
@@ -884,181 +939,181 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
       {/* Main Content */}
       <main className="flex-1 flex flex-col p-6 lg:p-10 pb-24 sm:pb-10">
         <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
-            <div className="p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
-                <button 
-                    onClick={() => window.location.href = '/#/dashboard'} 
-                    className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mr-2" 
-                    title="Înapoi la cursurile mele"
-                    aria-label="Înapoi la dashboard"
-                >
-                    <ArrowLeft size={18} />
-                </button>
-                <button className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setIsSidebarOpen(true)} aria-label="Deschide pașii">
-                    <ListTodo size={18} />
-                </button>
-                <h1 className="text-lg sm:text-2xl font-bold">{t(currentStep.title_key)}</h1>
-            </div>
+          <div className="p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
+            <button
+              onClick={() => window.location.href = '/#/dashboard'}
+              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mr-2"
+              title="Înapoi la cursurile mele"
+              aria-label="Înapoi la dashboard"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <button className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setIsSidebarOpen(true)} aria-label="Deschide pașii">
+              <ListTodo size={18} />
+            </button>
+            <h1 className="text-lg sm:text-2xl font-bold">{t(currentStep.title_key)}</h1>
+          </div>
 
-            <div className="border-b dark:border-gray-700 px-4">
-                <nav className="-mb-px flex space-x-4" aria-label="Tabs">
-                    <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
-                    <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
-                </nav>
-            </div>
-            
-            <div className="flex-1 flex flex-col min-h-0">
-                {isBusy && (
-                    <div className="absolute inset-1 bg-gray-100/50 dark:bg-gray-900/50 flex items-center justify-center z-20 rounded-lg">
-                        <div className="text-center p-6 bg-white/90 dark:bg-gray-800/90 rounded-xl shadow-lg backdrop-blur-sm">
-                            <Loader2 className="animate-spin text-primary-500 mx-auto" size={40} />
-                            <p className="mt-3 text-lg font-semibold">{isGenerating ? t('course.generating') : t('course.refine.button')}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('course.generating.waitMessage')}</p>
-                        </div>
-                    </div>
-                )}
-            {activeTab === 'editor' ? (
-                <div className="flex-1 flex flex-col">
-                        <div className="flex-1 relative min-h-0 pb-40 sm:pb-28">
-                            <TinyEditor
-                              key={`${currentStep.id}-${activeTab}`}
-                              value={editedContent}
-                              refreshSignal={editorRefreshTick}
-                              onChange={setEditedContent}
-                              onSelectionChange={(text) => {
-                                setSelectedText(text);
-                                const html = editedContent || '';
-                                const trimmed = (text || '').trim();
-                                if (trimmed.length === 0) {
-                                  selectionRef.current = { start: 0, end: 0 };
-                                  return;
-                                }
-                                const idx = html.indexOf(trimmed);
-                                if (idx >= 0) {
-                                  selectionRef.current = { start: idx, end: idx + trimmed.length };
-                                } else {
-                                  selectionRef.current = { start: 0, end: 0 };
-                                }
-                              }}
-                            />
-                        </div>
+          <div className="border-b dark:border-gray-700 px-4">
+            <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+              <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
+              <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
+            </nav>
+          </div>
+
+          <div className="flex-1 flex flex-col min-h-0">
+            {isBusy && (
+              <div className="absolute inset-1 bg-gray-100/50 dark:bg-gray-900/50 flex items-center justify-center z-20 rounded-lg">
+                <div className="text-center p-6 bg-white/90 dark:bg-gray-800/90 rounded-xl shadow-lg backdrop-blur-sm">
+                  <Loader2 className="animate-spin text-primary-500 mx-auto" size={40} />
+                  <p className="mt-3 text-lg font-semibold">{isGenerating ? t('course.generating') : t('course.refine.button')}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('course.generating.waitMessage')}</p>
                 </div>
-            ) : (
-                    <div className="flex-1 overflow-y-auto min-h-0 pb-40 sm:pb-28">
-                        {looksLikeHtml(editedContent) ? (
-                          <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: editedContent }} />
-                        ) : (
-                          <div className="p-4 sm:p-5">
-                            <MarkdownPreview content={resolveTokensForPreview(editedContent)} />
-                          </div>
-                        )}
-                </div>
+              </div>
             )}
-            </div>
+            {activeTab === 'editor' ? (
+              <div className="flex-1 flex flex-col">
+                <div className="flex-1 relative min-h-0 pb-40 sm:pb-28">
+                  <TinyEditor
+                    key={`${currentStep.id}-${activeTab}`}
+                    value={editedContent}
+                    refreshSignal={editorRefreshTick}
+                    onChange={setEditedContent}
+                    onSelectionChange={(text) => {
+                      setSelectedText(text);
+                      const html = editedContent || '';
+                      const trimmed = (text || '').trim();
+                      if (trimmed.length === 0) {
+                        selectionRef.current = { start: 0, end: 0 };
+                        return;
+                      }
+                      const idx = html.indexOf(trimmed);
+                      if (idx >= 0) {
+                        selectionRef.current = { start: idx, end: idx + trimmed.length };
+                      } else {
+                        selectionRef.current = { start: 0, end: 0 };
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto min-h-0 pb-40 sm:pb-28">
+                {looksLikeHtml(editedContent) ? (
+                  <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: editedContent }} />
+                ) : (
+                  <div className="p-4 sm:p-5">
+                    <MarkdownPreview content={resolveTokensForPreview(editedContent)} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-            <div id="workspace-actions" className="hidden sm:flex p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 justify-between items-center relative z-20 sticky bottom-0">
-                <div className="flex gap-2 flex-wrap">
-                    <button
-                        onClick={handleGenerate}
-                        disabled={!canGenerate}
-                        className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
-                    >
-                        <Sparkles size={16}/>
-                        {t('course.generate')}
+          <div id="workspace-actions" className="hidden sm:flex p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 justify-between items-center relative z-20 sticky bottom-0">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
+              >
+                <Sparkles size={16} />
+                {t('course.generate')}
+              </button>
+
+              <div ref={aiActionsDesktopRef} className="relative">
+                <button
+                  onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
+                  disabled={!canRefine}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50"
+                  title={t('course.refine.tooltip')}
+                >
+                  <Wand size={16} />
+                  {t('course.refine.button')}
+                </button>
+                {isAiActionsOpen && (
+                  <div className="absolute bottom-full mb-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-30">
+                    <button onClick={() => handleAiAction('simplify')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                      <Pilcrow size={16} /> {t('course.refine.simplify')}
                     </button>
-                    
-                    <div ref={aiActionsDesktopRef} className="relative">
-                        <button
-                            onClick={() => setIsAiActionsOpen(prev => !prev)}
-                            disabled={!canRefine}
-                            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50"
-                            title={t('course.refine.tooltip')}
-                        >
-                            <Wand size={16}/>
-                            {t('course.refine.button')}
-                        </button>
-                        {isAiActionsOpen && (
-                             <div className="absolute bottom-full mb-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-30">
-                                <button onClick={() => handleAiAction('simplify')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                                    <Pilcrow size={16}/> {t('course.refine.simplify')}
-                                </button>
-                                <button onClick={() => handleAiAction('expand')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                                    <Combine size={16}/> {t('course.refine.expand')}
-                                </button>
-                                <button onClick={() => handleAiAction('example')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                                    <Lightbulb size={16}/> {t('course.refine.example')}
-                                </button>
-                             </div>
-                        )}
-                    </div>
+                    <button onClick={() => handleAiAction('expand')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                      <Combine size={16} /> {t('course.refine.expand')}
+                    </button>
+                    <button onClick={() => handleAiAction('example')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                      <Lightbulb size={16} /> {t('course.refine.example')}
+                    </button>
+                  </div>
+                )}
+              </div>
 
-                    {isCourseComplete && (
-                        <button
-                            onClick={handleDownload}
-                            disabled={isDownloading}
-                            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
-                        >
-                            {isDownloading ? <Loader2 className="animate-spin" size={16}/> : <DownloadCloud size={16}/>}
-                            {t(isDownloading ? 'course.download.preparing' : 'course.download.button')}
-                        </button>
-                    )}
-                </div>
-                <div className="flex gap-2">
-                    {currentStep.is_completed && hasUnsavedChanges && (
-                        <button
-                            onClick={() => handleSaveChanges(false)}
-                            disabled={isBusy || isSaving}
-                            className="px-6 py-2 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
-                        >
-                            {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16} />}
-                            {t('course.saveChanges')}
-                        </button>
-                    )}
-                    {!currentStep.is_completed && (
-                        <button
-                        onClick={() => handleSaveChanges(true)}
-                        disabled={isBusy || isSaving || !editedContent}
-                        className="px-6 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400"
-                        >
-                        {isSaving && <Loader2 className="animate-spin inline-block mr-2" size={16}/>}
-                        {isLastStep ? t('course.saveAndContinue').replace(' & Continue', '') : t('course.saveAndContinue')}
-                        </button>
-                    )}
-                </div>
+              {isCourseComplete && (
+                <button
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                >
+                  {isDownloading ? <Loader2 className="animate-spin" size={16} /> : <DownloadCloud size={16} />}
+                  {t(isDownloading ? 'course.download.preparing' : 'course.download.button')}
+                </button>
+              )}
             </div>
+            <div className="flex gap-2">
+              {currentStep.is_completed && hasUnsavedChanges && (
+                <button
+                  onClick={() => handleSaveChanges(false)}
+                  disabled={isBusy || isSaving}
+                  className="px-6 py-2 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                  {t('course.saveChanges')}
+                </button>
+              )}
+              {!currentStep.is_completed && (
+                <button
+                  onClick={() => handleSaveChanges(true)}
+                  disabled={isBusy || isSaving || !editedContent}
+                  className="px-6 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400"
+                >
+                  {isSaving && <Loader2 className="animate-spin inline-block mr-2" size={16} />}
+                  {isLastStep ? t('course.saveAndContinue').replace(' & Continue', '') : t('course.saveAndContinue')}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </main>
       {/* Sticky mobile actions bar */}
       <div id="mobile-actions-bar" className="sm:hidden fixed bottom-0 left-0 right-0 z-40 border-t dark:border-gray-700 bg-white/90 dark:bg-gray-800/80 backdrop-blur-sm shadow-lg safe-area-bottom">
-            <div className="px-3 py-2 flex items-center justify-between gap-2">
+        <div className="px-3 py-2 flex items-center justify-between gap-2">
           <div className="flex gap-2 flex-1">
             <button
               onClick={handleGenerate}
               disabled={!canGenerate}
               className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
             >
-              <Sparkles size={16}/>
+              <Sparkles size={16} />
               {t('course.generate')}
             </button>
             <div ref={aiActionsMobileRef} className="relative flex-1">
               <button
-                onClick={() => setIsAiActionsOpen(prev => !prev)}
+                onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
                 disabled={!canRefine}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50"
                 title={t('course.refine.tooltip')}
               >
-                <Wand size={16}/>
+                <Wand size={16} />
                 {t('course.refine.button')}
               </button>
               {isAiActionsOpen && (
                 <div className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
                   <button onClick={() => handleAiAction('simplify')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                    <Pilcrow size={16}/> {t('course.refine.simplify')}
+                    <Pilcrow size={16} /> {t('course.refine.simplify')}
                   </button>
                   <button onClick={() => handleAiAction('expand')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                    <Combine size={16}/> {t('course.refine.expand')}
+                    <Combine size={16} /> {t('course.refine.expand')}
                   </button>
                   <button onClick={() => handleAiAction('example')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                    <Lightbulb size={16}/> {t('course.refine.example')}
+                    <Lightbulb size={16} /> {t('course.refine.example')}
                   </button>
                 </div>
               )}
@@ -1071,7 +1126,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
                 disabled={isDownloading}
                 className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
               >
-                {isDownloading ? <Loader2 className="animate-spin" size={16}/> : <DownloadCloud size={16}/>} 
+                {isDownloading ? <Loader2 className="animate-spin" size={16} /> : <DownloadCloud size={16} />}
                 {t(isDownloading ? 'course.download.preparing' : 'course.download.button')}
               </button>
             ) : currentStep.is_completed && hasUnsavedChanges ? (
@@ -1080,7 +1135,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
                 disabled={isBusy || isSaving}
                 className="px-4 py-2 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
               >
-                {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16} />}
+                {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                 {t('course.saveChanges')}
               </button>
             ) : !currentStep.is_completed ? (
@@ -1089,7 +1144,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
                 disabled={isBusy || isSaving || !editedContent}
                 className="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400"
               >
-                {isSaving && <Loader2 className="animate-spin inline-block mr-2" size={16}/>} 
+                {isSaving && <Loader2 className="animate-spin inline-block mr-2" size={16} />}
                 <span className="hide-tiny">{isLastStep ? t('course.save') : t('course.saveAndContinue')}</span>
                 <span className="show-tiny">{t('course.save')}</span>
               </button>
@@ -1104,9 +1159,9 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
           <div className="absolute left-0 top-0 h-full w-5/6 max-w-xs bg-white dark:bg-gray-800 shadow-xl">
             <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => { window.location.href = '/#/dashboard'; }} 
-                  className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" 
+                <button
+                  onClick={() => { window.location.href = '/#/dashboard'; }}
+                  className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   title="Înapoi la cursurile mele"
                   aria-label="Înapoi la dashboard"
                 >
@@ -1130,7 +1185,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
                     }}
                     className="w-full px-3 py-2 text-sm rounded border dark:border-gray-700 bg-white dark:bg-gray-900"
                   >
-                    {userCourses.map(c => (
+                    {userCourses.map((c: { id: string; title: string }) => (
                       <option key={c.id} value={c.id}>{c.title}</option>
                     ))}
                   </select>
@@ -1156,24 +1211,27 @@ const ACCEPTED_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/gif','
                   >
                     {importing ? 'Import în curs...' : 'Importă în pași'}
                   </button>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400">Acceptă .docx, .txt (secțiuni "## "), .pdf (prototip).</div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Acceptă .docx, .txt, .pdf.
+                    <br />
+                    <span className="text-amber-600 dark:text-amber-500">⚠️ PDF importă doar text. Pentru imagini/tabele folosiți DOCX.</span>
+                  </div>
                 </div>
               </div>
 
               <nav>
                 <ul>
-                  {(course?.steps ?? []).map((step, index) => (
-                    <li key={step.id || `${index}-${step.title_key}` }>
+                  {(course?.steps ?? []).map((step: CourseStep, index: number) => (
+                    <li key={step.id || `${index}-${step.title_key}`}>
                       <button
                         onClick={() => { setActiveStepIndex(index); setIsSidebarOpen(false); }}
                         disabled={index > 0 && !((course?.steps ?? [])[index - 1]?.is_completed)}
-                        className={`w-full text-left p-3 my-1 rounded-lg flex items-center gap-3 transition-colors ${
-                          activeStepIndex === index
-                            ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed'
-                        }`}
+                        className={`w-full text-left p-3 my-1 rounded-lg flex items-center gap-3 transition-colors ${activeStepIndex === index
+                          ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed'
+                          }`}
                       >
-                        {step.is_completed ? <CheckCircle className="text-green-500" size={20}/> : <Circle className="text-gray-400" size={20} />}
+                        {step.is_completed ? <CheckCircle className="text-green-500" size={20} /> : <Circle className="text-gray-400" size={20} />}
                         <span className="font-medium">{t(step.title_key)}</span>
                       </button>
                     </li>
