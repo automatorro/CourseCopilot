@@ -641,77 +641,33 @@ const CourseWorkspacePage: React.FC = () => {
     try {
       const arrayBuffer = await importFile.arrayBuffer();
       const ext = importFile.name.toLowerCase().split('.').pop() || '';
-      let steps: { title_key: string; content: string }[] = [];
+      let contentToLoad = '';
 
       if (ext === 'docx') {
-        steps = await parseDocxToSteps(arrayBuffer);
+        const steps = await parseDocxToSteps(arrayBuffer);
+        contentToLoad = steps[0]?.content || '';
       } else if (ext === 'txt') {
         const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
-        steps = parseTxtToSteps(text);
+        contentToLoad = text;
       } else if (ext === 'pdf') {
-        steps = await parsePdfToSteps(arrayBuffer);
+        const steps = await parsePdfToSteps(arrayBuffer);
+        contentToLoad = steps[0]?.content || '';
       } else {
         throw new Error('Format neacceptat. Accept: .docx, .txt, .pdf');
       }
 
-      if (steps.length === 0) throw new Error('Nu s-au identificat pași din document.');
+      if (!contentToLoad) throw new Error('Nu s-a putut extrage conținut din document.');
 
-      // Calculate insertion index: exactly at current active step position
-      // If no steps exist, start at 1.
-      // If steps exist, insert at activeStepIndex.
-      const currentSteps = course.steps || [];
-      // If we are at the start or want to insert before the current step
+      // Update editor content directly
+      setEditedContent(contentToLoad);
 
-      const currentStepOrder = currentSteps[activeStepIndex]?.step_order || 1;
-      // If we are inserting AT the current position, the new step takes the current order
-      // and the current step (and all following) must be shifted down.
-      const newStepOrder = currentStepOrder;
-
-      // Shift existing steps
-      if (currentSteps.length > 0) {
-        // Fetch all steps that need shifting (>= newStepOrder)
-        const { data: allSteps } = await supabase
-          .from('course_steps')
-          .select('id, step_order')
-          .eq('course_id', course.id)
-          .gte('step_order', newStepOrder);
-
-        if (allSteps && allSteps.length > 0) {
-          // Sort by order descending to avoid unique constraint issues if any (though upsert handles it)
-          // Actually, just incrementing is fine.
-          const updates = allSteps.map((s: any) => ({
-            id: s.id,
-            step_order: s.step_order + 1
-          }));
-          const { error: updateError } = await supabase.from('course_steps').upsert(updates);
-          if (updateError) console.error('Failed to shift steps:', updateError);
-        }
-      }
-
-      const newStepsPayload = steps.map((s, idx) => ({
-        course_id: course.id,
-        user_id: user.id,
-        title_key: s.title_key,
-        content: s.content,
-        is_completed: false,
-        step_order: newStepOrder + idx,
-      }));
-
-      const { error: stepsError } = await supabase.from('course_steps').insert(newStepsPayload);
-      if (stepsError) throw stepsError;
-
-      showToast('Import reușit: pasul a fost adăugat după cel curent.', 'success');
+      // Reset file input
       setImportFile(null);
-
-      // Reload course to get fresh order
-      const updatedCourse = await fetchCourseData();
-      if (updatedCourse) {
-        setCourse(updatedCourse);
-        // Optionally jump to the new step? 
-        // User said: "pastreaza decizia de blocare". 
-        // If current step is NOT completed, the new step (at activeIndex + 1) will be locked.
-        // So we stay on current step.
+      if (document.querySelector('input[type="file"]')) {
+        (document.querySelector('input[type="file"]') as HTMLInputElement).value = '';
       }
+
+      showToast('Conținutul a fost încărcat în editor. Verifică și salvează.', 'success');
 
     } catch (err: any) {
       console.error('Import error:', err);
@@ -786,10 +742,7 @@ const CourseWorkspacePage: React.FC = () => {
     }
   };
 
-  const parseTxtToSteps = (text: string): { title_key: string; content: string }[] => {
-    // Return single step instead of splitting
-    return [{ title_key: 'course.steps.manual', content: text }];
-  };
+
 
   const htmlToSimpleMarkdown = (html: string): string => {
     return html
@@ -904,7 +857,7 @@ const CourseWorkspacePage: React.FC = () => {
               onClick={processImportDocument}
               disabled={!importFile || importing}
             >
-              {importing ? 'Import în curs...' : 'Importă în pași'}
+              {importing ? 'Se încarcă...' : 'Încarcă în editor'}
             </button>
             <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-800 dark:text-amber-200">
               <strong>Notă:</strong>
@@ -1209,7 +1162,7 @@ const CourseWorkspacePage: React.FC = () => {
                     onClick={processImportDocument}
                     disabled={!importFile || importing}
                   >
-                    {importing ? 'Import în curs...' : 'Importă în pași'}
+                    {importing ? 'Se încarcă...' : 'Încarcă în editor'}
                   </button>
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">
                     Acceptă .docx, .txt, .pdf.

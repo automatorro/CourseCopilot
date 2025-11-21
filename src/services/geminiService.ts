@@ -4,11 +4,11 @@ import { supabase } from './supabaseClient';
 import { Course, CourseStep } from '../types';
 
 const invokeContentFunction = async (
-    action: 'generate' | 'improve' | 'refine', 
-    course: Course, 
-    step: CourseStep, 
-    originalContent?: string,
-    refinePayload?: { selectedText: string, actionType: string }
+  action: 'generate' | 'improve' | 'refine',
+  course: Course,
+  step: CourseStep,
+  originalContent?: string,
+  refinePayload?: { selectedText: string, actionType: string }
 ): Promise<string> => {
   console.log(`Invoking Edge Function with action '${action}' for step: ${step.title_key}`);
 
@@ -19,7 +19,10 @@ const invokeContentFunction = async (
         if (s.step_order >= step.step_order) {
           return { ...s, content: '' };
         }
-        return s;
+        // Strip base64 images from content to avoid payload too large errors
+        // This replaces data:image/... with a placeholder
+        const cleanContent = s.content?.replace(/!\[([^\]]*)\]\(data:image\/[^;]+;base64,[^)]+\)/g, '![$1]([Image])') || '';
+        return { ...s, content: cleanContent };
       })
     };
 
@@ -34,7 +37,7 @@ const invokeContentFunction = async (
     }
 
     if (action === 'refine') {
-        body.refinePayload = refinePayload;
+      body.refinePayload = refinePayload;
     }
 
     const { data, error } = await supabase.functions.invoke('generate-course-content', { body });
@@ -43,10 +46,10 @@ const invokeContentFunction = async (
       console.error('Error invoking Supabase Edge Function:', error);
       return `Error from server: ${error.message}.`;
     }
-    
+
     if (!data || typeof data.content !== 'string') {
-        console.error('Unexpected response format from Edge Function. Expected { content: string }, received:', data);
-        return 'Error: Received an invalid or empty response from the generation service.';
+      console.error('Unexpected response format from Edge Function. Expected { content: string }, received:', data);
+      return 'Error: Received an invalid or empty response from the generation service.';
     }
 
     return data.content;
