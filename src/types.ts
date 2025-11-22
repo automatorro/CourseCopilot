@@ -15,6 +15,9 @@ export interface User extends SupabaseUser {
 }
 
 export enum GenerationEnvironment {
+  LiveWorkshop = 'LiveWorkshop',
+  OnlineCourse = 'OnlineCourse',
+  // Deprecated but kept for backward compatibility
   Corporate = 'Corporate',
   Academic = 'Academic',
 }

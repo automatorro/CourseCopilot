@@ -5,26 +5,26 @@ import { useTranslation } from '../contexts/I18nContext';
 import { useToast } from '../contexts/ToastContext';
 import NewCourseModal from '../components/NewCourseModal';
 import { Course, GenerationEnvironment } from '../types';
-import { PRICING_PLANS, COURSE_STEPS_KEYS } from '../constants';
+import { PRICING_PLANS, LIVE_WORKSHOP_STEPS, ONLINE_COURSE_STEPS } from '../constants';
 import { supabase } from '../services/supabaseClient';
 import { deleteCourseById } from '../services/courseService';
 import { PlusCircle, Loader2, Edit, Copy, Download, Trash2, Rocket } from 'lucide-react';
 import { exportCourseAsZip } from '../services/exportService';
 
 const GettingStartedGuide: React.FC = () => {
-    const { t } = useTranslation();
-    return (
-        <div className="text-center py-16 px-6 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-            <Rocket className="mx-auto h-12 w-12 text-primary-500" />
-            <h2 className="mt-6 text-2xl font-bold">{t('dashboard.gettingStarted.title')}</h2>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('dashboard.gettingStarted.subtitle')}</p>
-            <div className="mt-8 text-left max-w-md mx-auto space-y-3">
-                <p className="flex items-center gap-3"><span className="flex-shrink-0 bg-primary-600 text-white rounded-full h-6 w-6 flex items-center justify-center font-bold text-sm">1</span> <span>{t('dashboard.gettingStarted.step1')}</span></p>
-                <p className="flex items-center gap-3"><span className="flex-shrink-0 bg-primary-600 text-white rounded-full h-6 w-6 flex items-center justify-center font-bold text-sm">2</span> <span>{t('dashboard.gettingStarted.step2')}</span></p>
-                <p className="flex items-center gap-3"><span className="flex-shrink-0 bg-primary-600 text-white rounded-full h-6 w-6 flex items-center justify-center font-bold text-sm">3</span> <span>{t('dashboard.gettingStarted.step3')}</span></p>
-            </div>
-        </div>
-    );
+  const { t } = useTranslation();
+  return (
+    <div className="text-center py-16 px-6 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+      <Rocket className="mx-auto h-12 w-12 text-primary-500" />
+      <h2 className="mt-6 text-2xl font-bold">{t('dashboard.gettingStarted.title')}</h2>
+      <p className="mt-2 text-gray-500 dark:text-gray-400">{t('dashboard.gettingStarted.subtitle')}</p>
+      <div className="mt-8 text-left max-w-md mx-auto space-y-3">
+        <p className="flex items-center gap-3"><span className="flex-shrink-0 bg-primary-600 text-white rounded-full h-6 w-6 flex items-center justify-center font-bold text-sm">1</span> <span>{t('dashboard.gettingStarted.step1')}</span></p>
+        <p className="flex items-center gap-3"><span className="flex-shrink-0 bg-primary-600 text-white rounded-full h-6 w-6 flex items-center justify-center font-bold text-sm">2</span> <span>{t('dashboard.gettingStarted.step2')}</span></p>
+        <p className="flex items-center gap-3"><span className="flex-shrink-0 bg-primary-600 text-white rounded-full h-6 w-6 flex items-center justify-center font-bold text-sm">3</span> <span>{t('dashboard.gettingStarted.step3')}</span></p>
+      </div>
+    </div>
+  );
 };
 
 const DashboardPage: React.FC = () => {
@@ -36,7 +36,7 @@ const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loadingStates, setLoadingStates] = useState<{ [key: string]: boolean }>({});
-  
+
   const courseLimit = user ? PRICING_PLANS[user.plan].courseLimit : 0;
   const isAdmin = user?.role === 'admin';
   const canCreateCourse = isAdmin || (user ? courses.length < courseLimit : false);
@@ -54,19 +54,19 @@ const DashboardPage: React.FC = () => {
 
       if (isMounted) {
         if (error) {
-            console.error('Error fetching courses:', error);
-            showToast('Failed to load courses.', 'error');
+          console.error('Error fetching courses:', error);
+          showToast('Failed to load courses.', 'error');
         } else {
-            setCourses(data || []);
+          setCourses(data || []);
         }
         setIsLoading(false);
       }
     };
 
     fetchCourses();
-    
+
     return () => {
-        isMounted = false;
+      isMounted = false;
     };
   }, [user, showToast]);
 
@@ -116,8 +116,15 @@ const DashboardPage: React.FC = () => {
       return;
     }
 
-    // 2. Insert the course steps
-    const stepsToInsert = COURSE_STEPS_KEYS.map((key, index) => ({
+    // 2. Insert the course steps based on environment
+    let stepsKeys = LIVE_WORKSHOP_STEPS;
+    if (details.environment === GenerationEnvironment.OnlineCourse) {
+      stepsKeys = ONLINE_COURSE_STEPS;
+    } else if (details.environment === GenerationEnvironment.Corporate) {
+      stepsKeys = LIVE_WORKSHOP_STEPS; // Fallback
+    }
+
+    const stepsToInsert = stepsKeys.map((key, index) => ({
       course_id: newCourseData.id,
       user_id: user.id,
       title_key: key,
@@ -129,12 +136,12 @@ const DashboardPage: React.FC = () => {
     const { error: stepsError } = await supabase.from('course_steps').insert(stepsToInsert);
 
     if (stepsError) {
-        console.error("Error creating course steps:", stepsError);
-        showToast('Error setting up course steps.', 'error');
-        return;
+      console.error("Error creating course steps:", stepsError);
+      showToast('Error setting up course steps.', 'error');
+      return;
     }
 
-    newCourseData.steps = stepsToInsert.map(s => ({...s, id: '', created_at: new Date().toISOString()}));
+    newCourseData.steps = stepsToInsert.map(s => ({ ...s, id: '', created_at: new Date().toISOString() }));
 
     setCourses(prev => [newCourseData as Course, ...prev]);
     setIsModalOpen(false);
@@ -167,20 +174,20 @@ const DashboardPage: React.FC = () => {
   const handleDuplicate = async (courseId: string) => {
     const originalCourse = courses.find(c => c.id === courseId);
     if (!originalCourse || !user) return;
-    
+
     const { data: newCourseData, error: courseError } = await supabase
-        .from('courses')
-        .insert({
-            user_id: user.id,
-            title: `(Copy) ${originalCourse.title}`,
-            subject: originalCourse.subject,
-            target_audience: originalCourse.target_audience,
-            environment: originalCourse.environment,
-            language: originalCourse.language,
-            progress: 0,
-        })
-        .select('*, steps:course_steps(*)')
-        .single();
+      .from('courses')
+      .insert({
+        user_id: user.id,
+        title: `(Copy) ${originalCourse.title}`,
+        subject: originalCourse.subject,
+        target_audience: originalCourse.target_audience,
+        environment: originalCourse.environment,
+        language: originalCourse.language,
+        progress: 0,
+      })
+      .select('*, steps:course_steps(*)')
+      .single();
 
     if (courseError) {
       console.error("Error duplicating course:", courseError);
@@ -190,24 +197,24 @@ const DashboardPage: React.FC = () => {
 
     const originalSteps = originalCourse.steps || [];
     const newSteps = originalSteps.map(step => ({
-        course_id: newCourseData.id,
-        user_id: user.id,
-        title_key: step.title_key,
-        content: step.content,
-        is_completed: false, // Reset progress
-        step_order: step.step_order,
+      course_id: newCourseData.id,
+      user_id: user.id,
+      title_key: step.title_key,
+      content: step.content,
+      is_completed: false, // Reset progress
+      step_order: step.step_order,
     }));
 
     if (newSteps.length > 0) {
-        const { error: stepsError } = await supabase.from('course_steps').insert(newSteps);
-        if (stepsError) {
-            console.error("Error duplicating course steps:", stepsError);
-            showToast('Failed to duplicate course steps.', 'error');
-            return;
-        }
-        newCourseData.steps = newSteps.map(s => ({...s, id: '', created_at: new Date().toISOString()}));
+      const { error: stepsError } = await supabase.from('course_steps').insert(newSteps);
+      if (stepsError) {
+        console.error("Error duplicating course steps:", stepsError);
+        showToast('Failed to duplicate course steps.', 'error');
+        return;
+      }
+      newCourseData.steps = newSteps.map(s => ({ ...s, id: '', created_at: new Date().toISOString() }));
     }
-    
+
     setCourses(prev => [newCourseData as Course, ...prev]);
     showToast('Course duplicated successfully!', 'success');
   };
@@ -245,7 +252,7 @@ const DashboardPage: React.FC = () => {
   };
 
   // Removed unused helper to satisfy typecheck (TS6133).
-  
+
   const handleDownload = async (courseId: string) => {
     const courseToDownload = courses.find(c => c.id === courseId);
     if (courseToDownload) {
@@ -259,7 +266,7 @@ const DashboardPage: React.FC = () => {
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-[calc(100vh-8rem)]"><Loader2 className="animate-spin text-primary-500" size={48}/></div>;
+    return <div className="flex items-center justify-center h-[calc(100vh-8rem)]"><Loader2 className="animate-spin text-primary-500" size={48} /></div>;
   }
 
   return (
@@ -276,7 +283,7 @@ const DashboardPage: React.FC = () => {
           {t('dashboard.newCourse')}
         </button>
       </div>
-      
+
       {courses.length === 0 ? (
         <GettingStartedGuide />
       ) : (
@@ -286,7 +293,10 @@ const DashboardPage: React.FC = () => {
               <div onClick={() => navigate(`/course/${course.id}`)} className="p-6 cursor-pointer flex-grow">
                 <div className="flex justify-between items-start">
                   <h2 className="text-xl font-bold mb-2 pr-2">{course.title}</h2>
-                  <span className={`flex-shrink-0 px-2 py-1 text-xs font-semibold rounded-full ${course.environment === GenerationEnvironment.Corporate ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>
+                  <span className={`flex-shrink-0 px-2 py-1 text-xs font-semibold rounded-full ${course.environment === GenerationEnvironment.OnlineCourse
+                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    }`}>
                     {t(`modal.newCourse.environment.${course.environment.toLowerCase()}`)}
                   </span>
                 </div>
@@ -301,28 +311,28 @@ const DashboardPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-               <div className="border-t dark:border-gray-700 p-2 flex justify-end items-center gap-1 bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl">
-                    <button onClick={(e) => { e.stopPropagation(); navigate(`/course/${course.id}`)}} title="Edit" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
-                        <Edit size={18} />
-                    </button>
-                    <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => handleAction(course.id, 'duplicate', e)} title="Duplicate" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300" disabled={loadingStates[`duplicate-${course.id}`] || !canCreateCourse}>
-                        {loadingStates[`duplicate-${course.id}`] ? <Loader2 size={18} className="animate-spin" /> : <Copy size={18} />}
-                    </button>
-                    {course.progress === 100 && (
-                        <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => handleAction(course.id, 'download', e)} title="Download" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300" disabled={loadingStates[`download-${course.id}`]}>
-                            {loadingStates[`download-${course.id}`] ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-                        </button>
-                    )}
-                    <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => handleAction(course.id, 'delete', e)} title="Delete" className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 text-red-500 dark:text-red-400" disabled={loadingStates[`delete-${course.id}`]}>
-                        {loadingStates[`delete-${course.id}`] ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                    </button>
-               </div>
+              <div className="border-t dark:border-gray-700 p-2 flex justify-end items-center gap-1 bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl">
+                <button onClick={(e) => { e.stopPropagation(); navigate(`/course/${course.id}`) }} title="Edit" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+                  <Edit size={18} />
+                </button>
+                <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => handleAction(course.id, 'duplicate', e)} title="Duplicate" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300" disabled={loadingStates[`duplicate-${course.id}`] || !canCreateCourse}>
+                  {loadingStates[`duplicate-${course.id}`] ? <Loader2 size={18} className="animate-spin" /> : <Copy size={18} />}
+                </button>
+                {course.progress === 100 && (
+                  <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => handleAction(course.id, 'download', e)} title="Download" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300" disabled={loadingStates[`download-${course.id}`]}>
+                    {loadingStates[`download-${course.id}`] ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+                  </button>
+                )}
+                <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => handleAction(course.id, 'delete', e)} title="Delete" className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 text-red-500 dark:text-red-400" disabled={loadingStates[`delete-${course.id}`]}>
+                  {loadingStates[`delete-${course.id}`] ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                </button>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      <NewCourseModal 
+      <NewCourseModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onCreate={handleCreateCourse}

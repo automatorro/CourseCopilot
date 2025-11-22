@@ -50,11 +50,27 @@ export const COURSE_STEPS_KEYS = [
   'course.steps.tests',
 ];
 
+export const LIVE_WORKSHOP_STEPS = [
+  'course.steps.structure',
+  'course.steps.slides',
+  'course.steps.exercises',
+  'course.steps.manual',
+  'course.steps.tests',
+];
+
+export const ONLINE_COURSE_STEPS = [
+  'course.steps.structure',
+  'course.steps.video_scripts',
+  'course.steps.projects',
+  'course.steps.cheat_sheets',
+  'course.steps.tests',
+];
+
 export const CONTENT_LANGUAGES = [
-    { code: 'en', name: 'English' },
-    { code: 'es', name: 'Español' },
-    { code: 'fr', name: 'Français' },
-    { code: 'de', name: 'Deutsch' },
-    { code: 'it', name: 'Italiano' },
-    { code: 'ro', name: 'Română' },
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'ro', name: 'Română' },
 ];
