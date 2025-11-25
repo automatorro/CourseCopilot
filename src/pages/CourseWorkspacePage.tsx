@@ -23,6 +23,9 @@ import ImageStudioModal from '../components/ImageStudioModal';
 import MarkdownPreview from '../components/MarkdownPreview';
 import TinyEditor from '../components/editor/TinyEditor';
 import OnboardingChat from '../components/OnboardingChat';
+import LearningObjectivesGenerator from '../components/LearningObjectivesGenerator';
+import BlueprintReview from '../components/BlueprintReview';
+import { generateBlueprintWithRetry } from '../services/blueprintService';
 
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useTranslation();
@@ -98,6 +101,10 @@ const CourseWorkspacePage: React.FC = () => {
   const [imageAlt, setImageAlt] = useState('');
   const [linkUrlValid, setLinkUrlValid] = useState(true);
   const [imageUrlValid, setImageUrlValid] = useState(true);
+
+  // Phase 1.4: Routing states for intelligent onboarding
+  const [showLOGenerator, setShowLOGenerator] = useState(false);
+  const [showBlueprintReview, setShowBlueprintReview] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
   const [localImageFile, setLocalImageFile] = useState<File | null>(null);
@@ -283,6 +290,28 @@ const CourseWorkspacePage: React.FC = () => {
     loadCourse();
     return () => { isMounted = false; };
   }, [fetchCourseData]);
+
+  // Phase 1.4: Routing logic for intelligent onboarding
+  useEffect(() => {
+    if (!course) {
+      setShowLOGenerator(false);
+      setShowBlueprintReview(false);
+      return;
+    }
+
+    // Decision tree based on course state
+    if (!course.learning_objectives) {
+      setShowLOGenerator(true);
+      setShowBlueprintReview(false);
+    } else if (!course.blueprint) {
+      setShowLOGenerator(false);
+      setShowBlueprintReview(true);
+    } else {
+      // Both exist, show normal editor
+      setShowLOGenerator(false);
+      setShowBlueprintReview(false);
+    }
+  }, [course]);
 
   const originalContentForStep = course?.steps?.[activeStepIndex]?.content ?? '';
 
@@ -787,6 +816,25 @@ const CourseWorkspacePage: React.FC = () => {
 
   const currentStep = course?.steps?.[activeStepIndex];
 
+  // Phase 1.4: Handler for LO Generator completion
+  const handleLOComplete = async () => {
+    if (!course || !id) return;
+    // Refresh course data
+    const courseData = await fetchCourseData();
+    if (courseData) {
+      setCourse(courseData);
+      showToast('Learning objectives saved successfully!', 'success');
+    }
+  };
+
+  // Phase 1.4: Handler for Blueprint generation
+  const handleGenerateContent = async () => {
+    if (!course) return;
+    setShowBlueprintReview(false);
+    showToast('Proceeding to content generation...', 'success');
+    // Course will reload and show normal editor
+  };
+
   const handleBlueprintReady = async (blueprint: CourseBlueprint) => {
     if (!course) return;
 
@@ -807,6 +855,47 @@ const CourseWorkspacePage: React.FC = () => {
 
   if (isLoading || !course) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-primary-500" size={32} /></div>;
+  }
+
+  // Phase 1.4: Conditional rendering based on  course state
+  if (showLOGenerator) {
+    return (
+      <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+        <div className="border-b bg-white dark:bg-gray-800 p-4 flex items-center gap-4 shadow-sm">
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white">{course.title} <span className="text-gray-400 font-normal">| Define Learning Objectives</span></h1>
+        </div>
+        <div className="flex-grow overflow-y-auto p-8">
+          <LearningObjectivesGenerator
+            course={course}
+            onComplete={handleLOComplete}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (showBlueprintReview && course.blueprint) {
+    return (
+      <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+        <div className="border-b bg-white dark:bg-gray-800 p-4 flex items-center gap-4 shadow-sm">
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white">{course.title} <span className="text-gray-400 font-normal">| Review Blueprint</span></h1>
+        </div>
+        <div className="flex-grow overflow-y-auto">
+          <BlueprintReview
+            blueprint={course.blueprint}
+            onGenerateContent={handleGenerateContent}
+            onRefine={() => showToast('AI refinement coming soon!', 'info')}
+            onEdit={() => showToast('Manual editing coming soon!', 'info')}
+          />
+        </div>
+      </div>
+    );
   }
 
   if (!course.blueprint) {
