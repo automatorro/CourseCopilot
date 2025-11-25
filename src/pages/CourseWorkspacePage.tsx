@@ -25,7 +25,6 @@ import TinyEditor from '../components/editor/TinyEditor';
 import OnboardingChat from '../components/OnboardingChat';
 import LearningObjectivesGenerator from '../components/LearningObjectivesGenerator';
 import BlueprintReview from '../components/BlueprintReview';
-import { generateBlueprintWithRetry } from '../services/blueprintService';
 
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useTranslation();
