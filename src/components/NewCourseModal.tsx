@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from '../contexts/I18nContext';
 import { GenerationEnvironment } from '../types';
 import { CONTENT_LANGUAGES } from '../constants';
-import { X, Presentation, MonitorPlay } from 'lucide-react';
+import { X, Presentation, MonitorPlay, Lightbulb } from 'lucide-react';
 
 interface NewCourseModalProps {
   isOpen: boolean;
@@ -13,6 +13,7 @@ interface NewCourseModalProps {
     targetAudience: string;
     environment: GenerationEnvironment;
     language: string;
+    learningObjectives?: string;
   }) => void;
 }
 
@@ -23,10 +24,18 @@ const NewCourseModal: React.FC<NewCourseModalProps> = ({ isOpen, onClose, onCrea
   const [targetAudience, setTargetAudience] = useState('');
   const [environment, setEnvironment] = useState<GenerationEnvironment>(GenerationEnvironment.LiveWorkshop);
   const [language, setLanguage] = useState('en');
+  const [learningObjectives, setLearningObjectives] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onCreate({ title, subject, targetAudience, environment, language });
+    onCreate({
+      title,
+      subject,
+      targetAudience,
+      environment,
+      language,
+      learningObjectives: learningObjectives.trim() || undefined
+    });
   };
 
   if (!isOpen) return null;
@@ -52,6 +61,27 @@ const NewCourseModal: React.FC<NewCourseModalProps> = ({ isOpen, onClose, onCrea
           <div>
             <label htmlFor="audience" className="block text-sm font-medium text-ink-600 dark:text-ink-300">{t('modal.newCourse.targetAudience')}</label>
             <input type="text" id="audience" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} required className="mt-1 input-premium" />
+          </div>
+
+          {/* NEW: Learning Objectives Field */}
+          <div className="bg-primary-50/50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-800 rounded-lg p-4">
+            <label htmlFor="learning_objectives" className="flex items-center gap-2 text-sm font-medium text-ink-700 dark:text-ink-200 mb-2">
+              <Lightbulb size={18} className="text-primary-600 dark:text-primary-400" />
+              {t('modal.newCourse.learningObjectives')}
+              <span className="text-xs text-ink-500 dark:text-ink-400 font-normal">(Optional, but recommended)</span>
+            </label>
+            <textarea
+              id="learning_objectives"
+              value={learningObjectives}
+              onChange={e => setLearningObjectives(e.target.value)}
+              rows={4}
+              placeholder={t('modal.newCourse.learningObjectives.placeholder')}
+              className="mt-1 input-premium w-full resize-none"
+            />
+            <p className="text-xs text-ink-600 dark:text-ink-400 mt-2 flex items-start gap-1">
+              <span>💡</span>
+              <span>{t('modal.newCourse.learningObjectives.hint')}</span>
+            </p>
           </div>
 
           <div className="space-y-3">

@@ -32,7 +32,10 @@ export interface Course {
   environment: GenerationEnvironment;
   language: string;
   progress: number;
+  learning_objectives?: string; // NEW: User-provided or AI-generated learning outcomes
   steps?: CourseStep[]; // Optional, as we might load them separately
+  blueprint?: CourseBlueprint;
+  ai_refinement_history?: AIMessage[]; // NEW: Optional log of AI suggestions
 }
 
 export interface CourseStep {
@@ -44,4 +47,39 @@ export interface CourseStep {
   content: string;
   is_completed: boolean;
   step_order: number;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+export interface AIMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+  action?: string; // e.g., 'generate_learning_objectives', 'refine_blueprint'
+}
+
+export interface CourseBlueprint {
+  version: '1.0';
+  modules: CourseModule[];
+  estimated_duration?: string; // e.g., "2 hours", "3 days"
+  generated_at: string; // ISO timestamp
+}
+
+export interface CourseModule {
+  id: string; // Unique identifier for module
+  title: string;
+  learning_objective: string; // Links back to course LOs
+  sections: CourseSection[];
+}
+
+export interface CourseSection {
+  id: string; // Unique identifier for section
+  title: string;
+  content_type: 'slides' | 'video_script' | 'exercise' | 'reading' | 'quiz';
+  order: number;
+  content_outline?: string; // Brief description of what will be covered
 }
