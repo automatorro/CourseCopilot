@@ -44,7 +44,51 @@ serve(async (req) => {
         let isJsonMode = false;
 
         // --- PROMPT ROUTER ---
-        if (action === 'chat_onboarding') {
+        if (action === 'generate_learning_objectives') {
+            isJsonMode = true;
+            prompt = `
+**ROLE:** You are a pedagogical expert specializing in learning objective design using Bloom's Taxonomy.
+
+**TASK:** Generate 3-5 clear, measurable, actionable learning objectives for this course.
+
+**COURSE CONTEXT:**
+- Title: ${course.title}
+- Subject: ${course.subject}
+- Target Audience: ${course.target_audience}
+- Environment: ${course.environment}
+- Language: ${course.language}
+
+**INSTRUCTIONS:**
+1. Use Bloom's Taxonomy verbs (e.g., Analyze, Create, Evaluate, Apply, Understand, Remember)
+2. Make objectives SMART (Specific, Measurable, Achievable, Relevant, Time-bound)
+3. Focus on what participants will BE ABLE TO DO (not just "know")
+4. Match the complexity to the target audience
+5. Consider the environment:
+   - LiveWorkshop: Include practical application objectives
+   - OnlineCourse: Include self-paced learning objectives
+
+**OUTPUT FORMAT (JSON):**
+You must output ONLY a valid JSON object with NO markdown code blocks.
+
+{
+  "objectives": [
+    "By the end of this course, participants will be able to [verb] [specific skill/knowledge]",
+    "Participants will be able to [verb] [specific skill/knowledge]",
+    ...
+  ]
+}
+
+**EXAMPLE:**
+For a React course:
+{
+  "objectives": [
+    "Build a functional React application using components and hooks",
+    "Implement state management using Context API and reducers",
+    "Debug React applications using React Developer Tools"
+  ]
+}
+`;
+        } else if (action === 'chat_onboarding') {
             isJsonMode = true;
             const history = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
 
