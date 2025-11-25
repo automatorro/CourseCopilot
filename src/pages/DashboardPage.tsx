@@ -5,7 +5,7 @@ import { useTranslation } from '../contexts/I18nContext';
 import { useToast } from '../contexts/ToastContext';
 import NewCourseModal from '../components/NewCourseModal';
 import { Course, GenerationEnvironment } from '../types';
-import { PRICING_PLANS, LIVE_WORKSHOP_STEPS, ONLINE_COURSE_STEPS } from '../constants';
+import { PRICING_PLANS } from '../constants';
 import { supabase } from '../services/supabaseClient';
 import { deleteCourseById } from '../services/courseService';
 import { PlusCircle, Loader2, Edit, Copy, Download, Trash2, Rocket } from 'lucide-react';
@@ -74,7 +74,6 @@ const DashboardPage: React.FC = () => {
     title: string;
     subject: string;
     targetAudience: string;
-
     environment: GenerationEnvironment;
     language: string;
   }) => {
@@ -101,61 +100,12 @@ const DashboardPage: React.FC = () => {
       return;
     }
 
-    // 2. Insert the course steps based on environment
-    let stepsKeys = LIVE_WORKSHOP_STEPS;
-    if (details.environment === GenerationEnvironment.OnlineCourse) {
-      stepsKeys = ONLINE_COURSE_STEPS;
-    } else if (details.environment === GenerationEnvironment.Corporate) {
-      stepsKeys = LIVE_WORKSHOP_STEPS; // Fallback
-    }
-
-    const stepsToInsert = stepsKeys.map((key, index) => ({
-      course_id: newCourseData.id,
-      user_id: user.id,
-      title_key: key,
-      content: '',
-      is_completed: false,
-      step_order: index,
-    }));
-
-    const { error: stepsError } = await supabase.from('course_steps').insert(stepsToInsert);
-
-    if (stepsError) {
-      console.error("Error creating course steps:", stepsError);
-      showToast('Error setting up course steps.', 'error');
-      return;
-    }
-
-    newCourseData.steps = stepsToInsert.map(s => ({ ...s, id: '', created_at: new Date().toISOString() }));
+    // Initialize empty steps for UI consistency until Blueprint is ready
+    newCourseData.steps = [];
 
     setCourses(prev => [newCourseData as Course, ...prev]);
     setIsModalOpen(false);
     navigate(`/course/${newCourseData.id}`);
-  };
-
-  const handleAction = async (courseId: string, action: 'duplicate' | 'delete' | 'download', e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log(`[Dashboard] handleAction triggered: action=${action}, courseId=${courseId}`);
-
-    const key = `${action}-${courseId}`;
-    // Pentru delete, gestionăm loader-ul în handleDelete după confirmare
-    if (action === 'delete') {
-      await handleDelete(courseId);
-      return;
-    }
-
-    // Pentru celelalte acțiuni, menținem comportamentul existent
-    setLoadingStates(prev => ({ ...prev, [key]: true }));
-    switch (action) {
-      case 'duplicate':
-        await handleDuplicate(courseId);
-        break;
-      case 'download':
-        await handleDownload(courseId);
-        break;
-    }
-    setLoadingStates(prev => ({ ...prev, [key]: false }));
   };
 
   const handleDuplicate = async (courseId: string) => {
@@ -249,6 +199,30 @@ const DashboardPage: React.FC = () => {
     } finally {
       setLoadingStates(prev => ({ ...prev, [`delete-${courseId}`]: false }));
     }
+  };
+
+  const handleAction = async (courseId: string, action: 'duplicate' | 'delete' | 'download', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log(`[Dashboard] handleAction triggered: action=${action}, courseId=${courseId}`);
+
+    const key = `${action}-${courseId}`;
+
+    if (action === 'delete') {
+      await handleDelete(courseId);
+      return;
+    }
+
+    setLoadingStates(prev => ({ ...prev, [key]: true }));
+    switch (action) {
+      case 'duplicate':
+        await handleDuplicate(courseId);
+        break;
+      case 'download':
+        await handleDownload(courseId);
+        break;
+    }
+    setLoadingStates(prev => ({ ...prev, [key]: false }));
   };
 
   if (isLoading) {

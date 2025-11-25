@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { marked } from 'marked';
@@ -9,7 +9,7 @@ import * as turndownPluginGfm from 'turndown-plugin-gfm';
 const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
 import TurndownService from 'turndown';
 
-import { Course, CourseStep } from '../types';
+import { Course, CourseStep, CourseBlueprint } from '../types';
 
 import { generateCourseContent, refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
@@ -22,6 +22,7 @@ import ImageStudioModal from '../components/ImageStudioModal';
 
 import MarkdownPreview from '../components/MarkdownPreview';
 import TinyEditor from '../components/editor/TinyEditor';
+import OnboardingChat from '../components/OnboardingChat';
 
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useTranslation();
@@ -64,6 +65,7 @@ const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
 const CourseWorkspacePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -785,8 +787,49 @@ const CourseWorkspacePage: React.FC = () => {
 
   const currentStep = course?.steps?.[activeStepIndex];
 
-  if (isLoading || !course || !currentStep) {
+  const handleBlueprintReady = async (blueprint: CourseBlueprint) => {
+    if (!course) return;
+
+    const { error } = await supabase
+      .from('courses')
+      .update({ blueprint })
+      .eq('id', course.id);
+
+    if (error) {
+      console.error('Failed to save blueprint:', error);
+      showToast('Failed to save course blueprint.', 'error');
+      return;
+    }
+
+    setCourse(prev => prev ? { ...prev, blueprint } : null);
+    showToast('Blueprint created! Welcome to the editor.', 'success');
+  };
+
+  if (isLoading || !course) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-primary-500" size={32} /></div>;
+  }
+
+  if (!course.blueprint) {
+    return (
+      <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+        <div className="border-b bg-white dark:bg-gray-800 p-4 flex items-center gap-4 shadow-sm">
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white">{course.title} <span className="text-gray-400 font-normal">| Onboarding</span></h1>
+        </div>
+        <div className="flex-grow overflow-hidden">
+          <OnboardingChat
+            course={course}
+            onBlueprintReady={handleBlueprintReady}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentStep) {
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-primary-500" size={32} /> <span className="ml-2">Preparing workspace...</span></div>;
   }
 
   const isLastStep = activeStepIndex === ((course.steps?.length ?? 0) - 1);

@@ -28,7 +28,7 @@ serve(async (req) => {
     }
 
     try {
-        const { course, step, action, originalContent } = await req.json();
+        const { course, step, action, originalContent, messages } = await req.json();
 
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
         if (!geminiApiKey) {
@@ -36,14 +36,72 @@ serve(async (req) => {
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
+        // Use a model that supports JSON mode well
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-        const stepTitle = STEP_TITLES[step.title_key] || "Unknown Step";
+        const stepTitle = step ? (STEP_TITLES[step.title_key] || "Unknown Step") : "General";
         let prompt;
+        let isJsonMode = false;
 
         // --- PROMPT ROUTER ---
-        if (action === 'improve') {
-            // --- IMPROVEMENT PROMPT (Generic for now, can be specialized later) ---
+        if (action === 'chat_onboarding') {
+            isJsonMode = true;
+            const history = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
+
+            prompt = `
+          **SYSTEM**: You are an expert Instructional Designer and Curriculum Architect.
+          **GOAL**: Conduct an intake interview with the user to design a high-quality course blueprint.
+          
+          **CONTEXT**:
+          - Provisional Title: ${course.title}
+          - Subject: ${course.subject}
+          - Environment: ${course.environment} (Live Workshop vs Online Course)
+          - Language: ${course.language}
+
+          **CHAT HISTORY**:
+          ${history}
+
+          **INSTRUCTIONS**:
+          1.  **Analyze** the conversation so far.
+          2.  **Determine** if you have enough information to create a comprehensive Course Blueprint. Key info needed:
+              - Specific Learning Objectives (what will they be able to do?)
+              - Target Audience details (beginner, advanced, corporate, etc.)
+              - Desired Duration (e.g., 1 day, 4 weeks, 2 hours)
+              - Depth/Tone preference.
+          3.  **Interact**:
+              - If info is missing: Ask ONE clear, relevant follow-up question to gather it. Do not ask multiple questions at once.
+              - If info is sufficient: Generate the Course Blueprint.
+
+          **OUTPUT FORMAT**:
+          You must output a VALID JSON object. Do not use Markdown code blocks.
+          
+          Structure:
+          {
+            "message": "Text response to the user (question or confirmation)",
+            "blueprint": null | {
+               "title": "Refined Course Title",
+               "target_audience": "Detailed audience description",
+               "duration": "Estimated duration",
+               "modules": [
+                 {
+                   "title": "Module 1: Name",
+                   "sections": [
+                      { "title": "Section 1.1: Name", "type": "content" },
+                      { "title": "Section 1.2: Quiz", "type": "quiz" }
+                   ]
+                 }
+               ]
+            }
+          }
+          
+          **BLUEPRINT RULES**:
+          - "type" must be one of: 'content', 'quiz', 'video', 'exercise'.
+          - Create a logical flow.
+          - For 'OnlineCourse', emphasize 'video' sections.
+          - For 'LiveWorkshop', emphasize 'content' (slides) and 'exercise' sections.
+        `;
+        } else if (action === 'improve') {
+            // --- IMPROVEMENT PROMPT ---
             prompt = `
           **ROLE:** You are a senior instructional design editor.
           **CONTEXT:** Improving a section of a ${course.environment} course titled "${course.title}".
@@ -191,7 +249,11 @@ serve(async (req) => {
         }
 
         // Call Gemini API
-        const result = await model.generateContent(prompt);
+        const generationConfig = isJsonMode ? { responseMimeType: "application/json" } : undefined;
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig
+        });
         const response = await result.response;
         const text = response.text();
 
