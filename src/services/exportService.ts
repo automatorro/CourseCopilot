@@ -1,7 +1,7 @@
 import PptxGenJS from 'pptxgenjs';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Header, ImageRun } from 'docx';
 import JSZip from 'jszip';
-import saveAs from 'file-saver';
+
 import { Course, CourseStep } from '../types';
 
 // ============================================================================
@@ -400,7 +400,20 @@ const createDocx = async (step: CourseStep, courseTitle: string, stepTitle: stri
     return Packer.toBlob(doc);
 };
 
+const triggerDownload = (blob: Blob, fileName: string): void => {
+    console.log(`[Export] Triggering download for: ${fileName}, size=${blob.size}, type=${blob.type}`);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
 export const exportCourseAsZip = async (course: Course, t: (key: string) => string): Promise<void> => {
+    console.log('[Export] Starting zip export for:', course.title);
     const zip = new JSZip();
 
     for (const step of course.steps || []) {
@@ -410,7 +423,15 @@ export const exportCourseAsZip = async (course: Course, t: (key: string) => stri
         zip.file(fileName, blob);
     }
 
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const safeCourseTitle = course.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    saveAs(zipBlob, `course_${safeCourseTitle}.zip`);
+    // Force application/octet-stream to prevent browser from trying to display it
+    const zipBlob = await zip.generateAsync({
+        type: 'blob',
+        mimeType: 'application/octet-stream'
+    });
+
+    const safeCourseTitle = course.title.replace(/[^a-z0-9]/gi, '_');
+    const finalFileName = `course_${safeCourseTitle}.zip`;
+
+    console.log('[Export] Zip generated, triggering download for:', finalFileName);
+    triggerDownload(zipBlob, finalFileName);
 };

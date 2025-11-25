@@ -70,21 +70,6 @@ const DashboardPage: React.FC = () => {
     };
   }, [user, showToast]);
 
-  const refetchCourses = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from('courses')
-      .select('*, steps:course_steps(*)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    if (error) {
-      console.error('Error refetching courses:', error);
-    } else {
-      setCourses(data || []);
-    }
-  };
-
-
   const handleCreateCourse = async (details: {
     title: string;
     subject: string;
@@ -151,6 +136,8 @@ const DashboardPage: React.FC = () => {
   const handleAction = async (courseId: string, action: 'duplicate' | 'delete' | 'download', e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    console.log(`[Dashboard] handleAction triggered: action=${action}, courseId=${courseId}`);
+
     const key = `${action}-${courseId}`;
     // Pentru delete, gestionăm loader-ul în handleDelete după confirmare
     if (action === 'delete') {
@@ -219,40 +206,6 @@ const DashboardPage: React.FC = () => {
     showToast('Course duplicated successfully!', 'success');
   };
 
-  const handleDelete = async (courseId: string) => {
-    // Doar dialogul nativ de confirmare, fără toast suplimentar
-    console.debug('[Dashboard] Delete clicked for', courseId);
-    const confirmed = window.confirm('Sunteți sigur că doriți să ștergeți acest curs?');
-    if (!confirmed || !user) return;
-
-    const key = `delete-${courseId}`;
-    setLoadingStates(prev => ({ ...prev, [key]: true }));
-    try {
-      // 2) Trimite cererea către backend și așteaptă răspunsul
-      console.debug('[Dashboard] Sending delete request for', courseId);
-      const result = await deleteCourseById(courseId, user.id);
-      if (!result.ok) {
-        console.error('Error deleting course:', result.message);
-        // Păstrăm cardul și nu afișăm toast (evităm mesaje duplicat)
-        // Re-sincronizează lista pentru a evita discrepanțe cu backend-ul
-        await refetchCourses();
-        return;
-      }
-
-      // 2.d) Nu mai eliminăm cardul local; ne bazăm pe refetch pentru consistență
-      // 4) Refetch pentru persistență și sincronizare completă UI-DB
-      try {
-        await refetchCourses();
-      } catch (e) {
-        console.warn('Refetch eșuat după ștergere');
-      }
-    } finally {
-      setLoadingStates(prev => ({ ...prev, [key]: false }));
-    }
-  };
-
-  // Removed unused helper to satisfy typecheck (TS6133).
-
   const handleDownload = async (courseId: string) => {
     const courseToDownload = courses.find(c => c.id === courseId);
     if (courseToDownload) {
@@ -262,6 +215,39 @@ const DashboardPage: React.FC = () => {
         console.error("Failed to export course:", error);
         showToast('Failed to prepare download.', 'error');
       }
+    }
+  };
+
+  const handleDelete = async (courseId: string) => {
+    console.log('[Dashboard] handleDelete called for', courseId);
+    const confirmed = window.confirm('Sunteți sigur că doriți să ștergeți acest curs?');
+    console.log('[Dashboard] Delete confirmed:', confirmed);
+
+    if (!confirmed) return;
+
+    if (!user) {
+      console.error('[Dashboard] No user found during delete');
+      return;
+    }
+
+    try {
+      setLoadingStates(prev => ({ ...prev, [`delete-${courseId}`]: true }));
+      console.log('[Dashboard] Calling deleteCourseById...');
+      const result = await deleteCourseById(courseId, user.id);
+      console.log('[Dashboard] deleteCourseById result:', result);
+
+      if (result.ok) {
+        setCourses(prev => prev.filter(c => c.id !== courseId));
+        showToast('Course deleted successfully', 'success');
+      } else {
+        console.error('[Dashboard] Delete failed:', result.message);
+        showToast(`Failed to delete course: ${result.message}`, 'error');
+      }
+    } catch (error) {
+      console.error("Failed to delete course:", error);
+      showToast('Failed to delete course.', 'error');
+    } finally {
+      setLoadingStates(prev => ({ ...prev, [`delete-${courseId}`]: false }));
     }
   };
 

@@ -132,7 +132,7 @@ const CourseWorkspacePage: React.FC = () => {
     });
   }, [imageMap]);
 
-  const looksLikeHtml = useCallback((s: string) => /<[a-z][\s\S]*>/i.test(s), []);
+  const looksLikeHtml = useCallback((s: string) => /^\s*<(p|div|h[1-6]|ul|ol|li|blockquote|pre|table|section|article|span|b|i|strong|em|u|a|img)/i.test(s), []);
 
   // Process @img tokens and upload images to storage, replacing tokens with public URLs
   const processImageTokensForSave = useCallback(async (md: string) => {

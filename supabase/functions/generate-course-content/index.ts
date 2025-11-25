@@ -1,7 +1,7 @@
 // @ts-nocheck
 // ABOUTME: This Supabase Edge Function now handles both generating AND improving course content.
 // ABOUTME: It uses the Google Gemini API and selects the correct prompt based on the requested action.
-import { GoogleGenAI } from "npm:@google/genai@^0.14.1";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -35,7 +35,8 @@ serve(async (req) => {
             throw new Error("GEMINI_API_KEY is not set in Supabase secrets.");
         }
 
-        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         const stepTitle = STEP_TITLES[step.title_key] || "Unknown Step";
         let prompt;
@@ -92,9 +93,15 @@ serve(async (req) => {
             switch (step.title_key) {
                 case 'course.steps.structure':
                     specificInstructions = `
-            - Create a detailed outline with modules and lessons.
-            - For each lesson, write 1-2 learning objectives.
-            - Estimate timing for each section.
+            - Create a **Detailed Course Outline** structured by Modules and Lessons.
+            - **CRITICAL**: For EVERY Lesson, you MUST define 2-3 specific **Learning Objectives** using Bloom's Taxonomy verbs (e.g., Define, Analyze, Create).
+            - Format:
+              ### Module 1: [Title] (Total Time)
+              #### Lesson 1.1: [Title] ([Time] min)
+              *   **Objectives**:
+                  *   By the end of this lesson, participants will be able to...
+              *   **Key Topics**: [List of topics]
+            - Ensure the flow is logical and builds complexity gradually.
           `;
                     break;
                 case 'course.steps.video_scripts':
@@ -124,7 +131,25 @@ serve(async (req) => {
                     specificInstructions = `
             - Design a practical **${course.environment === 'LiveWorkshop' ? 'Group Activity' : 'Individual Project'}**.
             - Include: Objective, Instructions, Materials Needed, and Success Criteria.
+            - Suggest a "Solution" or "Answer Key" if applicable.
           `;
+                    break;
+                case 'course.steps.manual':
+                    if (course.environment === 'LiveWorkshop') {
+                        specificInstructions = `
+            - Create a **Trainer's Manual** (Facilitator Guide) in a structured table format.
+            - Use a Markdown table with these columns: **Slide/Topic**, **Time**, **Activity Type** (Presentation, Discussion, Exercise, Break), **Facilitator Instructions & Script**.
+            - **Facilitator Instructions**: Include exactly what to say (script) and what to do (actions).
+            - Include specific instructions for exercises (group split, materials needed).
+            - Example row: | Slide 1: Intro | 5 min | Presentation | Say: "Welcome..." |
+          `;
+                    } else {
+                        specificInstructions = `
+            - Create a comprehensive **Student Manual / Guide**.
+            - Include detailed explanations of the concepts covered in the course.
+            - Use clear headings, bullet points, and examples.
+          `;
+                    }
                     break;
                 case 'course.steps.tests':
                     specificInstructions = `
@@ -166,12 +191,11 @@ serve(async (req) => {
         }
 
         // Call Gemini API
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: prompt
-        });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
 
-        return new Response(JSON.stringify({ content: response.text }), {
+        return new Response(JSON.stringify({ content: text }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200
         });
