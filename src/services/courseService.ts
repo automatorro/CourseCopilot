@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { CourseBlueprint } from '../types';
 
 export type DeleteCourseResult = {
   ok: boolean;
@@ -90,4 +91,101 @@ function mapSupabaseError(error: { message: string; code?: string }): DeleteCour
   if (msg.includes('not found')) return 'NOT_FOUND';
   if (msg.includes('fetch') || msg.includes('network')) return 'NETWORK';
   return 'UNKNOWN';
+}
+
+/**
+ * Converts a Course Blueprint into actual database rows in the `course_steps` table.
+ * This is the critical link between the AI planning phase and the execution phase.
+ */
+export async function createCourseStepsFromBlueprint(courseId: string, blueprint: CourseBlueprint): Promise<{ ok: boolean; error?: any }> {
+  console.log('[CourseService] Creating steps from blueprint for course:', courseId);
+
+  try {
+    // 1. Clear existing steps (if any) to avoid duplicates during re-generation
+    const { error: deleteError } = await supabase
+      .from('course_steps')
+      .delete()
+      .eq('course_id', courseId);
+
+    if (deleteError) {
+      console.error('Failed to clear existing steps:', deleteError);
+      return { ok: false, error: deleteError };
+    }
+
+    // 2. Map Blueprint Modules/Sections to Course Steps
+    // We flatten the hierarchy into a linear list of steps for now, 
+    // but we preserve the module structure in the step title or metadata if needed.
+    const stepsToInsert: any[] = [];
+    let stepOrder = 0;
+
+    // Add a "Course Structure" step first as a summary
+    stepsToInsert.push({
+      course_id: courseId,
+      title_key: 'course.steps.structure',
+      step_order: stepOrder++,
+      is_completed: false,
+      content: generateStructureMarkdown(blueprint) // Pre-fill with the outline
+    });
+
+    for (const module of blueprint.modules) {
+      for (const section of module.sections) {
+        // Map section type to our step keys
+        let titleKey = 'course.steps.manual'; // Default
+        if (section.content_type === 'slides') titleKey = 'course.steps.slides';
+        if (section.content_type === 'video_script') titleKey = 'course.steps.video_scripts';
+        if (section.content_type === 'exercise') titleKey = 'course.steps.exercises';
+        if (section.content_type === 'quiz') titleKey = 'course.steps.tests';
+        if (section.content_type === 'reading') titleKey = 'course.steps.manual';
+
+        // Create a descriptive title for the step content
+        // We might want to store the specific section title in the content or a separate column
+        // For now, we'll prepend it to the content as a header
+        const initialContent = `# ${module.title}: ${section.title}\\n\\n${section.content_outline || ''}`;
+
+        stepsToInsert.push({
+          course_id: courseId,
+          title_key: titleKey,
+          step_order: stepOrder++,
+          is_completed: false,
+          content: initialContent
+        });
+      }
+    }
+
+    // 3. Insert into Database
+    const { error: insertError } = await supabase
+      .from('course_steps')
+      .insert(stepsToInsert);
+
+    if (insertError) {
+      console.error('Failed to insert steps:', insertError);
+      return { ok: false, error: insertError };
+    }
+
+    return { ok: true };
+
+  } catch (error) {
+    console.error('Unexpected error creating steps:', error);
+    return { ok: false, error };
+  }
+}
+
+function generateStructureMarkdown(blueprint: CourseBlueprint): string {
+  let md = `# Course Structure\\n\\n`;
+  md += `**Duration:** ${blueprint.estimated_duration || 'Not specified'}\\n\\n`;
+  md += `## Modules\\n\\n`;
+
+  blueprint.modules.forEach((mod, idx) => {
+    md += `### Module ${idx + 1}: ${mod.title}\\n`;
+    if (mod.learning_objective) {
+      md += `*Objective: ${mod.learning_objective}*\\n`;
+    }
+    md += `\\n`;
+    mod.sections.forEach((sec) => {
+      md += `- **${sec.title}** (${sec.content_type})\\n`;
+    });
+    md += `\\n`;
+  });
+
+  return md;
 }
