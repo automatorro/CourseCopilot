@@ -5,48 +5,48 @@ import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
 const STEP_TITLES: { [key: string]: string } = {
-    'course.steps.structure': "Structure & Agenda",
-    'course.steps.slides': "Slides Content",
-    'course.steps.exercises': "Practical Exercises",
-    'course.steps.manual': "Trainer/Student Manual",
-    'course.steps.tests': "Final Test/Assessment",
-    // New Steps for Online Course
-    'course.steps.video_scripts': "Video Scripts",
-    'course.steps.projects': "Practical Projects",
-    'course.steps.cheat_sheets': "Cheat Sheets / Summary Cards"
+  'course.steps.structure': "Structure & Agenda",
+  'course.steps.slides': "Slides Content",
+  'course.steps.exercises': "Practical Exercises",
+  'course.steps.manual': "Trainer/Student Manual",
+  'course.steps.tests': "Final Test/Assessment",
+  // New Steps for Online Course
+  'course.steps.video_scripts': "Video Scripts",
+  'course.steps.projects': "Practical Projects",
+  'course.steps.cheat_sheets': "Cheat Sheets / Summary Cards"
 };
 
 // Main server function
 serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const { course, step, action, originalContent, messages } = await req.json();
+
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) {
+      throw new Error("GEMINI_API_KEY is not set in Supabase secrets.");
     }
 
-    try {
-        const { course, step, action, originalContent, messages } = await req.json();
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    // Use a model that supports JSON mode well
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-        const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-        if (!geminiApiKey) {
-            throw new Error("GEMINI_API_KEY is not set in Supabase secrets.");
-        }
+    const stepTitle = step ? (STEP_TITLES[step.title_key] || "Unknown Step") : "General";
+    let prompt;
+    let isJsonMode = false;
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
-        // Use a model that supports JSON mode well
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-        const stepTitle = step ? (STEP_TITLES[step.title_key] || "Unknown Step") : "General";
-        let prompt;
-        let isJsonMode = false;
-
-        // --- PROMPT ROUTER ---
-        if (action === 'generate_learning_objectives') {
-            isJsonMode = true;
-            prompt = `
+    // --- PROMPT ROUTER ---
+    if (action === 'generate_learning_objectives') {
+      isJsonMode = true;
+      prompt = `
 **ROLE:** You are a pedagogical expert specializing in learning objective design using Bloom's Taxonomy.
 
 **TASK:** Generate 3-5 clear, measurable, actionable learning objectives for this course.
@@ -88,11 +88,11 @@ For a React course:
   ]
 }
 `;
-        } else if (action === 'chat_onboarding') {
-            isJsonMode = true;
-            const history = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
+    } else if (action === 'chat_onboarding') {
+      isJsonMode = true;
+      const history = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
 
-            prompt = `
+      prompt = `
           **SYSTEM**: You are an expert Instructional Designer and Curriculum Architect.
           **GOAL**: Conduct an intake interview with the user to design a high-quality course blueprint.
           
@@ -123,15 +123,31 @@ For a React course:
           {
             "message": "Text response to the user (question or confirmation)",
             "blueprint": null | {
+               "version": "1.0",
                "title": "Refined Course Title",
                "target_audience": "Detailed audience description",
-               "duration": "Estimated duration",
+               "estimated_duration": "Estimated duration (e.g., '2 hours', '3 days')",
+               "generated_at": "[ISO timestamp]",
                "modules": [
                  {
+                   "id": "module-1",
                    "title": "Module 1: Name",
+                   "learning_objective": "What participants will achieve in this module",
                    "sections": [
-                      { "title": "Section 1.1: Name", "type": "content" },
-                      { "title": "Section 1.2: Quiz", "type": "quiz" }
+                      { 
+                        "id": "section-1-1",
+                        "title": "Section 1.1: Name", 
+                        "content_type": "slides",
+                        "order": 1,
+                        "content_outline": "Brief description of what will be covered"
+                      },
+                      { 
+                        "id": "section-1-2",
+                        "title": "Section 1.2: Quiz", 
+                        "content_type": "quiz",
+                        "order": 2,
+                        "content_outline": "Assessment of module concepts"
+                      }
                    ]
                  }
                ]
@@ -139,14 +155,17 @@ For a React course:
           }
           
           **BLUEPRINT RULES**:
-          - "type" must be one of: 'content', 'quiz', 'video', 'exercise'.
-          - Create a logical flow.
-          - For 'OnlineCourse', emphasize 'video' sections.
-          - For 'LiveWorkshop', emphasize 'content' (slides) and 'exercise' sections.
+          - "content_type" must be one of: 'slides', 'video_script', 'exercise', 'reading', 'quiz'.
+          - Create a logical flow that builds complexity gradually.
+          - **For LiveWorkshop environment**: Emphasize 'slides' (presentation content) and 'exercise' (group activities).
+          - **For OnlineCourse environment**: Emphasize 'video_script' (video narration) and 'reading' (self-paced materials).
+          - Include at least one 'quiz' or 'exercise' per module for knowledge check.
+          - Each module should have a clear learning_objective.
+          - Generate unique IDs for modules and sections (e.g., "module-1", "section-1-1").
         `;
-        } else if (action === 'improve') {
-            // --- IMPROVEMENT PROMPT ---
-            prompt = `
+    } else if (action === 'improve') {
+      // --- IMPROVEMENT PROMPT ---
+      prompt = `
           **ROLE:** You are a senior instructional design editor.
           **CONTEXT:** Improving a section of a ${course.environment} course titled "${course.title}".
           **CURRENT STEP:** ${stepTitle}
@@ -160,41 +179,41 @@ For a React course:
           **TASK:** Rewrite the text to be more engaging, clear, and pedagogically sound.
           **RULES:** Keep the same format (Markdown). Output ONLY the improved text.
         `;
-        } else {
-            // --- GENERATION PROMPT ---
+    } else {
+      // --- GENERATION PROMPT ---
 
-            // 1. Build Context from Previous Steps
-            const previousStepsContext = course.steps
-                ?.filter((s: any) => s.step_order < step.step_order && s.content)
-                .map((s: any) => `--- PREVIOUS STEP: ${STEP_TITLES[s.title_key]} ---\n${s.content.substring(0, 500)}...\n`) // Truncate for token limit
-                .join('\n');
+      // 1. Build Context from Previous Steps
+      const previousStepsContext = course.steps
+        ?.filter((s: any) => s.step_order < step.step_order && s.content)
+        .map((s: any) => `--- PREVIOUS STEP: ${STEP_TITLES[s.title_key]} ---\n${s.content.substring(0, 500)}...\n`) // Truncate for token limit
+        .join('\n');
 
-            // 2. Define Pedagogical Guidance based on Environment
-            let pedagogicalGuidance = "";
-            if (course.environment === 'LiveWorkshop') {
-                pedagogicalGuidance = `
+      // 2. Define Pedagogical Guidance based on Environment
+      let pedagogicalGuidance = "";
+      if (course.environment === 'LiveWorkshop') {
+        pedagogicalGuidance = `
           **PEDAGOGY (Live Workshop):**
           - Focus on **interaction**: Ask questions to the audience, suggest group activities.
           - Content is for **slides and speaking notes**. Keep it punchy.
           - Use **Merrill's First Principles of Instruction**: Activation, Demonstration, Application, Integration.
         `;
-            } else if (course.environment === 'OnlineCourse') {
-                pedagogicalGuidance = `
+      } else if (course.environment === 'OnlineCourse') {
+        pedagogicalGuidance = `
           **PEDAGOGY (Online Video Course):**
           - Focus on **visual storytelling** and clear, scripted narration.
           - Content is for **video scripts** and **downloadable assets**.
           - Use **Mayer's Principles of Multimedia Learning**: Weed out extraneous words (Coherence Principle).
         `;
-            } else {
-                // Fallback for Corporate/Academic
-                pedagogicalGuidance = `**PEDAGOGY:** Focus on clear learning objectives and structured content.`;
-            }
+      } else {
+        // Fallback for Corporate/Academic
+        pedagogicalGuidance = `**PEDAGOGY:** Focus on clear learning objectives and structured content.`;
+      }
 
-            // 3. Define Specific Instructions based on Step Type
-            let specificInstructions = "";
-            switch (step.title_key) {
-                case 'course.steps.structure':
-                    specificInstructions = `
+      // 3. Define Specific Instructions based on Step Type
+      let specificInstructions = "";
+      switch (step.title_key) {
+        case 'course.steps.structure':
+          specificInstructions = `
             - Create a **Detailed Course Outline** structured by Modules and Lessons.
             - **CRITICAL**: For EVERY Lesson, you MUST define 2-3 specific **Learning Objectives** using Bloom's Taxonomy verbs (e.g., Define, Analyze, Create).
             - Format:
@@ -205,66 +224,66 @@ For a React course:
               *   **Key Topics**: [List of topics]
             - Ensure the flow is logical and builds complexity gradually.
           `;
-                    break;
-                case 'course.steps.video_scripts':
-                    specificInstructions = `
+          break;
+        case 'course.steps.video_scripts':
+          specificInstructions = `
             - Write a **Video Script** for the key lessons defined in the structure.
             - Format: **[VISUAL]** (what is on screen) vs **[AUDIO]** (what the speaker says).
             - Include a "Hook" at the start and a "Call to Action" at the end of each script.
             - Keep sentences short and conversational.
           `;
-                    break;
-                case 'course.steps.slides':
-                    specificInstructions = `
+          break;
+        case 'course.steps.slides':
+          specificInstructions = `
             - Create content for **Presentation Slides**.
             - Format: **Slide Title**, **Bullet Points** (max 5), **Speaker Notes**.
             - Suggest an image description for each slide.
           `;
-                    break;
-                case 'course.steps.cheat_sheets':
-                    specificInstructions = `
+          break;
+        case 'course.steps.cheat_sheets':
+          specificInstructions = `
             - Create a **Cheat Sheet / One-Pager** summary.
             - Use tables, checklists, and bold key terms.
             - Focus on "Quick Wins" and actionable tips.
           `;
-                    break;
-                case 'course.steps.exercises':
-                case 'course.steps.projects':
-                    specificInstructions = `
+          break;
+        case 'course.steps.exercises':
+        case 'course.steps.projects':
+          specificInstructions = `
             - Design a practical **${course.environment === 'LiveWorkshop' ? 'Group Activity' : 'Individual Project'}**.
             - Include: Objective, Instructions, Materials Needed, and Success Criteria.
             - Suggest a "Solution" or "Answer Key" if applicable.
           `;
-                    break;
-                case 'course.steps.manual':
-                    if (course.environment === 'LiveWorkshop') {
-                        specificInstructions = `
+          break;
+        case 'course.steps.manual':
+          if (course.environment === 'LiveWorkshop') {
+            specificInstructions = `
             - Create a **Trainer's Manual** (Facilitator Guide) in a structured table format.
             - Use a Markdown table with these columns: **Slide/Topic**, **Time**, **Activity Type** (Presentation, Discussion, Exercise, Break), **Facilitator Instructions & Script**.
             - **Facilitator Instructions**: Include exactly what to say (script) and what to do (actions).
             - Include specific instructions for exercises (group split, materials needed).
             - Example row: | Slide 1: Intro | 5 min | Presentation | Say: "Welcome..." |
           `;
-                    } else {
-                        specificInstructions = `
+          } else {
+            specificInstructions = `
             - Create a comprehensive **Student Manual / Guide**.
             - Include detailed explanations of the concepts covered in the course.
             - Use clear headings, bullet points, and examples.
           `;
-                    }
-                    break;
-                case 'course.steps.tests':
-                    specificInstructions = `
+          }
+          break;
+        case 'course.steps.tests':
+          specificInstructions = `
             - Create a **Final Assessment**.
             - Include 5-10 Multiple Choice Questions with correct answers and explanations.
           `;
-                    break;
-                default:
-                    specificInstructions = `- Generate comprehensive content for this section.`;
-            }
+          break;
+        default:
+          specificInstructions = `- Generate comprehensive content for this section.`;
+      }
 
-            // 4. Assemble the Final Prompt
-            prompt = `
+      // 4. Assemble the Final Prompt
+      prompt = `
           **ROLE:** You are an expert instructional designer specializing in ${course.environment}.
 
           **COURSE CONTEXT:**
@@ -290,27 +309,27 @@ For a React course:
           3.  **Tone:** Professional, encouraging, and adapted to the environment.
           4.  **No Fluff:** Go straight to the content. No "Here is the content" intros.
         `;
-        }
-
-        // Call Gemini API
-        const generationConfig = isJsonMode ? { responseMimeType: "application/json" } : undefined;
-        const result = await model.generateContent({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig
-        });
-        const response = await result.response;
-        const text = response.text();
-
-        return new Response(JSON.stringify({ content: text }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200
-        });
-
-    } catch (error: any) {
-        console.error("Error in Edge Function:", error);
-        return new Response(JSON.stringify({ error: error.message }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 500
-        });
     }
+
+    // Call Gemini API
+    const generationConfig = isJsonMode ? { responseMimeType: "application/json" } : undefined;
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig
+    });
+    const response = await result.response;
+    const text = response.text();
+
+    return new Response(JSON.stringify({ content: text }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
+    });
+
+  } catch (error: any) {
+    console.error("Error in Edge Function:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    });
+  }
 });
