@@ -10,6 +10,7 @@ const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
 import TurndownService from 'turndown';
 
 import { Course, CourseStep, CourseBlueprint } from '../types';
+import { createCourseStepsFromBlueprint } from '../services/courseService';
 
 import { generateCourseContent, refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
@@ -304,11 +305,15 @@ const CourseWorkspacePage: React.FC = () => {
       setShowBlueprintReview(false);
     } else if (!course.blueprint) {
       setShowLOGenerator(false);
-      setShowBlueprintReview(true);
-    } else {
-      // Both exist, show normal editor
-      setShowLOGenerator(false);
       setShowBlueprintReview(false);
+    } else {
+      // Both exist. Check if we should show the review or the editor.
+      // Heuristic: If we have very few steps (<= 1), we probably haven't generated the full course yet.
+      // The 'createCourseStepsFromBlueprint' function will create multiple steps.
+      const hasGeneratedSteps = (course.steps || []).length > 1;
+
+      setShowLOGenerator(false);
+      setShowBlueprintReview(!hasGeneratedSteps);
     }
   }, [course]);
 
@@ -826,12 +831,32 @@ const CourseWorkspacePage: React.FC = () => {
     }
   };
 
+
+
   // Phase 1.4: Handler for Blueprint generation
   const handleGenerateContent = async () => {
-    if (!course) return;
+    if (!course || !course.blueprint) return;
+
+    showToast('Generating course structure from blueprint...', 'info');
+
+    const { ok, error } = await createCourseStepsFromBlueprint(course.id, course.blueprint);
+
+    if (!ok) {
+      console.error('Failed to generate steps:', error);
+      showToast('Failed to generate course structure.', 'error');
+      return;
+    }
+
     setShowBlueprintReview(false);
-    showToast('Proceeding to content generation...', 'success');
-    // Course will reload and show normal editor
+    showToast('Course structure created! Loading editor...', 'success');
+
+    // Reload course to fetch the new steps
+    const updatedCourse = await fetchCourseData();
+    if (updatedCourse) {
+      setCourse(updatedCourse);
+      // Set active step to the first one (Structure)
+      setActiveStepIndex(0);
+    }
   };
 
   const handleBlueprintReady = async (blueprint: CourseBlueprint) => {

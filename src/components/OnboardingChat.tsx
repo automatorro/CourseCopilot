@@ -75,9 +75,22 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
 
             if (error) throw error;
 
+            console.log('AI Response raw:', data);
+
+            let aiResponse;
+            try {
+                // The Edge Function returns { content: "stringified_json" }
+                // We need to parse data.content to get the actual object { message: "...", blueprint: ... }
+                aiResponse = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+            } catch (parseError) {
+                console.error('Failed to parse AI response:', parseError);
+                // Fallback if it's just plain text (unlikely given the prompt, but good for safety)
+                aiResponse = { message: data.content || "I'm having trouble processing that. Could you try again?" };
+            }
+
             const aiMsg: AIMessage = {
                 role: 'assistant',
-                content: data.reply,
+                content: aiResponse.message,
                 timestamp: Date.now(),
                 action: 'chat_response',
             };
@@ -86,9 +99,10 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
             setMessages(updatedMessages);
             saveChatHistory(updatedMessages);
 
-            if (data.blueprint) {
+            if (aiResponse.blueprint) {
                 // Blueprint generated!
-                onBlueprintReady(data.blueprint);
+                console.log('Blueprint received:', aiResponse.blueprint);
+                onBlueprintReady(aiResponse.blueprint);
             }
 
         } catch (error) {
