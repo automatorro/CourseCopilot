@@ -3,6 +3,7 @@
 // ABOUTME: It uses the Google Gemini API and selects the correct prompt based on the requested action.
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,12 +29,35 @@ serve(async (req) => {
   }
 
   try {
-    const { course, step, action, originalContent, messages } = await req.json();
+    const {
+      course,
+      step,
+      action,
+      originalContent,
+      messages,
+      chat_history,
+      refinePayload,
+      context_files,
+      // New parameters for analyze_upload and fill_gaps
+      fileContent,
+      fileName,
+      environment,
+      blueprint,
+      existingContent
+    } = await req.json();
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     if (!geminiApiKey) {
       throw new Error("GEMINI_API_KEY is not set in Supabase secrets.");
     }
+
+    // Initialize Supabase Client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const authHeader = req.headers.get('Authorization');
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader! } },
+    });
 
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     // Use a model that supports JSON mode well
@@ -43,8 +67,95 @@ serve(async (req) => {
     let prompt;
     let isJsonMode = false;
 
+    // --- FETCH CONTEXT FILES ---
+    let fileContext = "";
+    if (context_files && context_files.length > 0) {
+      const { data: files, error } = await supabase
+        .from('course_files')
+        .select('filename, extracted_text')
+        .in('id', context_files);
+
+      if (!error && files) {
+        fileContext = files.map((f: any) =>
+          `--- FILE: ${f.filename} ---\n${f.extracted_text ? f.extracted_text.substring(0, 10000) : '(No text content)'}\n`
+        ).join('\n');
+      }
+    }
+
     // --- PROMPT ROUTER ---
-    if (action === 'generate_learning_objectives') {
+    if (action === 'analyze_upload') {
+      isJsonMode = true;
+      prompt = `
+        **ROLE:** You are an expert Instructional Designer.
+        **TASK:** Analyze the provided course content and structure it into a formal Course Blueprint.
+        
+        **INPUT CONTENT:**
+        ---
+        Filename: ${fileName}
+        Content: ${fileContent ? fileContent.substring(0, 50000) : ''}... (truncated if too long)
+        ---
+        
+        **TARGET ENVIRONMENT:** ${environment}
+        
+        **INSTRUCTIONS:**
+        1. Extract the main topic and target audience.
+        2. Break down the content into logical Modules and Sections.
+        3. Assign appropriate 'content_type' to each section based on the content (e.g., 'slides' for theory, 'exercise' for practice).
+        4. Generate a learning objective for each module.
+        
+        **OUTPUT FORMAT (JSON):**
+        {
+          "version": "1.0",
+          "title": "Course Title",
+          "target_audience": "Audience description",
+          "estimated_duration": "e.g. 2 hours",
+          "generated_at": "${new Date().toISOString()}",
+          "modules": [
+            {
+              "id": "module-1",
+              "title": "Module 1 Title",
+              "learning_objective": "Objective",
+              "sections": [
+                {
+                  "id": "section-1-1",
+                  "title": "Section Title",
+                  "content_type": "slides",
+                  "order": 1,
+                  "content_outline": "Summary of content"
+                }
+              ]
+            }
+          ]
+        }
+      `;
+    } else if (action === 'fill_gaps') {
+      isJsonMode = true;
+      prompt = `
+        **ROLE:** You are an expert Instructional Designer.
+        **TASK:** Identify missing pedagogical elements in the course content and generate them.
+        
+        **COURSE BLUEPRINT:**
+        ${JSON.stringify(blueprint)}
+        
+        **EXISTING CONTENT:**
+        ${existingContent ? existingContent.substring(0, 20000) : ''}...
+        
+        **INSTRUCTIONS:**
+        1. Based on the blueprint and content, identify what is missing (e.g., quizzes, practical exercises, summaries).
+        2. Generate the missing content.
+        
+        **OUTPUT FORMAT (JSON):**
+        {
+          "gaps": [
+            {
+              "type": "quiz",
+              "module_id": "module-1",
+              "content": "Question 1: ..."
+            }
+          ]
+        }
+      `;
+    } else if (action === 'generate_learning_objectives') {
       isJsonMode = true;
       prompt = `
 **ROLE:** You are a pedagogical expert specializing in learning objective design using Bloom's Taxonomy.
@@ -58,14 +169,16 @@ serve(async (req) => {
 - Environment: ${course.environment}
 - Language: ${course.language}
 
+${fileContext ? `**REFERENCE MATERIALS:**\nUse these materials to inform the objectives:\n${fileContext}\n` : ''}
+
 **INSTRUCTIONS:**
 1. Use Bloom's Taxonomy verbs (e.g., Analyze, Create, Evaluate, Apply, Understand, Remember)
 2. Make objectives SMART (Specific, Measurable, Achievable, Relevant, Time-bound)
 3. Focus on what participants will BE ABLE TO DO (not just "know")
 4. Match the complexity to the target audience
 5. Consider the environment:
-   - LiveWorkshop: Include practical application objectives
-   - OnlineCourse: Include self-paced learning objectives
+6.    - LiveWorkshop: Include practical application objectives
+7.    - OnlineCourse: Include self-paced learning objectives
 
 **OUTPUT FORMAT (JSON):**
 You must output ONLY a valid JSON object with NO markdown code blocks.
@@ -90,7 +203,8 @@ For a React course:
 `;
     } else if (action === 'chat_onboarding') {
       isJsonMode = true;
-      const history = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
+      const conversationHistory = messages || chat_history || [];
+      const history = conversationHistory.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
 
       prompt = `
           **SYSTEM**: You are an expert Instructional Designer and Curriculum Architect.
@@ -102,10 +216,12 @@ For a React course:
           - Environment: ${course.environment} (Live Workshop vs Online Course)
           - Language: ${course.language}
 
+          ${fileContext ? `**REFERENCE MATERIALS:**\nThe user has provided these materials:\n${fileContext}\n` : ''}
+
           **CHAT HISTORY**:
           ${history}
 
-          **INSTRUCTIONS**:
+          **INSTRUCTIONS:**
           1.  **Analyze** the conversation so far.
           2.  **Determine** if you have enough information to create a comprehensive Course Blueprint. Key info needed:
               - Specific Learning Objectives (what will they be able to do?)
@@ -171,6 +287,8 @@ For a React course:
           **CURRENT STEP:** ${stepTitle}
           **LANGUAGE:** ${course.language}
 
+          ${fileContext ? `**REFERENCE MATERIALS:**\nUse these materials to ensure accuracy and relevance:\n${fileContext}\n` : ''}
+
           **ORIGINAL TEXT:**
           ---
           ${originalContent}
@@ -179,6 +297,31 @@ For a React course:
           **TASK:** Rewrite the text to be more engaging, clear, and pedagogically sound.
           **RULES:** Keep the same format (Markdown). Output ONLY the improved text.
         `;
+    } else if (action === 'refine') {
+      // --- REFINE SELECTION PROMPT ---
+      const { selectedText, actionType } = refinePayload || {};
+
+
+      prompt = `
+          **ROLE:** You are a senior instructional design editor.
+          **CONTEXT:** Refining a specific section of a ${course.environment} course titled "${course.title}".
+          **LANGUAGE:** ${course.language}
+
+          ${fileContext ? `**REFERENCE MATERIALS:**\nUse these materials if relevant to the refinement:\n${fileContext}\n` : ''}
+
+          **SELECTED TEXT:**
+          "${selectedText}"
+
+          **INSTRUCTION:** ${actionType}
+
+          **TASK:** Rewrite the SELECTED TEXT to follow the INSTRUCTION.
+          **RULES:** 
+          1. Output ONLY the rewritten text. 
+          2. Do NOT include the instruction or any conversational filler.
+          3. Maintain the same Markdown formatting (bold, italics, etc.) unless the instruction implies changing it.
+          4. Ensure the tone fits the course environment (${course.environment}).
+      `;
+
     } else {
       // --- GENERATION PROMPT ---
 
@@ -293,6 +436,8 @@ For a React course:
           *   Language: ${course.language}
 
           ${pedagogicalGuidance}
+
+          ${fileContext ? `**REFERENCE MATERIALS:**\nUse these materials as the primary source of information where applicable:\n${fileContext}\n` : ''}
 
           **PREVIOUS CONTEXT:**
           ${previousStepsContext || "Start of course."}

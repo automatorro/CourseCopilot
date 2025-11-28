@@ -64,6 +64,8 @@ export interface AIMessage {
 
 export interface CourseBlueprint {
   version: '1.0';
+  title?: string;
+  target_audience?: string;
   modules: CourseModule[];
   estimated_duration?: string; // e.g., "2 hours", "3 days"
   generated_at: string; // ISO timestamp
@@ -82,4 +84,17 @@ export interface CourseSection {
   content_type: 'slides' | 'video_script' | 'exercise' | 'reading' | 'quiz';
   order: number;
   content_outline?: string; // Brief description of what will be covered
+}
+
+export interface CourseFile {
+  id: string;
+  course_id: string;
+  user_id: string;
+  filename: string;
+  storage_path: string;
+  file_type: 'pdf' | 'docx' | 'txt' | 'pptx';
+  file_size: number;
+  extracted_text: string | null;
+  uploaded_at: string;
+  created_at: string;
 }

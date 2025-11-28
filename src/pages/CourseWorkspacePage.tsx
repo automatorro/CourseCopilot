@@ -26,6 +26,7 @@ import TinyEditor from '../components/editor/TinyEditor';
 import OnboardingChat from '../components/OnboardingChat';
 import LearningObjectivesGenerator from '../components/LearningObjectivesGenerator';
 import BlueprintReview from '../components/BlueprintReview';
+import FileManager from '../components/FileManager';
 
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useTranslation();
@@ -114,13 +115,14 @@ const CourseWorkspacePage: React.FC = () => {
     void showLinkPanel; void showImagePanel; void showTablePanel;
     void linkUrl; void linkText; void imageUrl; void imageAlt; void linkUrlValid; void imageUrlValid; void tableRows; void tableCols; void localImageFile; void localImageError;
     void setLinkUrl; void setLinkText; void setImageUrl; void setImageAlt; void setTableRows; void setTableCols;
+    void _handleImportFileChange; void _processImportDocument;
   }, []);
 
 
   // Import document state (DOCX/TXT/PDF prototype)
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
+  const [_importing, setImporting] = useState(false);
+  const [_importError, setImportError] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectionRef = useRef<{ start: number, end: number }>({ start: 0, end: 0 });
@@ -308,9 +310,11 @@ const CourseWorkspacePage: React.FC = () => {
       setShowBlueprintReview(false);
     } else {
       // Both exist. Check if we should show the review or the editor.
-      // Heuristic: If we have very few steps (<= 1), we probably haven't generated the full course yet.
-      // The 'createCourseStepsFromBlueprint' function will create multiple steps.
-      const hasGeneratedSteps = (course.steps || []).length > 1;
+      // Heuristic: If we have any steps, we assume the course is generated.
+      const stepCount = (course.steps || []).length;
+      const hasGeneratedSteps = stepCount > 0;
+
+      console.log('[CourseWorkspace] Routing check:', { stepCount, hasGeneratedSteps });
 
       setShowLOGenerator(false);
       setShowBlueprintReview(!hasGeneratedSteps);
@@ -663,13 +667,13 @@ const CourseWorkspacePage: React.FC = () => {
   // =============================
   // Document Import (Prototype)
   // =============================
-  const handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const _handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0] || null;
     setImportFile(file);
     setImportError(null);
   };
 
-  const processImportDocument = async () => {
+  const _processImportDocument = async () => {
     if (!importFile || !course || !user) return;
     setImporting(true);
     setImportError(null);
@@ -950,7 +954,7 @@ const CourseWorkspacePage: React.FC = () => {
   const isBusy = isGenerating || isProposingChanges;
   const canEdit = !isBusy;
   const canGenerate = canEdit && !currentStep.is_completed;
-  const canRefine = canEdit && !!editedContent;
+  const canRefine = canEdit && !!editedContent && !!selectedText.trim();
 
 
 
@@ -996,34 +1000,13 @@ const CourseWorkspacePage: React.FC = () => {
           </div>
         )}
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{t('course.workspace.title')}</p>
-        <div className="mb-6 p-3 card-premium">
-          <div className="flex items-center justify-between">
-            <span className="font-medium text-sm">Importă document</span>
-          </div>
-          <div className="mt-2 space-y-2">
-            <input type="file" accept=".docx,.txt,.pdf" onChange={handleImportFileChange} className="w-full text-sm input-premium" />
-            {importFile && (
-              <div className="text-xs text-gray-600 dark:text-gray-400">Fișier selectat: {importFile.name}</div>
-            )}
-            {importError && (
-              <div className="text-xs text-red-600">{importError}</div>
-            )}
-            <button
-              className="btn-premium text-sm disabled:opacity-50"
-              onClick={processImportDocument}
-              disabled={!importFile || importing}
-            >
-              {importing ? 'Se încarcă...' : 'Încarcă în editor'}
-            </button>
-            <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-800 dark:text-amber-200">
-              <strong>Notă:</strong>
-              <ul className="list-disc list-inside mt-1 space-y-1">
-                <li><strong>DOCX:</strong> Recomandat pentru imagini și tabele.</li>
-                <li><strong>PDF:</strong> Importă doar text simplu.</li>
-              </ul>
-            </div>
-          </div>
+        {/* Legacy Import Removed - Replaced by FileManager */}
+
+        {/* Knowledge Base / Reference Materials */}
+        <div className="mb-6">
+          <FileManager courseId={course.id} />
         </div>
+
         <nav>
           <ul>
             {(course.steps ?? []).map((step: CourseStep, index: number) => (
@@ -1134,8 +1117,8 @@ const CourseWorkspacePage: React.FC = () => {
                 <button
                   onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
                   disabled={!canRefine}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50"
-                  title={t('course.refine.tooltip')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!selectedText.trim() ? 'Select text first to refine it' : t('course.refine.tooltip')}
                 >
                   <Wand size={16} />
                   {t('course.refine.button')}
@@ -1207,8 +1190,8 @@ const CourseWorkspacePage: React.FC = () => {
               <button
                 onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
                 disabled={!canRefine}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50"
-                title={t('course.refine.tooltip')}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!selectedText.trim() ? 'Select text first to refine it' : t('course.refine.tooltip')}
               >
                 <Wand size={16} />
                 {t('course.refine.button')}
@@ -1301,31 +1284,11 @@ const CourseWorkspacePage: React.FC = () => {
                 </div>
               )}
 
-              <div className="mb-6 p-3 card-premium">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm">Importă document</span>
-                </div>
-                <div className="mt-2 space-y-2">
-                  <input type="file" accept=".docx,.txt,.pdf" onChange={handleImportFileChange} className="w-full text-sm input-premium" />
-                  {importFile && (
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Fișier selectat: {importFile.name}</div>
-                  )}
-                  {importError && (
-                    <div className="text-xs text-red-600">{importError}</div>
-                  )}
-                  <button
-                    className="btn-premium text-sm disabled:opacity-50 w-full"
-                    onClick={processImportDocument}
-                    disabled={!importFile || importing}
-                  >
-                    {importing ? 'Se încarcă...' : 'Încarcă în editor'}
-                  </button>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                    Acceptă .docx, .txt, .pdf.
-                    <br />
-                    <span className="text-amber-600 dark:text-amber-500">⚠️ PDF importă doar text. Pentru imagini/tabele folosiți DOCX.</span>
-                  </div>
-                </div>
+              {/* Legacy Import Removed - Replaced by FileManager */}
+
+              {/* Knowledge Base / Reference Materials (Mobile) */}
+              <div className="mb-6">
+                <FileManager courseId={course.id} />
               </div>
 
               <nav>

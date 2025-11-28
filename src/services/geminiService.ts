@@ -2,6 +2,7 @@
 // ABOUTME: for generating and improving course content using the Gemini API.
 import { supabase } from './supabaseClient';
 import { Course, CourseStep } from '../types';
+import { getCourseFiles } from './fileStorageService';
 
 const invokeContentFunction = async (
   action: 'generate' | 'improve' | 'refine',
@@ -13,6 +14,10 @@ const invokeContentFunction = async (
   console.log(`Invoking Edge Function with action '${action}' for step: ${step.title_key}`);
 
   try {
+    // Fetch context files (Knowledge Base)
+    const files = await getCourseFiles(course.id);
+    const context_files = files.map(f => f.id);
+
     const courseForPayload: Course = {
       ...course,
       steps: course.steps?.map(s => {
@@ -26,10 +31,18 @@ const invokeContentFunction = async (
       })
     };
 
-    const body: { course: Course, step: CourseStep, action: string, originalContent?: string, refinePayload?: any } = {
+    const body: {
+      course: Course,
+      step: CourseStep,
+      action: string,
+      originalContent?: string,
+      refinePayload?: any,
+      context_files?: string[]
+    } = {
       course: courseForPayload,
       step: step,
-      action: action
+      action: action,
+      context_files: context_files
     };
 
     if (action === 'improve' || action === 'refine') {
