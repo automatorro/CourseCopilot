@@ -64,8 +64,8 @@ export interface AIMessage {
 
 export interface CourseBlueprint {
   version: '1.0';
-  title?: string;
-  target_audience?: string;
+  title?: string; // Optional override from analysis
+  target_audience?: string; // Optional override from analysis
   modules: CourseModule[];
   estimated_duration?: string; // e.g., "2 hours", "3 days"
   generated_at: string; // ISO timestamp
@@ -97,4 +97,27 @@ export interface CourseFile {
   extracted_text: string | null;
   uploaded_at: string;
   created_at: string;
+}
+
+// NEW: The 12 Steps of the Trainer's Flow
+export enum TrainerStepType {
+  PerformanceObjectives = 'performance_objectives',
+  CourseObjectives = 'course_objectives',
+  Structure = 'structure',
+  LearningMethods = 'learning_methods',
+  TimingAndFlow = 'timing_and_flow',
+  Exercises = 'exercises',
+  ExamplesAndStories = 'examples_and_stories',
+  FacilitatorNotes = 'facilitator_notes',
+  Slides = 'slides',
+  FacilitatorManual = 'facilitator_manual',
+  ParticipantWorkbook = 'participant_workbook',
+  VideoScripts = 'video_scripts',
+}
+
+export interface CourseGenerationStatus {
+  is_generating: boolean;
+  current_step: TrainerStepType | null;
+  completed_steps: TrainerStepType[];
+  error?: string;
 }

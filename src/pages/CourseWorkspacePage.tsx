@@ -27,6 +27,7 @@ import OnboardingChat from '../components/OnboardingChat';
 import LearningObjectivesGenerator from '../components/LearningObjectivesGenerator';
 import BlueprintReview from '../components/BlueprintReview';
 import FileManager from '../components/FileManager';
+import { GenerationProgressModal } from '../components/GenerationProgressModal';
 
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useTranslation();
@@ -110,19 +111,19 @@ const CourseWorkspacePage: React.FC = () => {
   const [tableCols, setTableCols] = useState(3);
   const [localImageFile, setLocalImageFile] = useState<File | null>(null);
   const [localImageError, setLocalImageError] = useState<string | null>(null);
+  const [showGenerationModal, setShowGenerationModal] = useState(false);
 
   useEffect(() => {
     void showLinkPanel; void showImagePanel; void showTablePanel;
     void linkUrl; void linkText; void imageUrl; void imageAlt; void linkUrlValid; void imageUrlValid; void tableRows; void tableCols; void localImageFile; void localImageError;
     void setLinkUrl; void setLinkText; void setImageUrl; void setImageAlt; void setTableRows; void setTableCols;
-    void _handleImportFileChange; void _processImportDocument;
   }, []);
 
 
   // Import document state (DOCX/TXT/PDF prototype)
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [_importing, setImporting] = useState(false);
-  const [_importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectionRef = useRef<{ start: number, end: number }>({ start: 0, end: 0 });
@@ -343,14 +344,22 @@ const CourseWorkspacePage: React.FC = () => {
   const hasUnsavedChanges = editedContent !== originalHtml;
 
   const handleGenerate = useCallback(async () => {
-    if (!course || !course.steps) return;
-    setIsGenerating(true);
-    const currentStep = course.steps[activeStepIndex];
-    const generatedContent = await generateCourseContent(course, currentStep);
-    const html = marked.parse(generatedContent || '', { breaks: true }) as string;
-    setEditedContent(html);
-    setIsGenerating(false);
-  }, [course, activeStepIndex]);
+    if (!course) return;
+    // New Flow: Open the Generation Modal
+    setShowGenerationModal(true);
+  }, [course]);
+
+  const handleGenerationComplete = async () => {
+    setShowGenerationModal(false);
+    showToast('Course materials generated successfully!', 'success');
+    // Reload course to get the new steps
+    const updated = await fetchCourseData();
+    if (updated) {
+      setCourse(updated);
+      // Go to first step
+      setActiveStepIndex(0);
+    }
+  };
 
   useEffect(() => {
     if (!course) return;
@@ -667,13 +676,13 @@ const CourseWorkspacePage: React.FC = () => {
   // =============================
   // Document Import (Prototype)
   // =============================
-  const _handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0] || null;
     setImportFile(file);
     setImportError(null);
   };
 
-  const _processImportDocument = async () => {
+  const processImportDocument = async () => {
     if (!importFile || !course || !user) return;
     setImporting(true);
     setImportError(null);
@@ -843,7 +852,7 @@ const CourseWorkspacePage: React.FC = () => {
 
     showToast('Generating course structure from blueprint...', 'info');
 
-    const { ok, error } = await createCourseStepsFromBlueprint(course.id, course.blueprint);
+    const { ok, error } = await createCourseStepsFromBlueprint(course.id, course.blueprint, user!.id);
 
     if (!ok) {
       console.error('Failed to generate steps:', error);
@@ -1313,6 +1322,15 @@ const CourseWorkspacePage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {course && (
+        <GenerationProgressModal
+          isOpen={showGenerationModal}
+          onClose={() => setShowGenerationModal(false)}
+          course={course}
+          onComplete={handleGenerationComplete}
+        />
       )}
     </div>
   );

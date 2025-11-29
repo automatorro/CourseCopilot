@@ -97,15 +97,63 @@ function mapSupabaseError(error: { message: string; code?: string }): DeleteCour
  * Converts a Course Blueprint into actual database rows in the `course_steps` table.
  * This is the critical link between the AI planning phase and the execution phase.
  */
-export async function createCourseStepsFromBlueprint(courseId: string, _blueprint: CourseBlueprint): Promise<{ ok: boolean; error?: any }> {
+export async function createCourseStepsFromBlueprint(courseId: string, blueprint: CourseBlueprint, userId: string): Promise<{ ok: boolean; error?: any }> {
   console.log('[CourseService] Creating steps from blueprint for course:', courseId);
 
   try {
     // 1. Clear existing steps (if any) to avoid duplicates during re-generation
-    const { error: _deleteError } = await supabase
+    const { error: deleteError } = await supabase
       .from('course_steps')
       .delete()
       .eq('course_id', courseId);
+
+    if (deleteError) throw deleteError;
+
+    // 2. Generate new steps from blueprint
+    const stepsToInsert = [];
+    let stepOrder = 1;
+
+    // Always add a "Structure" step first
+    stepsToInsert.push({
+      course_id: courseId,
+      user_id: userId,
+      title_key: 'course.steps.structure',
+      step_order: stepOrder++,
+      content: generateStructureMarkdown(blueprint),
+      is_completed: true
+    });
+
+    for (const module of blueprint.modules) {
+      for (const section of module.sections) {
+        let titleKey = 'course.steps.manual'; // Default
+        switch (section.content_type) {
+          case 'slides': titleKey = 'course.steps.slides'; break;
+          case 'video_script': titleKey = 'course.steps.video_scripts'; break;
+          case 'exercise': titleKey = 'course.steps.exercises'; break;
+          case 'quiz': titleKey = 'course.steps.tests'; break;
+          case 'reading': titleKey = 'course.steps.manual'; break;
+        }
+
+        // Prepend section title to content as a hint
+        const initialContent = `## ${section.title}\n\n`;
+
+        stepsToInsert.push({
+          course_id: courseId,
+          user_id: userId,
+          title_key: titleKey,
+          step_order: stepOrder++,
+          content: initialContent,
+          is_completed: false
+        });
+      }
+    }
+
+    // 3. Insert steps
+    const { error: insertError } = await supabase
+      .from('course_steps')
+      .insert(stepsToInsert);
+
+    if (insertError) throw insertError;
 
     return { ok: true };
 
@@ -115,24 +163,22 @@ export async function createCourseStepsFromBlueprint(courseId: string, _blueprin
   }
 }
 
-/*
-function _generateStructureMarkdown(blueprint: CourseBlueprint): string {
-  let md = `# Course Structure\\n\\n`;
-  md += `**Duration:** ${blueprint.estimated_duration || 'Not specified'}\\n\\n`;
-  md += `## Modules\\n\\n`;
+function generateStructureMarkdown(blueprint: CourseBlueprint): string {
+  let md = `# Course Structure\n\n`;
+  md += `**Duration:** ${blueprint.estimated_duration || 'Not specified'}\n\n`;
+  md += `## Modules\n\n`;
 
   blueprint.modules.forEach((mod, idx) => {
-    md += `### Module ${idx + 1}: ${mod.title}\\n`;
+    md += `### Module ${idx + 1}: ${mod.title}\n`;
     if (mod.learning_objective) {
-      md += `*Objective: ${mod.learning_objective}*\\n`;
+      md += `*Objective: ${mod.learning_objective}*\n`;
     }
-    md += `\\n`;
+    md += `\n`;
     mod.sections.forEach((sec) => {
-      md += `- **${sec.title}** (${sec.content_type})\\n`;
+      md += `- **${sec.title}** (${sec.content_type})\n`;
     });
-    md += `\\n`;
+    md += `\n`;
   });
 
   return md;
 }
-*/

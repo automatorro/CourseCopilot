@@ -322,6 +322,159 @@ For a React course:
           4. Ensure the tone fits the course environment (${course.environment}).
       `;
 
+    } else if (action === 'generate_step_content') {
+      // --- NEW: 12-STEP TRAINER FLOW GENERATION ---
+      const { step_type, previous_steps } = await req.json();
+
+      // Build context from previous steps (critical for continuity)
+      const previousContext = previous_steps
+        ? previous_steps.map((s: any) => `\n--- PREVIOUS STEP: ${s.step_type} ---\n${s.content.substring(0, 2000)}`).join('\n')
+        : "";
+
+      let specificPrompt = "";
+
+      switch (step_type) {
+        case 'performance_objectives':
+          specificPrompt = `
+            **TASK**: Generate Performance Objectives.
+            **GOAL**: Define exactly what participants will be able to DO by the end.
+            **INSTRUCTIONS**:
+            - Use Bloom's Taxonomy (Action Verbs).
+            - Focus on observable behaviors.
+            - Format as a bulleted list.
+          `;
+          break;
+        case 'course_objectives':
+          specificPrompt = `
+            **TASK**: Generate High-Level Course Objectives.
+            **GOAL**: Define the broader goals and business impact.
+            **INSTRUCTIONS**:
+            - Connect learning to business/personal outcomes.
+            - Keep it inspiring but realistic.
+          `;
+          break;
+        case 'structure':
+          specificPrompt = `
+            **TASK**: Design the Course Structure (Architecture).
+            **GOAL**: Outline the Modules and Lessons.
+            **INSTRUCTIONS**:
+            - Create a logical flow (Simple to Complex).
+            - Define time allocation for each module.
+            - Format as a hierarchical outline.
+          `;
+          break;
+        case 'learning_methods':
+          specificPrompt = `
+            **TASK**: Select Learning Methods.
+            **GOAL**: Choose the best pedagogical approach for each module.
+            **INSTRUCTIONS**:
+            - Suggest methods like: Lecture, Case Study, Role Play, Simulation, Discussion.
+            - Justify WHY this method fits the content.
+            - Map methods to specific modules from the structure.
+          `;
+          break;
+        case 'timing_and_flow':
+          specificPrompt = `
+            **TASK**: Design Timing and Flow.
+            **GOAL**: Create a detailed minute-by-minute agenda.
+            **INSTRUCTIONS**:
+            - Break down each module into specific activities.
+            - Include breaks and energy checks.
+            - Ensure the total time matches the estimated duration.
+          `;
+          break;
+        case 'exercises':
+          specificPrompt = `
+            **TASK**: Design Practical Exercises (Deep Content).
+            **GOAL**: Create detailed instructions for all hands-on activities.
+            **INSTRUCTIONS**:
+            - For each exercise, define:
+              1. **Purpose**: Why are we doing this?
+              2. **Instructions**: Step-by-step guide for participants.
+              3. **Materials**: What is needed?
+              4. **Debrief**: Questions for the facilitator to ask afterwards.
+          `;
+          break;
+        case 'examples_and_stories':
+          specificPrompt = `
+            **TASK**: Generate Examples, Stories, and Case Studies.
+            **GOAL**: Make the theory concrete and relatable.
+            **INSTRUCTIONS**:
+            - Provide 1-2 relevant examples or analogies for each major concept.
+            - Create a "Hero's Journey" style story if appropriate.
+            - Ensure examples fit the Target Audience industry/context.
+          `;
+          break;
+        case 'facilitator_notes':
+          specificPrompt = `
+            **TASK**: Write Facilitator Notes (Deep Content).
+            **GOAL**: Guide the trainer on HOW to deliver the content.
+            **INSTRUCTIONS**:
+            - Include "Say" (Script snippets) and "Do" (Actions).
+            - Highlight potential pitfalls or difficult questions.
+            - Provide tips for managing energy and engagement.
+          `;
+          break;
+        case 'slides':
+          specificPrompt = `
+            **TASK**: Generate Slide Content.
+            **GOAL**: Create the visual support structure.
+            **INSTRUCTIONS**:
+            - Based on the Structure and Deep Content.
+            - Format: **Slide Title**, **Bullet Points** (max 5), **Image Suggestion**.
+            - STRICTLY NO WALLS OF TEXT.
+          `;
+          break;
+        case 'facilitator_manual':
+          specificPrompt = `
+            **TASK**: Compile the Facilitator Manual.
+            **GOAL**: A complete guide for the trainer.
+            **INSTRUCTIONS**:
+            - Combine Structure, Timing, Notes, and Exercises into a cohesive document.
+            - Use a clear, readable format (e.g., tables for agenda).
+          `;
+          break;
+        case 'participant_workbook':
+          specificPrompt = `
+            **TASK**: Create the Participant Workbook.
+            **GOAL**: Materials for the student to use during the course.
+            **INSTRUCTIONS**:
+            - Include: Agenda, Key Concepts (summarized), Exercise worksheets (blank spaces), Reflection questions.
+            - Tone: Encouraging and learner-centric.
+          `;
+          break;
+        case 'video_scripts':
+          specificPrompt = `
+            **TASK**: Write Video Scripts (for Online Course).
+            **GOAL**: Engaging scripts for video production.
+            **INSTRUCTIONS**:
+            - Format: **[VISUAL]** vs **[AUDIO]**.
+            - Keep sentences short and spoken-word style.
+            - Include "Hook", "Content", and "Call to Action".
+          `;
+          break;
+        default:
+          specificPrompt = `**TASK**: Generate content for ${step_type}.`;
+      }
+
+      prompt = `
+        **ROLE**: You are a World-Class Instructional Designer and Curriculum Architect.
+        **CONTEXT**: Creating a **${course.environment}** course titled "**${course.title}**".
+        **TARGET AUDIENCE**: ${course.target_audience}
+        **LANGUAGE**: ${course.language}
+
+        ${fileContext ? `**REFERENCE MATERIALS**:\n${fileContext}\n` : ''}
+
+        ${previousContext}
+
+        ${specificPrompt}
+
+        **OUTPUT RULES**:
+        1. Output ONLY the requested content in Markdown.
+        2. Be thorough and professional.
+        3. STRICTLY adhere to the requested format.
+      `;
+
     } else {
       // --- GENERATION PROMPT ---
 
