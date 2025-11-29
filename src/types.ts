@@ -113,6 +113,9 @@ export enum TrainerStepType {
   FacilitatorManual = 'facilitator_manual',
   ParticipantWorkbook = 'participant_workbook',
   VideoScripts = 'video_scripts',
+  CheatSheets = 'cheat_sheets',
+  Projects = 'projects',
+  Tests = 'tests',
 }
 
 export interface CourseGenerationStatus {

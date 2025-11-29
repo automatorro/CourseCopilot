@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, File, Trash2, Loader2, X } from 'lucide-react';
+import { Upload, FileText, File, Trash2, Loader2 } from 'lucide-react';
 import { CourseFile } from '../types';
 import { uploadCourseFile, getCourseFiles, deleteCourseFile } from '../services/fileStorageService';
 import { useAuth } from '../contexts/AuthContext';

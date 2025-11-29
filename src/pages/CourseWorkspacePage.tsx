@@ -6,13 +6,13 @@ import { marked } from 'marked';
 
 // @ts-ignore
 import * as turndownPluginGfm from 'turndown-plugin-gfm';
-const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
+// const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
 import TurndownService from 'turndown';
 
 import { Course, CourseStep, CourseBlueprint } from '../types';
 import { createCourseStepsFromBlueprint } from '../services/courseService';
 
-import { generateCourseContent, refineCourseContent } from '../services/geminiService';
+import { refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo } from 'lucide-react';
 import { exportCourseAsZip } from '../services/exportService';
@@ -77,7 +77,7 @@ const CourseWorkspacePage: React.FC = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [userCourses, setUserCourses] = useState<Array<{ id: string; title: string }>>([]);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGenerating] = useState(false);
   const [isProposingChanges, setIsProposingChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -121,14 +121,53 @@ const CourseWorkspacePage: React.FC = () => {
 
 
   // Import document state (DOCX/TXT/PDF prototype)
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
+  // const [importFile, setImportFile] = useState<File | null>(null);
+  // const [importing, setImporting] = useState(false);
+  // const [importError, setImportError] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectionRef = useRef<{ start: number, end: number }>({ start: 0, end: 0 });
   const aiActionsDesktopRef = useRef<HTMLDivElement>(null);
   const aiActionsMobileRef = useRef<HTMLDivElement>(null);
+
+  // ... (lines 133-728)
+
+  // const parseDocxToSteps = async (arrayBuffer: ArrayBuffer): Promise<{ title_key: string; content: string }[]> => {
+  //   try {
+  //     const mammothLib: any = await import('mammoth');
+  //     const result = await mammothLib.convertToHtml({ arrayBuffer });
+  //     const html: string = result.value || '';
+  //     const TurndownService = (await import('turndown')).default;
+  //     const turndownPluginGfm = await import('turndown-plugin-gfm');
+  //     const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
+  //     const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+  //     turndownService.use(gfm);
+  //     const markdown = turndownService.turndown(html);
+  //     return [{ title_key: 'course.steps.manual', content: markdown }];
+  //   } catch (err) {
+  //     console.error('DOCX parse error:', err);
+  //     throw new Error('Nu s-a putut procesa fișierul DOCX.');
+  //   }
+  // };
+
+  // const parsePdfToSteps = async (arrayBuffer: ArrayBuffer): Promise<{ title_key: string; content: string }[]> => {
+  //   try {
+  //     const pdfjsLib: any = await import('pdfjs-dist');
+  //     pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  //     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  //     let fullText = '';
+  //     for (let i = 1; i <= pdf.numPages; i++) {
+  //       const page = await pdf.getPage(i);
+  //       const textContent = await page.getTextContent();
+  //       const pageText = textContent.items.map((item: any) => item.str).join(' ');
+  //       fullText += pageText + '\n\n';
+  //     }
+  //     return [{ title_key: 'course.steps.manual', content: fullText }];
+  //   } catch (err) {
+  //     console.error('PDF parse error:', err);
+  //     throw new Error('Nu s-a putut procesa fișierul PDF.');
+  //   }
+  // };
 
 
   // Helper functions for image token system
@@ -676,119 +715,136 @@ const CourseWorkspacePage: React.FC = () => {
   // =============================
   // Document Import (Prototype)
   // =============================
-  const handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const file = e.target.files?.[0] || null;
-    setImportFile(file);
-    setImportError(null);
-  };
+  // const handleImportFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  //   const file = e.target.files?.[0] || null;
+  //   setImportFile(file);
+  //   setImportError(null);
+  // };
 
-  const processImportDocument = async () => {
-    if (!importFile || !course || !user) return;
-    setImporting(true);
-    setImportError(null);
-    try {
-      const arrayBuffer = await importFile.arrayBuffer();
-      const ext = importFile.name.toLowerCase().split('.').pop() || '';
-      let contentToLoad = '';
+  // const processImportDocument = async () => {
+  //   if (!importFile || !course || !user) return;
+  //   setImporting(true);
+  //   setImportError(null);
+  //   try {
+  //     const arrayBuffer = await importFile.arrayBuffer();
+  //     const ext = importFile.name.toLowerCase().split('.').pop() || '';
+  //     let contentToLoad = '';
 
-      if (ext === 'docx') {
-        const steps = await parseDocxToSteps(arrayBuffer);
-        contentToLoad = steps[0]?.content || '';
-      } else if (ext === 'txt') {
-        const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
-        contentToLoad = text;
-      } else if (ext === 'pdf') {
-        const steps = await parsePdfToSteps(arrayBuffer);
-        contentToLoad = steps[0]?.content || '';
-      } else {
-        throw new Error('Format neacceptat. Accept: .docx, .txt, .pdf');
-      }
+  //     if (ext === 'docx') {
+  //       const steps = await parseDocxToSteps(arrayBuffer);
+  //       contentToLoad = steps[0]?.content || '';
+  //     } else if (ext === 'txt') {
+  //       const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
+  //       contentToLoad = text;
+  //     } else if (ext === 'pdf') {
+  //       const steps = await parsePdfToSteps(arrayBuffer);
+  //       contentToLoad = steps[0]?.content || '';
+  //     } else {
+  //       throw new Error('Format neacceptat. Accept: .docx, .txt, .pdf');
+  //     }
 
-      if (!contentToLoad) throw new Error('Nu s-a putut extrage conținut din document.');
+  //     if (!contentToLoad) throw new Error('Nu s-a putut extrage conținut din document.');
 
-      // Update editor content directly
-      setEditedContent(contentToLoad);
+  //     // Update editor content directly
+  //     setEditedContent(contentToLoad);
 
-      // Reset file input
-      setImportFile(null);
-      if (document.querySelector('input[type="file"]')) {
-        (document.querySelector('input[type="file"]') as HTMLInputElement).value = '';
-      }
+  //     // Reset file input
+  //     setImportFile(null);
+  //     if (document.querySelector('input[type="file"]')) {
+  //       (document.querySelector('input[type="file"]') as HTMLInputElement).value = '';
+  //     }
 
-      showToast('Conținutul a fost încărcat în editor. Verifică și salvează.', 'success');
+  //     showToast('Conținutul a fost încărcat în editor. Verifică și salvează.', 'success');
 
-    } catch (err: any) {
-      console.error('Import error:', err);
-      setImportError(err.message || 'A apărut o eroare la import.');
-      showToast('Import nereușit.', 'error');
-    } finally {
-      setImporting(false);
-    }
-  };
+  //   } catch (err: any) {
+  //     console.error('Import error:', err);
+  //     setImportError(err.message || 'A apărut o eroare la import.');
+  //     showToast('Import nereușit.', 'error');
+  //   } finally {
+  //     setImporting(false);
+  //   }
+  // };
 
-  const parseDocxToSteps = async (arrayBuffer: ArrayBuffer): Promise<{ title_key: string; content: string }[]> => {
-    try {
-      const mammothLib: any = await import('mammoth');
-      // Mammoth converts images to base64 by default
-      const result = await mammothLib.convertToHtml({ arrayBuffer });
-      const html: string = result.value || '';
+  // const parseDocxToSteps = async (arrayBuffer: ArrayBuffer): Promise<{ title_key: string; content: string }[]> => {
+  //   try {
+  //     const mammothLib: any = await import('mammoth');
+  //     // Mammoth converts images to base64 by default
+  //     const result = await mammothLib.convertToHtml({ arrayBuffer });
+  //     const html: string = result.value || '';
 
-      // Use TurndownService to preserve images and better formatting
-      const turndownService = new TurndownService({
-        headingStyle: 'atx',
-        codeBlockStyle: 'fenced'
-      });
-      // Use GFM plugin for tables
-      turndownService.use(gfm);
-      // Keep images
-      turndownService.keep(['img']);
+  //     // Use TurndownService to preserve images and better formatting
+  //     const turndownService = new TurndownService({
+  //       headingStyle: 'atx',
+  //       codeBlockStyle: 'fenced'
+  //     });
+  //     // Use GFM plugin for tables
+  //     turndownService.use(gfm);
+  //     // Keep images
+  //     turndownService.keep(['img']);
 
-      const md = turndownService.turndown(html);
+  //     const md = turndownService.turndown(html);
 
-      // Return single step
-      return [{ title_key: 'course.steps.manual', content: md }];
-    } catch (e) {
-      console.warn('DOCX parse fallback:', e);
-      const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
-      return [{ title_key: 'course.steps.manual', content: text }];
-    }
-  };
+  //     // Return single step
+  //     return [{ title_key: 'course.steps.manual', content: md }];
+  //   } catch (e) {
+  //     console.warn('DOCX parse fallback:', e);
+  //     const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
+  //     return [{ title_key: 'course.steps.manual', content: text }];
+  //   }
+  // };
 
-  const parsePdfToSteps = async (arrayBuffer: ArrayBuffer): Promise<{ title_key: string; content: string }[]> => {
-    try {
-      const pdfjsLib: any = await import('pdfjs-dist');
-      // Configure worker for performance
-      try {
-        const workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
-        if (pdfjsLib?.GlobalWorkerOptions) {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
-        }
-      } catch { /* best-effort; continue */ }
+  // const parsePdfToSteps = async (arrayBuffer: ArrayBuffer): Promise<{ title_key: string; content: string }[]> => {
+  //   try {
+  //     const pdfjsLib: any = await import('pdfjs-dist');
+  //     // Configure worker for performance
+  //     try {
+  //       pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  //     } catch (e) { console.warn('PDF worker config warning:', e); }
 
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-      const pdf = await loadingTask.promise;
+  //     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  //     let fullText = '';
+  //     for (let i = 1; i <= pdf.numPages; i++) {
+  //       const page = await pdf.getPage(i);
+  //       const textContent = await page.getTextContent();
+  //       const pageText = textContent.items.map((item: any) => item.str).join(' ');
+  //       fullText += pageText + '\n\n';
+  //     }
+  //     return [{ title_key: 'course.steps.manual', content: fullText }];
+  //   } catch (err) {
+  //     console.error('PDF parse error:', err);
+  //     throw new Error('Nu s-a putut procesa fișierul PDF.');
+  //   }
+  // };
+  // const workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
+  // if (pdfjsLib?.GlobalWorkerOptions) {
+  //   pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+  // }
+  // } catch { /* best-effort; continue */ }
 
-      let fullContent = '';
+  // const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  // const pdf = await loadingTask.promise;
 
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const textContent = await page.getTextContent();
+  // let fullContent = '';
 
-        // Join items with space and clean up excessive whitespace
-        const pageText = textContent.items.map((i: any) => (i.str || '')).join(' ');
-        const cleanText = pageText.replace(/\s{2,}/g, ' ').trim();
+  // for (let p = 1; p <= pdf.numPages; p++) {
+  //   const page = await pdf.getPage(p);
+  //   const textContent = await page.getTextContent();
 
-        if (cleanText.length > 0) {
-          fullContent += `# Slide ${p}\n\n${cleanText}\n\n---\n\n`;
-        }
-      }
+  //   // Join items with space and clean up excessive whitespace
+  //   const pageText = textContent.items.map((i: any) => (i.str || '')).join(' ');
+  //   const cleanText = pageText.replace(/\s{2,}/g, ' ').trim();
 
-      return [{ title_key: 'course.steps.slides', content: fullContent }];
-    } catch (e) {
-      console.warn('PDF parse failed:', e);
-      throw new Error('Nu am potut procesa PDF-ul. Verifică fișierul sau încearcă altul.');
-    }
-  };
+  //   if (cleanText.length > 0) {
+  //     fullContent += `# Slide ${p}\n\n${cleanText}\n\n---\n\n`;
+  //   }
+  // }
+
+  // return [{ title_key: 'course.steps.slides', content: fullContent }];
+  //   } catch (e) {
+  // console.warn('PDF parse failed:', e);
+  // throw new Error('Nu am potut procesa PDF-ul. Verifică fișierul sau încearcă altul.');
+  // }
+  // };
 
 
 

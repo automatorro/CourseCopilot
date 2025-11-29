@@ -279,7 +279,6 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                         {relevantSteps.map((step, index) => {
                             const isCompleted = completedSteps.includes(step.type);
                             const isCurrent = index === currentStepIndex && isGenerating;
-                            const isPending = !isCompleted && !isCurrent;
 
                             return (
                                 <div

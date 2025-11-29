@@ -133,7 +133,7 @@ export async function createCourseFromUpload(
  * Fill missing content types in the course (runs in background)
  */
 async function fillContentGaps(
-    courseId: string,
+    _courseId: string,
     blueprint: CourseBlueprint,
     existingContent: string,
     environment: string
