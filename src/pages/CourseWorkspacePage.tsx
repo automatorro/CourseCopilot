@@ -10,7 +10,6 @@ import * as turndownPluginGfm from 'turndown-plugin-gfm';
 import TurndownService from 'turndown';
 
 import { Course, CourseStep, CourseBlueprint } from '../types';
-import { createCourseStepsFromBlueprint } from '../services/courseService';
 
 import { refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
