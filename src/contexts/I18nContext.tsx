@@ -17,11 +17,14 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const loadTranslations = async () => {
       try {
-        const enResponse = await fetch('/locales/en.json');
-        const en = await enResponse.json();
-        const roResponse = await fetch('/locales/ro.json');
-        const ro = await roResponse.json();
-        setTranslations({ en, ro });
+        const langs = ['en', 'ro', 'es', 'fr', 'de', 'it'];
+        const entries: { [key: string]: Translations } = {};
+        for (const code of langs) {
+          const res = await fetch(`/locales/${code}.json`);
+          const json = await res.json();
+          entries[code] = json;
+        }
+        setTranslations(entries);
       } catch (error) {
         console.error("Failed to load translations:", error);
       }

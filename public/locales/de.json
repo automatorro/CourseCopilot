@@ -1,0 +1,26 @@
+{
+  "chat.onboarding.greetNoObj": "Hallo. Ich bin dein AI Course Co‑Pilot. Ich sehe, du möchtest einen **{env}**‑Kurs über **\"{title}\"** erstellen.\n\nUm die optimale Struktur zu bauen, brauche ich ein paar Informationen.\n\n**Was ist das Hauptziel, das die Teilnehmer am Ende des Kurses erreichen sollen?**",
+  "chat.onboarding.greetWithObj": "Hallo. Ich bin dein AI Course Co‑Pilot. Ich sehe, du möchtest einen **{env}**‑Kurs über **\"{title}\"** erstellen.\n\nIch habe deine Lernziele notiert:\n\n{los}\n\nSuper. Erzähle mir mehr über die Zielgruppe und das gewünschte Niveau/den Ton, damit ich die Struktur verfeinern kann.",
+  "chat.onboarding.placeholder": "Schreibe deine Antwort..."
+  ,"blueprint.title": "Kurs-Blueprint-Überprüfung",
+  "blueprint.subtitle": "Die KI hat eine strukturierte Kursübersicht erstellt. Prüfe und bestätige vor der Inhaltserzeugung.",
+  "blueprint.totalModules": "Gesamtzahl der Module:",
+  "blueprint.estimatedDuration": "Geschätzte Dauer:",
+  "blueprint.notSpecified": "Nicht angegeben",
+  "blueprint.noModules": "Keine Module im Blueprint gefunden. Bitte erneut generieren.",
+  "blueprint.moduleN": "Modul {n}",
+  "blueprint.learningObjective": "Lernziel",
+  "blueprint.sectionsCount": "{count} Abschnitte",
+  "blueprint.actions.refine": "Mit KI verfeinern",
+  "blueprint.actions.edit": "Manuell bearbeiten",
+  "blueprint.actions.generate": "Kursinhalt generieren",
+  "generation.title": "Generierung der Kursmaterialien",
+  "generation.subtitle": "Erstellung deines {env} entsprechend dem Trainer-Flow.",
+  "generation.env.workshop": "Live-Workshop",
+  "generation.env.online": "Online-Kurs",
+  "generation.paused": "Generierung pausiert",
+  "generation.generating": "Generierung...",
+  "generation.completed": "{done} von {total} Schritten abgeschlossen",
+  "generation.processing": "Verarbeitung...",
+  "common.retry": "Erneut versuchen"
+}

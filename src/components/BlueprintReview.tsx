@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle, ChevronDown, ChevronRight, Sparkles, Edit, Play } from 'lucide-react';
 import { CourseBlueprint } from '../types';
+import { useTranslation } from '../contexts/I18nContext';
 
 interface BlueprintReviewProps {
     blueprint: CourseBlueprint;
@@ -16,6 +17,7 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
     onEdit,
 }) => {
     const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+    const { t } = useTranslation();
 
     const toggleModule = (moduleId: string) => {
         setExpandedModules(prev => {
@@ -49,10 +51,10 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                         <div className="bg-white/20 p-2 rounded-full">
                             <CheckCircle size={24} />
                         </div>
-                        <h2 className="text-2xl font-bold">Course Blueprint Review</h2>
+                        <h2 className="text-2xl font-bold">{t('blueprint.title')}</h2>
                     </div>
                     <p className="text-indigo-100">
-                        AI has generated a structured course outline. Review and approve before generating content.
+                        {t('blueprint.subtitle')}
                     </p>
                 </div>
 
@@ -60,23 +62,23 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <span className="text-sm font-medium text-ink-600 dark:text-ink-400">Total Modules:</span>
+                            <span className="text-sm font-medium text-ink-600 dark:text-ink-400">{t('blueprint.totalModules')}</span>
                             <span className="ml-2 font-semibold text-ink-900 dark:text-white">{blueprint.modules.length}</span>
                         </div>
                         <div>
-                            <span className="text-sm font-medium text-ink-600 dark:text-ink-400">Estimated Duration:</span>
+                            <span className="text-sm font-medium text-ink-600 dark:text-ink-400">{t('blueprint.estimatedDuration')}</span>
                             <span className="ml-2 font-semibold text-ink-900 dark:text-white">
-                                {blueprint.estimated_duration || 'Not specified'}
+                                {blueprint.estimated_duration || t('blueprint.notSpecified')}
                             </span>
                         </div>
-                    </div>
+                </div>
                 </div>
 
                 {/* Module Tree */}
                 <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                     {(!blueprint.modules || blueprint.modules.length === 0) ? (
                         <div className="text-center p-8 text-gray-500 dark:text-gray-400">
-                            No modules found in blueprint. Please regenerate.
+                            {t('blueprint.noModules')}
                         </div>
                     ) : (
                         blueprint.modules.map((module, moduleIndex) => {
@@ -99,16 +101,16 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                                         <div className="flex-1 text-left">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                                                    Module {moduleIndex + 1}
+                                                    {t('blueprint.moduleN', { n: moduleIndex + 1 })}
                                                 </span>
                                                 <h3 className="font-bold text-ink-900 dark:text-white">{module.title}</h3>
                                             </div>
                                             <p className="text-sm text-ink-600 dark:text-ink-400 mt-1">
-                                                <strong>Learning Objective:</strong> {module.learning_objective}
+                                                <strong>{t('blueprint.learningObjective')}:</strong> {module.learning_objective}
                                             </p>
                                         </div>
                                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                                            {module.sections.length} sections
+                                            {t('blueprint.sectionsCount', { count: module.sections.length })}
                                         </span>
                                     </button>
 
@@ -162,14 +164,14 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                             className="btn-secondary flex items-center gap-2"
                         >
                             <Sparkles size={18} />
-                            Refine with AI
+                            {t('blueprint.actions.refine')}
                         </button>
                         <button
                             onClick={onEdit}
                             className="btn-secondary flex items-center gap-2"
                         >
                             <Edit size={18} />
-                            Edit Manually
+                            {t('blueprint.actions.edit')}
                         </button>
                     </div>
                     <button
@@ -177,7 +179,7 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                         className="btn-premium flex items-center gap-2"
                     >
                         <Play size={18} />
-                        Generate Course Content
+                        {t('blueprint.actions.generate')}
                     </button>
                 </div>
             </div>

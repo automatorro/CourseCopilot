@@ -1116,7 +1116,7 @@ const CourseWorkspacePage: React.FC = () => {
             <h1 className="text-lg sm:text-2xl font-bold">{t(currentStep.title_key)}</h1>
           </div>
 
-          <div className="border-b dark:border-gray-700 px-4">
+          <div className="border-b dark:border-gray-700 px-4 bg-white dark:bg-gray-800 rounded-t-2xl shadow">
             <nav className="-mb-px flex space-x-4" aria-label="Tabs">
               <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
               <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
@@ -1125,7 +1125,7 @@ const CourseWorkspacePage: React.FC = () => {
 
           <div className="flex-1 flex flex-col min-h-0">
             {isBusy && (
-              <div className="absolute inset-1 bg-gray-100/50 dark:bg-gray-900/50 flex items-center justify-center z-20 rounded-lg">
+              <div className="absolute inset-1 bg-gray-100/50 dark:bg-gray-900/50 flex items-center justify-center z-20 rounded-2xl shadow-lg">
                 <div className="text-center p-6 bg-white/90 dark:bg-gray-800/90 rounded-xl shadow-lg backdrop-blur-sm">
                   <Loader2 className="animate-spin text-primary-500 mx-auto" size={40} />
                   <p className="mt-3 text-lg font-semibold">{isGenerating ? t('course.generating') : t('course.refine.button')}</p>

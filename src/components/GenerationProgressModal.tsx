@@ -3,6 +3,7 @@ import { X, CheckCircle, Circle, Loader2, AlertTriangle } from 'lucide-react';
 import { TrainerStepType, Course } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from '../contexts/I18nContext';
 
 interface GenerationProgressModalProps {
     isOpen: boolean;
@@ -12,18 +13,18 @@ interface GenerationProgressModalProps {
 }
 
 const STEPS_ORDER = [
-    { type: TrainerStepType.PerformanceObjectives, label: '1. Performance Objectives' },
-    { type: TrainerStepType.CourseObjectives, label: '2. Course Objectives' },
-    { type: TrainerStepType.Structure, label: '3. Structure & Architecture' },
-    { type: TrainerStepType.LearningMethods, label: '4. Learning Methods' },
-    { type: TrainerStepType.TimingAndFlow, label: '5. Timing & Flow' },
-    { type: TrainerStepType.Exercises, label: '6. Practical Exercises (Deep Content)' },
-    { type: TrainerStepType.ExamplesAndStories, label: '7. Examples & Stories' },
-    { type: TrainerStepType.FacilitatorNotes, label: '8. Facilitator Notes' },
-    { type: TrainerStepType.Slides, label: '9. Slide Content' },
-    { type: TrainerStepType.FacilitatorManual, label: '10. Facilitator Manual' },
-    { type: TrainerStepType.ParticipantWorkbook, label: '11. Participant Workbook' },
-    { type: TrainerStepType.VideoScripts, label: '12. Video Scripts (Online Only)' },
+    { type: TrainerStepType.PerformanceObjectives, key: 'generation.steps.performanceObjectives' },
+    { type: TrainerStepType.CourseObjectives, key: 'generation.steps.courseObjectives' },
+    { type: TrainerStepType.Structure, key: 'generation.steps.structure' },
+    { type: TrainerStepType.LearningMethods, key: 'generation.steps.learningMethods' },
+    { type: TrainerStepType.TimingAndFlow, key: 'generation.steps.timingFlow' },
+    { type: TrainerStepType.Exercises, key: 'generation.steps.exercises' },
+    { type: TrainerStepType.ExamplesAndStories, key: 'generation.steps.examplesStories' },
+    { type: TrainerStepType.FacilitatorNotes, key: 'generation.steps.facilitatorNotes' },
+    { type: TrainerStepType.Slides, key: 'generation.steps.slides' },
+    { type: TrainerStepType.FacilitatorManual, key: 'generation.steps.facilitatorManual' },
+    { type: TrainerStepType.ParticipantWorkbook, key: 'generation.steps.participantWorkbook' },
+    { type: TrainerStepType.VideoScripts, key: 'generation.steps.videoScripts' },
 ];
 
 export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = ({
@@ -33,6 +34,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
     onComplete,
 }) => {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [completedSteps, setCompletedSteps] = useState<TrainerStepType[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -103,7 +105,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
         setCurrentStepIndex(index);
         const step = relevantSteps[index];
-        console.log(`[GenerationProgressModal] Processing step ${index + 1}/${relevantSteps.length}: ${step.label}`);
+            console.log(`[GenerationProgressModal] Processing step ${index + 1}/${relevantSteps.length}: ${step.key}`);
 
         try {
             // Validate that we have user_id (use fallback from auth context if needed)
@@ -139,7 +141,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             await processStep(index + 1);
 
         } catch (err: any) {
-            console.error(`Error processing step ${step.label}:`, err);
+            console.error(`Error processing step ${step.key}:`, err);
             setError(err.message || "An error occurred during generation.");
             setIsGenerating(false);
         }
@@ -293,10 +295,10 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                     <div>
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                            Generating Course Materials
+                            {t('generation.title')}
                         </h2>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
-                            Creating your {course.environment === 'LiveWorkshop' ? 'Live Workshop' : 'Online Course'} following the Trainer's Flow.
+                            {t('generation.subtitle', { env: course.environment === 'LiveWorkshop' ? t('generation.env.workshop') : t('generation.env.online') })}
                         </p>
                     </div>
                     {!isGenerating && (
@@ -312,13 +314,13 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                         <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
                             <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                             <div>
-                                <h3 className="font-medium text-red-900 dark:text-red-200">Generation Paused</h3>
+                                <h3 className="font-medium text-red-900 dark:text-red-200">{t('generation.paused')}</h3>
                                 <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
                                 <button
                                     onClick={startGeneration}
                                     className="mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
                                 >
-                                    Retry
+                                    {t('common.retry')}
                                 </button>
                             </div>
                         </div>
@@ -354,13 +356,13 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                                             isCompleted ? 'text-green-700 dark:text-green-300' :
                                                 'text-slate-500 dark:text-slate-500'
                                             }`}>
-                                            {step.label}
+                                            {`${index + 1}. ${t(step.key)}`}
                                         </span>
                                     </div>
 
                                     {isCurrent && (
                                         <span className="text-xs font-medium text-blue-600 dark:text-blue-400 animate-pulse">
-                                            Generating...
+                                            {t('generation.generating')}
                                         </span>
                                     )}
                                 </div>
@@ -373,12 +375,12 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 <div className="p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-b-xl">
                     <div className="flex justify-between items-center text-sm text-slate-500">
                         <span>
-                            {completedSteps.length} of {relevantSteps.length} steps completed
+                            {t('generation.completed', { done: completedSteps.length, total: relevantSteps.length })}
                         </span>
                         {isGenerating && (
                             <span className="flex items-center gap-2">
                                 <Loader2 className="w-3 h-3 animate-spin" />
-                                Processing...
+                                {t('generation.processing')}
                             </span>
                         )}
                     </div>

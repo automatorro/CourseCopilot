@@ -1,0 +1,26 @@
+{
+  "chat.onboarding.greetNoObj": "Ciao. Sono il tuo AI Course Co‑Pilot. Vedo che vuoi creare un corso **{env}** su **\"{title}\"**.\n\nPer costruire la struttura ideale, ho bisogno di qualche dettaglio.\n\n**Qual è l’obiettivo principale che desideri che i partecipanti raggiungano alla fine del corso?**",
+  "chat.onboarding.greetWithObj": "Ciao. Sono il tuo AI Course Co‑Pilot. Vedo che vuoi creare un corso **{env}** su **\"{title}\"**.\n\nHo annotato i tuoi obiettivi di apprendimento:\n\n{los}\n\nOttimo. Parlami del pubblico di riferimento e del livello/tono preferito così posso affinare la struttura.",
+  "chat.onboarding.placeholder": "Scrivi la tua risposta..."
+  ,"blueprint.title": "Revisione del Blueprint del Corso",
+  "blueprint.subtitle": "L’IA ha generato una struttura del corso. Rivedi e approva prima di generare i contenuti.",
+  "blueprint.totalModules": "Moduli totali:",
+  "blueprint.estimatedDuration": "Durata stimata:",
+  "blueprint.notSpecified": "Non specificata",
+  "blueprint.noModules": "Nessun modulo trovato nel blueprint. Rigenera per favore.",
+  "blueprint.moduleN": "Modulo {n}",
+  "blueprint.learningObjective": "Obiettivo di apprendimento",
+  "blueprint.sectionsCount": "{count} sezioni",
+  "blueprint.actions.refine": "Raffina con IA",
+  "blueprint.actions.edit": "Modifica manualmente",
+  "blueprint.actions.generate": "Genera i contenuti del corso",
+  "generation.title": "Generazione dei Materiali del Corso",
+  "generation.subtitle": "Creazione del tuo {env} seguendo il flusso del formatore.",
+  "generation.env.workshop": "Workshop live",
+  "generation.env.online": "Corso online",
+  "generation.paused": "Generazione in pausa",
+  "generation.generating": "Generazione...",
+  "generation.completed": "{done} di {total} passaggi completati",
+  "generation.processing": "Elaborazione...",
+  "common.retry": "Riprova"
+}

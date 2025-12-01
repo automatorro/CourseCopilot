@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Sparkles, User, Bot, Loader2 } from 'lucide-react';
 import { AIMessage, Course, CourseBlueprint } from '../types';
 import { supabase } from '../services/supabaseClient';
+import { useTranslation } from '../contexts/I18nContext';
+import { detectChatLanguage } from '../lib/chatLocalizer';
+import { isEnabled } from '../config/featureFlags';
 
 interface OnboardingChatProps {
     course: Course;
@@ -13,6 +16,8 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const { t, language: appLanguage } = useTranslation();
+    const lang = detectChatLanguage(course.language, appLanguage);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -24,10 +29,21 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
 
     useEffect(() => {
         if (messages.length === 0) {
-            // Initial greeting
+            const losRaw = (course.learning_objectives || '').trim();
+            const losLines = losRaw ? losRaw.split('\n').map(s => s.trim()).filter(s => s.length > 0).slice(0, 6) : [];
+            const losFormatted = losLines.length > 0 ? losLines.map(l => (l.startsWith('-') ? l : `- ${l}`)).join('\n') : '';
+            const content = (() => {
+                if (!isEnabled('localizedChat')) {
+                    return `Hello! I'm your AI Course Co‑Pilot. I see you want to create a **${course.environment}** course on **"${course.title}"**.\n\nTo build the perfect structure for you, I need to know a bit more.\n\n**What is the main goal you want your participants to achieve by the end of this course?**`;
+                }
+                if (losFormatted && isEnabled('adaptiveGreeting')) {
+                    return t('chat.onboarding.greetWithObj', { env: course.environment, title: course.title, los: losFormatted });
+                }
+                return t('chat.onboarding.greetNoObj', { env: course.environment, title: course.title });
+            })();
             const initialMessage: AIMessage = {
                 role: 'assistant',
-                content: `Hello! I'm your AI Course Co-Pilot. I see you want to create a **${course.environment}** course on **"${course.title}"**. \n\nTo build the perfect structure for you, I need to know a bit more. \n\n**What is the main goal you want your participants to achieve by the end of this course?**`,
+                content,
                 timestamp: Date.now(),
                 action: 'onboarding_greeting',
             };
@@ -178,7 +194,7 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                        placeholder="Type your answer..."
+                        placeholder={lang === 'ro' ? t('chat.onboarding.placeholder') : t('chat.onboarding.placeholder')}
                         className="flex-1 input-premium"
                         disabled={isTyping}
                     />
