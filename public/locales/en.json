@@ -23,6 +23,14 @@
   "generation.completed": "{done} of {total} steps completed",
   "generation.processing": "Processing...",
   "common.retry": "Retry"
+  ,"course.livrables.structure": "Complete Structure",
+  "course.livrables.examples": "Examples & Case Studies",
+  "course.livrables.participant_workbook": "Participant Workbook",
+  "course.livrables.trainer_manual": "Trainer Manual",
+  "course.livrables.exercises": "Exercises & Activities",
+  "course.livrables.slides": "Slide Deck",
+  "course.livrables.video_scripts": "Video Scripts",
+  "course.livrables.assessment": "Assessment & Tests"
   "header.title": "AI Course Co-Pilot",
   "header.profile": "My Profile",
   "header.dashboard": "Dashboard",

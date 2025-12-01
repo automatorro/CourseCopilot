@@ -23,4 +23,12 @@
   "generation.completed": "{done} von {total} Schritten abgeschlossen",
   "generation.processing": "Verarbeitung...",
   "common.retry": "Erneut versuchen"
+  ,"course.livrables.structure": "Vollständige Struktur",
+  "course.livrables.examples": "Beispiele & Fallstudien",
+  "course.livrables.participant_workbook": "Teilnehmerhandbuch",
+  "course.livrables.trainer_manual": "Trainerhandbuch",
+  "course.livrables.exercises": "Übungen & Aktivitäten",
+  "course.livrables.slides": "Foliensatz",
+  "course.livrables.video_scripts": "Videoskripte",
+  "course.livrables.assessment": "Bewertung & Tests"
 }

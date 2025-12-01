@@ -23,6 +23,14 @@
   "generation.completed": "{done} din {total} pași finalizați",
   "generation.processing": "Procesare...",
   "common.retry": "Reîncearcă"
+  ,"course.livrables.structure": "Structură completă",
+  "course.livrables.examples": "Exemple și studii de caz",
+  "course.livrables.participant_workbook": "Caietul participantului",
+  "course.livrables.trainer_manual": "Manualul trainerului",
+  "course.livrables.exercises": "Exerciții și activități",
+  "course.livrables.slides": "Set de slide-uri",
+  "course.livrables.video_scripts": "Scripturi video",
+  "course.livrables.assessment": "Evaluare și teste"
   "header.title": "AI Course Co-Pilot",
   "header.profile": "Profilul Meu",
   "header.dashboard": "Panou de control",
