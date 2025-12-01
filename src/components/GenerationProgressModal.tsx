@@ -47,8 +47,11 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         return true;
     });
 
+    const hasStartedRef = useRef(false);
+
     useEffect(() => {
-        if (isOpen && !isGenerating && completedSteps.length === 0) {
+        if (isOpen && !isGenerating && completedSteps.length === 0 && !hasStartedRef.current) {
+            hasStartedRef.current = true;
             startGeneration();
         }
         return () => {
@@ -60,12 +63,30 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
     const startGeneration = async () => {
         setIsGenerating(true);
+        console.log('[GenerationProgressModal] Starting generation...');
         setError(null);
         setCurrentStepIndex(0);
         setCompletedSteps([]);
         accumulatedContentRef.current = [];
 
         try {
+            // 0. Connection Check (Ping)
+            console.log('[GenerationProgressModal] Pinging Edge Function...');
+            const { data: pingData, error: pingError } = await supabase.functions.invoke('generate-course-content', {
+                body: { action: 'ping' }
+            });
+
+            if (pingError) {
+                console.error('[GenerationProgressModal] Ping failed:', pingError);
+                throw new Error(`Connection failed: ${pingError.message}. Please check if the Edge Function is deployed.`);
+            }
+
+            if (!pingData || pingData.message !== 'pong') {
+                console.error('[GenerationProgressModal] Invalid ping response:', pingData);
+                throw new Error('Connection verification failed. Invalid response from server.');
+            }
+
+            console.log('[GenerationProgressModal] Ping successful. Starting steps...');
             await processStep(0);
         } catch (err: any) {
             console.error("Generation failed:", err);
@@ -82,6 +103,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
         setCurrentStepIndex(index);
         const step = relevantSteps[index];
+        console.log(`[GenerationProgressModal] Processing step ${index + 1}/${relevantSteps.length}: ${step.label}`);
 
         try {
             // Validate that we have user_id (use fallback from auth context if needed)
@@ -125,14 +147,15 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
     const finalizeGeneration = async () => {
         try {
+            console.log('[GenerationProgressModal] Finalizing generation...');
             const userId = course.user_id || user?.id;
             if (!userId) throw new Error('User ID is missing.');
 
-            // 1. Define Mapping
+            // 1. Define Mapping (8 Livrables - Fixed to separate incompatible types)
             const LIVRABLE_MAPPING = [
                 {
                     key: 'course.livrables.structure',
-                    label: 'Structure & Architecture',
+                    label: 'Complete Structure',
                     sources: [
                         TrainerStepType.PerformanceObjectives,
                         TrainerStepType.CourseObjectives,
@@ -141,11 +164,17 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                     ]
                 },
                 {
-                    key: 'course.livrables.participant_manual',
-                    label: 'Participant Manual',
+                    key: 'course.livrables.examples',
+                    label: 'Examples & Case Studies',
+                    sources: [
+                        TrainerStepType.ExamplesAndStories
+                    ]
+                },
+                {
+                    key: 'course.livrables.participant_workbook',
+                    label: 'Participant Workbook',
                     sources: [
                         TrainerStepType.ParticipantWorkbook,
-                        TrainerStepType.ExamplesAndStories,
                         TrainerStepType.CheatSheets
                     ]
                 },
@@ -155,13 +184,12 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                     sources: [
                         TrainerStepType.LearningMethods,
                         TrainerStepType.FacilitatorNotes,
-                        TrainerStepType.FacilitatorManual,
-                        TrainerStepType.VideoScripts
+                        TrainerStepType.FacilitatorManual
                     ]
                 },
                 {
                     key: 'course.livrables.exercises',
-                    label: 'Exercises & Case Studies',
+                    label: 'Exercises & Activities',
                     sources: [
                         TrainerStepType.Exercises,
                         TrainerStepType.Projects
@@ -175,6 +203,13 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                     ]
                 },
                 {
+                    key: 'course.livrables.video_scripts',
+                    label: 'Video Scripts',
+                    sources: [
+                        TrainerStepType.VideoScripts
+                    ]
+                },
+                {
                     key: 'course.livrables.assessment',
                     label: 'Assessment & Tests',
                     sources: [
@@ -184,6 +219,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             ];
 
             // 2. Delete existing steps to avoid duplicates
+            console.log('[GenerationProgressModal] Deleting existing steps for course:', course.id);
             const { error: deleteError } = await supabase
                 .from('course_steps')
                 .delete()
@@ -195,6 +231,8 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             const stepsToInsert = [];
             let orderCounter = 1;
 
+            console.log('[GenerationProgressModal] Accumulated content:', accumulatedContentRef.current);
+
             for (const livrable of LIVRABLE_MAPPING) {
                 // Find all content chunks that belong to this livrable
                 const chunks = accumulatedContentRef.current.filter(item =>
@@ -202,6 +240,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 );
 
                 if (chunks.length > 0) {
+                    console.log(`[GenerationProgressModal] Found ${chunks.length} chunks for ${livrable.key}`);
                     // Join content with separators
                     const aggregatedContent = chunks.map(c => c.content).join('\n\n---\n\n');
 
@@ -213,15 +252,25 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                         step_order: orderCounter++,
                         is_completed: true
                     });
+                } else {
+                    console.log(`[GenerationProgressModal] No chunks found for ${livrable.key}`);
                 }
             }
+
+            console.log('[GenerationProgressModal] Steps to insert:', stepsToInsert);
 
             if (stepsToInsert.length > 0) {
                 const { error: insertError } = await supabase
                     .from('course_steps')
                     .insert(stepsToInsert);
 
-                if (insertError) throw insertError;
+                if (insertError) {
+                    console.error('[GenerationProgressModal] Insert error:', insertError);
+                    throw insertError;
+                }
+                console.log('[GenerationProgressModal] Insert successful');
+            } else {
+                console.warn('[GenerationProgressModal] No steps to insert!');
             }
 
             setIsGenerating(false);

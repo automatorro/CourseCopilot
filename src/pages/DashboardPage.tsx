@@ -10,6 +10,7 @@ import { supabase } from '../services/supabaseClient';
 import { deleteCourseById } from '../services/courseService';
 import { PlusCircle, Loader2, Edit, Copy, Download, Trash2, Rocket } from 'lucide-react';
 import { exportCourseAsZip } from '../services/exportService';
+import ConfirmModal from '../components/ConfirmModal';
 
 const GettingStartedGuide: React.FC = () => {
   const { t } = useTranslation();
@@ -36,6 +37,10 @@ const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loadingStates, setLoadingStates] = useState<{ [key: string]: boolean }>({});
+
+  // Delete Confirmation State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState<string | null>(null);
 
   const courseLimit = user ? PRICING_PLANS[user.plan].courseLimit : 0;
   const isAdmin = user?.role === 'admin';
@@ -76,6 +81,7 @@ const DashboardPage: React.FC = () => {
     targetAudience: string;
     environment: GenerationEnvironment;
     language: string;
+    learningObjectives?: string;
   }) => {
     if (!user) return;
 
@@ -89,6 +95,7 @@ const DashboardPage: React.FC = () => {
         target_audience: details.targetAudience,
         environment: details.environment,
         language: details.language,
+        learning_objectives: details.learningObjectives || null,
         progress: 0,
       })
       .select('*, steps:course_steps(*)')
@@ -168,21 +175,14 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (courseId: string) => {
-    console.log('[Dashboard] handleDelete called for', courseId);
-    const confirmed = window.confirm('Sunteți sigur că doriți să ștergeți acest curs?');
-    console.log('[Dashboard] Delete confirmed:', confirmed);
+  const confirmDelete = async () => {
+    if (!courseToDelete || !user) return;
 
-    if (!confirmed) return;
-
-    if (!user) {
-      console.error('[Dashboard] No user found during delete');
-      return;
-    }
+    const courseId = courseToDelete;
 
     try {
       setLoadingStates(prev => ({ ...prev, [`delete-${courseId}`]: true }));
-      console.log('[Dashboard] Calling deleteCourseById...');
+      console.log('[Dashboard] Calling deleteCourseById for', courseId);
       const result = await deleteCourseById(courseId, user.id);
       console.log('[Dashboard] deleteCourseById result:', result);
 
@@ -198,7 +198,14 @@ const DashboardPage: React.FC = () => {
       showToast('Failed to delete course.', 'error');
     } finally {
       setLoadingStates(prev => ({ ...prev, [`delete-${courseId}`]: false }));
+      setDeleteModalOpen(false);
+      setCourseToDelete(null);
     }
+  };
+
+  const handleDeleteClick = (courseId: string) => {
+    setCourseToDelete(courseId);
+    setDeleteModalOpen(true);
   };
 
   const handleAction = async (courseId: string, action: 'duplicate' | 'delete' | 'download', e: React.MouseEvent) => {
@@ -209,7 +216,7 @@ const DashboardPage: React.FC = () => {
     const key = `${action}-${courseId}`;
 
     if (action === 'delete') {
-      await handleDelete(courseId);
+      handleDeleteClick(courseId);
       return;
     }
 
@@ -296,6 +303,16 @@ const DashboardPage: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onCreate={handleCreateCourse}
+      />
+
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title="Delete Course"
+        message="Are you sure you want to delete this course? This action cannot be undone."
+        confirmText="Delete Course"
+        isDestructive={true}
       />
     </div>
   );

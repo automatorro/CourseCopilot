@@ -902,30 +902,13 @@ const CourseWorkspacePage: React.FC = () => {
 
 
 
-  // Phase 1.4: Handler for Blueprint generation
+  // Phase 1.4: Handler for Blueprint generation - UPDATED to use 12-step flow
   const handleGenerateContent = async () => {
     if (!course || !course.blueprint) return;
 
-    showToast('Generating course structure from blueprint...', 'info');
-
-    const { ok, error } = await createCourseStepsFromBlueprint(course.id, course.blueprint, user!.id);
-
-    if (!ok) {
-      console.error('Failed to generate steps:', error);
-      showToast('Failed to generate course structure.', 'error');
-      return;
-    }
-
+    // Close blueprint review and open the new 12-step generation modal
     setShowBlueprintReview(false);
-    showToast('Course structure created! Loading editor...', 'success');
-
-    // Reload course to fetch the new steps
-    const updatedCourse = await fetchCourseData();
-    if (updatedCourse) {
-      setCourse(updatedCourse);
-      // Set active step to the first one (Structure)
-      setActiveStepIndex(0);
-    }
+    setShowGenerationModal(true);
   };
 
   const handleBlueprintReady = async (blueprint: CourseBlueprint) => {
@@ -1006,6 +989,29 @@ const CourseWorkspacePage: React.FC = () => {
             onBlueprintReady={handleBlueprintReady}
           />
         </div>
+      </div>
+    );
+  }
+
+  if (showGenerationModal) {
+    return (
+      <div className="relative h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="animate-spin text-primary-500" size={32} />
+          <span className="ml-2 text-gray-500">Generating course content...</span>
+        </div>
+        <GenerationProgressModal
+          isOpen={true}
+          onClose={() => {
+            setShowGenerationModal(false);
+            // If we closed without generating steps, go back to blueprint
+            if ((course.steps || []).length === 0) {
+              setShowBlueprintReview(true);
+            }
+          }}
+          course={course}
+          onComplete={handleGenerationComplete}
+        />
       </div>
     );
   }

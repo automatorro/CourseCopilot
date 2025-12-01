@@ -74,78 +74,84 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
 
                 {/* Module Tree */}
                 <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                    {blueprint.modules.map((module, moduleIndex) => {
-                        const isExpanded = expandedModules.has(module.id);
-                        return (
-                            <div
-                                key={module.id}
-                                className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
-                            >
-                                {/* Module Header */}
-                                <button
-                                    onClick={() => toggleModule(module.id)}
-                                    className="w-full flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
+                    {(!blueprint.modules || blueprint.modules.length === 0) ? (
+                        <div className="text-center p-8 text-gray-500 dark:text-gray-400">
+                            No modules found in blueprint. Please regenerate.
+                        </div>
+                    ) : (
+                        blueprint.modules.map((module, moduleIndex) => {
+                            const isExpanded = expandedModules.has(module.id);
+                            return (
+                                <div
+                                    key={module.id}
+                                    className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
                                 >
-                                    {isExpanded ? (
-                                        <ChevronDown size={20} className="text-primary-600 dark:text-primary-400" />
-                                    ) : (
-                                        <ChevronRight size={20} className="text-gray-400" />
-                                    )}
-                                    <div className="flex-1 text-left">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                                                Module {moduleIndex + 1}
-                                            </span>
-                                            <h3 className="font-bold text-ink-900 dark:text-white">{module.title}</h3>
-                                        </div>
-                                        <p className="text-sm text-ink-600 dark:text-ink-400 mt-1">
-                                            <strong>Learning Objective:</strong> {module.learning_objective}
-                                        </p>
-                                    </div>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                        {module.sections.length} sections
-                                    </span>
-                                </button>
-
-                                {/* Module Sections */}
-                                {isExpanded && (
-                                    <div className="p-4 space-y-2 bg-white dark:bg-gray-800">
-                                        {module.sections.map((section, sectionIndex) => (
-                                            <div
-                                                key={section.id}
-                                                className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
-                                            >
-                                                <div className="flex-shrink-0 mt-0.5">
-                                                    <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                                        {sectionIndex + 1}
-                                                    </div>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <h4 className="font-semibold text-ink-900 dark:text-white">
-                                                            {section.title}
-                                                        </h4>
-                                                        <span
-                                                            className={`px-2 py-0.5 text-xs font-medium rounded-full ${getContentTypeColor(
-                                                                section.content_type
-                                                            )}`}
-                                                        >
-                                                            {section.content_type.replace('_', ' ')}
-                                                        </span>
-                                                    </div>
-                                                    {section.content_outline && (
-                                                        <p className="text-sm text-ink-600 dark:text-ink-400">
-                                                            {section.content_outline}
-                                                        </p>
-                                                    )}
-                                                </div>
+                                    {/* Module Header */}
+                                    <button
+                                        onClick={() => toggleModule(module.id)}
+                                        className="w-full flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
+                                    >
+                                        {isExpanded ? (
+                                            <ChevronDown size={20} className="text-primary-600 dark:text-primary-400" />
+                                        ) : (
+                                            <ChevronRight size={20} className="text-gray-400" />
+                                        )}
+                                        <div className="flex-1 text-left">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
+                                                    Module {moduleIndex + 1}
+                                                </span>
+                                                <h3 className="font-bold text-ink-900 dark:text-white">{module.title}</h3>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                                            <p className="text-sm text-ink-600 dark:text-ink-400 mt-1">
+                                                <strong>Learning Objective:</strong> {module.learning_objective}
+                                            </p>
+                                        </div>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            {module.sections.length} sections
+                                        </span>
+                                    </button>
+
+                                    {/* Module Sections */}
+                                    {isExpanded && (
+                                        <div className="p-4 space-y-2 bg-white dark:bg-gray-800">
+                                            {module.sections.map((section, sectionIndex) => (
+                                                <div
+                                                    key={section.id}
+                                                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
+                                                >
+                                                    <div className="flex-shrink-0 mt-0.5">
+                                                        <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                                            {sectionIndex + 1}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-semibold text-ink-900 dark:text-white">
+                                                                {section.title}
+                                                            </h4>
+                                                            <span
+                                                                className={`px-2 py-0.5 text-xs font-medium rounded-full ${getContentTypeColor(
+                                                                    section.content_type
+                                                                )}`}
+                                                            >
+                                                                {section.content_type.replace('_', ' ')}
+                                                            </span>
+                                                        </div>
+                                                        {section.content_outline && (
+                                                            <p className="text-sm text-ink-600 dark:text-ink-400">
+                                                                {section.content_outline}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
 
                 {/* Actions */}

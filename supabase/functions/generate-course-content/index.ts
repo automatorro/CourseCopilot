@@ -1,6 +1,3 @@
-// @ts-nocheck
-// ABOUTME: This Supabase Edge Function now handles both generating AND improving course content.
-// ABOUTME: It uses the Google Gemini API and selects the correct prompt based on the requested action.
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
@@ -16,13 +13,11 @@ const STEP_TITLES: { [key: string]: string } = {
   'course.steps.exercises': "Practical Exercises",
   'course.steps.manual': "Trainer/Student Manual",
   'course.steps.tests': "Final Test/Assessment",
-  // New Steps for Online Course
   'course.steps.video_scripts': "Video Scripts",
   'course.steps.projects': "Practical Projects",
   'course.steps.cheat_sheets': "Cheat Sheets / Summary Cards"
 };
 
-// Main server function
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -38,12 +33,13 @@ serve(async (req) => {
       chat_history,
       refinePayload,
       context_files,
-      // New parameters for analyze_upload and fill_gaps
       fileContent,
       fileName,
       environment,
       blueprint,
-      existingContent
+      existingContent,
+      step_type,
+      previous_steps
     } = await req.json();
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
@@ -51,7 +47,6 @@ serve(async (req) => {
       throw new Error("GEMINI_API_KEY is not set in Supabase secrets.");
     }
 
-    // Initialize Supabase Client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const authHeader = req.headers.get('Authorization');
@@ -60,14 +55,12 @@ serve(async (req) => {
     });
 
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    // Use a model that supports JSON mode well
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const stepTitle = step ? (STEP_TITLES[step.title_key] || "Unknown Step") : "General";
     let prompt;
     let isJsonMode = false;
 
-    // --- FETCH CONTEXT FILES ---
     let fileContext = "";
     if (context_files && context_files.length > 0) {
       const { data: files, error } = await supabase
@@ -76,13 +69,18 @@ serve(async (req) => {
         .in('id', context_files);
 
       if (!error && files) {
-        fileContext = files.map((f: any) =>
-          `--- FILE: ${f.filename} ---\n${f.extracted_text ? f.extracted_text.substring(0, 10000) : '(No text content)'}\n`
-        ).join('\n');
       }
+
     }
 
-    // --- PROMPT ROUTER ---
+
+    if (action === 'ping') {
+      return new Response(JSON.stringify({ message: 'pong' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      });
+    }
+
     if (action === 'analyze_upload') {
       isJsonMode = true;
       prompt = `
@@ -226,9 +224,13 @@ For a React course:
           2.  **Determine** if you have enough information to create a comprehensive Course Blueprint. Key info needed:
               - Specific Learning Objectives (what will they be able to do?)
               - Target Audience details (beginner, advanced, corporate, etc.)
-              - Desired Duration (e.g., 1 day, 4 weeks, 2 hours)
-              - Depth/Tone preference.
-          3.  **Interact**:
+              - Depth/Tone preference (beginner-friendly, advanced, practical, theoretical)
+          3.  **Auto-Calculate Duration** based on topic complexity:
+              - Simple topic (1-2 key concepts): "2-3 hours"
+              - Moderate topic (3-5 key concepts): "4-5 hours"
+              - Complex topic (6+ key concepts): "6-8 hours"
+              - NEVER exceed "8 hours" (hard limit for quality and cost control)
+          4.  **Interact**:
               - If info is missing: Ask ONE clear, relevant follow-up question to gather it. Do not ask multiple questions at once.
               - If info is sufficient: Generate the Course Blueprint.
 
@@ -324,12 +326,22 @@ For a React course:
 
     } else if (action === 'generate_step_content') {
       // --- NEW: 12-STEP TRAINER FLOW GENERATION ---
-      const { step_type, previous_steps } = await req.json();
+      // --- NEW: 12-STEP TRAINER FLOW GENERATION ---
+      // const { step_type, previous_steps } = await req.json(); // REMOVED: Already parsed above
 
       // Build context from previous steps (critical for continuity)
       const previousContext = previous_steps
         ? previous_steps.map((s: any) => `\n--- PREVIOUS STEP: ${s.step_type} ---\n${s.content.substring(0, 2000)}`).join('\n')
         : "";
+
+      // Extract blueprint duration for enforcement
+      const blueprintDuration = course.blueprint?.estimated_duration || "4 hours";
+      const durationEnforcement = `
+**CRITICAL CONSTRAINT - TOTAL COURSE DURATION**: ${blueprintDuration}
+- The ENTIRE course must fit within ${blueprintDuration}. DO NOT EXCEED THIS LIMIT.
+- Allocate time proportionally across all modules.
+- If generating detailed content, ensure it's appropriate for this duration.
+`;
 
       let specificPrompt = "";
 
@@ -359,8 +371,9 @@ For a React course:
             **GOAL**: Outline the Modules and Lessons.
             **INSTRUCTIONS**:
             - Create a logical flow (Simple to Complex).
-            - Define time allocation for each module.
+            - Define time allocation for each module that TOTALS to ${blueprintDuration}.
             - Format as a hierarchical outline.
+            - CRITICAL: Ensure all modules combined equal ${blueprintDuration}, not more.
           `;
           break;
         case 'learning_methods':
@@ -380,7 +393,7 @@ For a React course:
             **INSTRUCTIONS**:
             - Break down each module into specific activities.
             - Include breaks and energy checks.
-            - Ensure the total time matches the estimated duration.
+            - Ensure the total time matches ${blueprintDuration} EXACTLY.
           `;
           break;
         case 'exercises':
@@ -388,6 +401,7 @@ For a React course:
             **TASK**: Design Practical Exercises (Deep Content).
             **GOAL**: Create detailed instructions for all hands-on activities.
             **INSTRUCTIONS**:
+            - **QUANTITY**: Generate at least **2-3 distinct exercises per module**.
             - For each exercise, define:
               1. **Purpose**: Why are we doing this?
               2. **Instructions**: Step-by-step guide for participants.
@@ -400,6 +414,7 @@ For a React course:
             **TASK**: Generate Examples, Stories, and Case Studies.
             **GOAL**: Make the theory concrete and relatable.
             **INSTRUCTIONS**:
+            - **QUANTITY**: Provide at least **3 concrete examples or analogies** per module.
             - Provide 1-2 relevant examples or analogies for each major concept.
             - Create a "Hero's Journey" style story if appropriate.
             - Ensure examples fit the Target Audience industry/context.
@@ -420,6 +435,7 @@ For a React course:
             **TASK**: Generate Slide Content.
             **GOAL**: Create the visual support structure.
             **INSTRUCTIONS**:
+            - **QUANTITY**: Generate content for at least **5-7 slides per module**.
             - Based on the Structure and Deep Content.
             - Format: **Slide Title**, **Bullet Points** (max 5), **Image Suggestion**.
             - STRICTLY NO WALLS OF TEXT.
@@ -448,6 +464,7 @@ For a React course:
             **TASK**: Write Video Scripts (for Online Course).
             **GOAL**: Engaging scripts for video production.
             **INSTRUCTIONS**:
+            - **QUANTITY**: Write a script for **every key lesson** defined in the structure.
             - Format: **[VISUAL]** vs **[AUDIO]**.
             - Keep sentences short and spoken-word style.
             - Include "Hook", "Content", and "Call to Action".
@@ -462,6 +479,8 @@ For a React course:
         **CONTEXT**: Creating a **${course.environment}** course titled "**${course.title}**".
         **TARGET AUDIENCE**: ${course.target_audience}
         **LANGUAGE**: ${course.language}
+
+        ${durationEnforcement}
 
         ${fileContext ? `**REFERENCE MATERIALS**:\n${fileContext}\n` : ''}
 
