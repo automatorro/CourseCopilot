@@ -14,6 +14,8 @@ import { Course, CourseStep, CourseBlueprint } from '../types';
 import { refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo } from 'lucide-react';
+import BlueprintEditModal from '../components/BlueprintEditModal';
+import BlueprintRefineModal from '../components/BlueprintRefineModal';
 import { exportCourseAsZip } from '../services/exportService';
 import { replaceBlobUrlsWithPublic, uploadBlobToStorage } from '../services/imageService';
 import { useToast } from '../contexts/ToastContext';
@@ -106,6 +108,8 @@ const CourseWorkspacePage: React.FC = () => {
   // Phase 1.4: Routing states for intelligent onboarding
   const [showLOGenerator, setShowLOGenerator] = useState(false);
   const [showBlueprintReview, setShowBlueprintReview] = useState(false);
+  const [showBlueprintEdit, setShowBlueprintEdit] = useState(false);
+  const [showBlueprintRefine, setShowBlueprintRefine] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
   const [localImageFile, setLocalImageFile] = useState<File | null>(null);
@@ -965,10 +969,52 @@ const CourseWorkspacePage: React.FC = () => {
           <BlueprintReview
             blueprint={course.blueprint}
             onGenerateContent={handleGenerateContent}
-            onRefine={() => showToast('AI refinement coming soon!', 'info')}
-            onEdit={() => showToast('Manual editing coming soon!', 'info')}
+            onRefine={() => setShowBlueprintRefine(true)}
+            onEdit={() => setShowBlueprintEdit(true)}
           />
         </div>
+        {showBlueprintEdit && (
+          <BlueprintEditModal
+            isOpen={showBlueprintEdit}
+            blueprint={course.blueprint}
+            onClose={() => setShowBlueprintEdit(false)}
+            onSave={async (bp) => {
+              const { error } = await supabase
+                .from('courses')
+                .update({ blueprint: bp })
+                .eq('id', course.id);
+              if (error) {
+                console.error('Failed to save blueprint:', error);
+                showToast('Failed to save updated blueprint.', 'error');
+                return;
+              }
+              setCourse(prev => prev ? { ...prev, blueprint: bp } : null);
+              showToast('Blueprint updated successfully.', 'success');
+            }}
+          />
+        )}
+        {showBlueprintRefine && (
+          <BlueprintRefineModal
+            isOpen={showBlueprintRefine}
+            course={course}
+            original={course.blueprint}
+            onClose={() => setShowBlueprintRefine(false)}
+            onAccept={async (bp) => {
+              const { error } = await supabase
+                .from('courses')
+                .update({ blueprint: bp })
+                .eq('id', course.id);
+              if (error) {
+                console.error('Failed to save refined blueprint:', error);
+                showToast('Failed to save refined blueprint.', 'error');
+                return;
+              }
+              setCourse(prev => prev ? { ...prev, blueprint: bp } : null);
+              setShowBlueprintRefine(false);
+              showToast('Blueprint refined and saved.', 'success');
+            }}
+          />
+        )}
       </div>
     );
   }

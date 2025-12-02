@@ -4,6 +4,8 @@ import { TrainerStepType, Course } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../contexts/I18nContext';
+import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations, validateDurationsArray } from '../lib/outputValidators';
+import { isEnabled } from '../config/featureFlags';
 
 interface GenerationProgressModalProps {
     isOpen: boolean;
@@ -39,6 +41,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
     const [completedSteps, setCompletedSteps] = useState<TrainerStepType[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [validationReport, setValidationReport] = useState<{ ok: boolean; items: { ok: boolean; message: string }[] } | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
     const accumulatedContentRef = useRef<any[]>([]); // Store content to pass as context
 
@@ -229,7 +232,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
             if (deleteError) throw deleteError;
 
-            // 3. Aggregate and Insert
+            // 3. Aggregate
             const stepsToInsert = [];
             let orderCounter = 1;
 
@@ -261,6 +264,59 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
             console.log('[GenerationProgressModal] Steps to insert:', stepsToInsert);
 
+            // 4. Validation before insert
+            const byKey: Record<string, string> = Object.fromEntries(stepsToInsert.map(s => [s.title_key, s.content]));
+            const items: { ok: boolean; message: string }[] = [];
+            let overallOk = true;
+
+            // a) Non-localized fragments (if not EN)
+            if ((course.language || 'en').toLowerCase() !== 'en') {
+                for (const [key, content] of Object.entries(byKey)) {
+                    const res = detectNonLocalizedFragments(content, course.language || 'ro');
+                    if (!res.ok) {
+                        if (isEnabled('validationStrictLocalization')) {
+                            overallOk = false;
+                        }
+                        items.push({ ok: false, message: t('validation.nonLocalized', { key: t(key), hints: res.hints.join(', ') }) });
+                    } else {
+                        items.push({ ok: true, message: t('validation.okNonLocalized', { key: t(key) }) });
+                    }
+                }
+            }
+
+            // b) Module titles consistency between Structure and Slides
+            if (byKey['course.livrables.structure'] && byKey['course.livrables.slides']) {
+                const cmp = compareModuleTitlesText(byKey['course.livrables.structure'], byKey['course.livrables.slides']);
+                if (!cmp.ok) {
+                    overallOk = false;
+                    items.push({ ok: false, message: t('validation.modulesMismatch', { missing: (cmp.missingInB || []).join('; '), extra: (cmp.extraInB || []).join('; ') }) });
+                } else {
+                    items.push({ ok: true, message: t('validation.modulesMatch') });
+                }
+            }
+
+            // c) Durations array consistency between Structure and Workbook
+            if (byKey['course.livrables.structure'] && byKey['course.livrables.participant_workbook']) {
+                const sd = extractModuleDurations(byKey['course.livrables.structure']);
+                const wd = extractModuleDurations(byKey['course.livrables.participant_workbook']);
+                const v = validateDurationsArray(sd, wd);
+                if (!v.ok) {
+                    overallOk = false;
+                    items.push({ ok: false, message: t('validation.durationMismatch') });
+                } else {
+                    items.push({ ok: true, message: t('validation.durationMatch') });
+                }
+            }
+
+            setValidationReport({ ok: overallOk, items });
+
+            if (!overallOk) {
+                setIsGenerating(false);
+                console.warn('[GenerationProgressModal] Validation failed. Not inserting steps.');
+                return; // Stop here, show report in UI
+            }
+
+            // 5. Insert if validation ok
             if (stepsToInsert.length > 0) {
                 const { error: insertError } = await supabase
                     .from('course_steps')
@@ -310,6 +366,38 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    {/* Validation Report */}
+                    {validationReport && !isGenerating && (
+                        <div className={`p-4 rounded-lg border ${validationReport.ok ? 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30' : 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/10 dark:border-yellow-900/30'}`}>
+                            <div className="flex items-center gap-2 mb-2">
+                                {validationReport.ok ? (
+                                    <CheckCircle className="w-5 h-5 text-green-600" />
+                                ) : (
+                                    <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                                )}
+                                <span className="font-semibold">
+                                    {validationReport.ok ? t('validation.titleOk') : t('validation.titleIssues')}
+                                </span>
+                            </div>
+                            <ul className="space-y-1">
+                                {validationReport.items.map((it, idx) => (
+                                    <li key={idx} className="text-sm">
+                                        <span className={it.ok ? 'text-green-700 dark:text-green-300' : 'text-yellow-700 dark:text-yellow-300'}>• {it.message}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {!validationReport.ok && (
+                                <div className="mt-3 flex gap-2">
+                                    <button onClick={startGeneration} className="btn-premium">
+                                        {t('validation.actions.retry')}
+                                    </button>
+                                    <button onClick={() => setValidationReport(null)} className="btn-premium--secondary">
+                                        {t('validation.actions.dismiss')}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {error && (
                         <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
                             <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />

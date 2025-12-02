@@ -1,7 +1,7 @@
 // ABOUTME: This service handles communication with the Supabase Edge Function
 // ABOUTME: for generating and improving course content using the Gemini API.
 import { supabase } from './supabaseClient';
-import { Course, CourseStep } from '../types';
+import { Course, CourseStep, CourseBlueprint } from '../types';
 import { getCourseFiles } from './fileStorageService';
 
 const invokeContentFunction = async (
@@ -93,4 +93,38 @@ export const improveCourseContent = async (course: Course, step: CourseStep, ori
  */
 export const refineCourseContent = async (course: Course, step: CourseStep, fullContent: string, selectedText: string, actionType: string): Promise<string> => {
   return invokeContentFunction('refine', course, step, fullContent, { selectedText, actionType });
-}
+};
+
+/**
+ * Refines the Course Blueprint using Edge Function.
+ * Returns the refined blueprint or the original on failure.
+ */
+export const refineBlueprint = async (course: Course, blueprint: CourseBlueprint): Promise<CourseBlueprint> => {
+  try {
+    const body = {
+      action: 'refine_blueprint',
+      course: { ...course, steps: [] },
+      blueprint,
+      language: course.language
+    };
+    const { data, error } = await supabase.functions.invoke('generate-course-content', { body });
+    if (error) {
+      console.warn('[refineBlueprint] Edge Function error:', error);
+      return blueprint;
+    }
+    if (typeof data?.content === 'string') {
+      try {
+        const refined = JSON.parse(data.content);
+        if (refined && Array.isArray(refined.modules)) return refined as CourseBlueprint;
+      } catch (e) {
+        console.warn('[refineBlueprint] Failed to parse content as JSON:', e);
+      }
+    } else if (data?.blueprint && Array.isArray(data.blueprint.modules)) {
+      return data.blueprint as CourseBlueprint;
+    }
+    return blueprint;
+  } catch (e) {
+    console.warn('[refineBlueprint] Client-side error:', e);
+    return blueprint;
+  }
+};

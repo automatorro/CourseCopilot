@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CheckCircle, ChevronDown, ChevronRight, Sparkles, Edit, Play } from 'lucide-react';
+import { isEnabled } from '../config/featureFlags';
 import { CourseBlueprint } from '../types';
 import { useTranslation } from '../contexts/I18nContext';
 
@@ -159,13 +160,15 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                 {/* Actions */}
                 <div className="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-3 justify-between">
                     <div className="flex gap-3">
-                        <button
-                            onClick={onRefine}
-                            className="btn-secondary flex items-center gap-2"
-                        >
-                            <Sparkles size={18} />
-                            {t('blueprint.actions.refine')}
-                        </button>
+                        {isEnabled('blueprintRefineEnabled') && (
+                            <button
+                                onClick={onRefine}
+                                className="btn-secondary flex items-center gap-2"
+                            >
+                                <Sparkles size={18} />
+                                {t('blueprint.actions.refine')}
+                            </button>
+                        )}
                         <button
                             onClick={onEdit}
                             className="btn-secondary flex items-center gap-2"
