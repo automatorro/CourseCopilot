@@ -29,7 +29,8 @@ import LearningObjectivesGenerator from '../components/LearningObjectivesGenerat
 import BlueprintReview from '../components/BlueprintReview';
 import FileManager from '../components/FileManager';
 import { GenerationProgressModal } from '../components/GenerationProgressModal';
-
+import { isEnabled } from '../config/featureFlags';
+import '../styles/sticky-editor.css';
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useTranslation();
   const helpItems = [
@@ -1076,7 +1077,7 @@ const CourseWorkspacePage: React.FC = () => {
 
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] overflow-x-hidden">
+    <div className="course-workspace-container flex flex-col lg:flex-row overflow-x-hidden">
       {isHelpModalOpen && <HelpModal onClose={handleCloseHelpModal} />}
       {proposedContent !== null && originalForProposal !== null && (
         <ReviewChangesModal
@@ -1146,8 +1147,8 @@ const CourseWorkspacePage: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col p-6 lg:p-10 pb-24 sm:pb-10">
-        <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
-          <div className="p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-visible">
+          <div className="editor-header-sticky p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
             <button
               onClick={() => window.location.href = '/#/dashboard'}
               className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mr-2"
@@ -1162,7 +1163,7 @@ const CourseWorkspacePage: React.FC = () => {
             <h1 className="text-lg sm:text-2xl font-bold">{t(currentStep.title_key)}</h1>
           </div>
 
-          <div className="border-b dark:border-gray-700 px-4 bg-white dark:bg-gray-800 rounded-t-2xl shadow">
+          <div className="editor-tabs-sticky border-b dark:border-gray-700 px-4 bg-white dark:bg-gray-800">
             <nav className="-mb-px flex space-x-4" aria-label="Tabs">
               <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
               <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
@@ -1206,7 +1207,7 @@ const CourseWorkspacePage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto min-h-0 pb-40 sm:pb-28">
+              <div className="flex-1 min-h-0 pb-40 sm:pb-28">
                 {looksLikeHtml(editedContent) ? (
                   <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: editedContent }} />
                 ) : (
@@ -1218,16 +1219,18 @@ const CourseWorkspacePage: React.FC = () => {
             )}
           </div>
 
-          <div id="workspace-actions" className="hidden sm:flex p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 justify-between items-center relative z-20 sticky bottom-0">
+          <div id="workspace-actions" className="editor-actions-sticky hidden sm:flex p-6 border-t dark:border-gray-700 justify-between items-center">
             <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={handleGenerate}
-                disabled={!canGenerate}
-                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
-              >
-                <Sparkles size={16} />
-                {t('course.generate')}
-              </button>
+              {isEnabled('editorGenerateButtonEnabled') && (
+                <button
+                  onClick={handleGenerate}
+                  disabled={!canGenerate}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
+                >
+                  <Sparkles size={16} />
+                  {t('course.generate')}
+                </button>
+              )}
 
               <div ref={aiActionsDesktopRef} className="relative">
                 <button
@@ -1291,17 +1294,19 @@ const CourseWorkspacePage: React.FC = () => {
         </div>
       </main>
       {/* Sticky mobile actions bar */}
-      <div id="mobile-actions-bar" className="sm:hidden fixed bottom-0 left-0 right-0 z-40 border-t dark:border-gray-700 bg-white/90 dark:bg-gray-800/80 backdrop-blur-sm shadow-lg safe-area-bottom">
-        <div className="px-3 py-2 flex items-center justify-between gap-2">
-          <div className="flex gap-2 flex-1">
-            <button
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
-            >
-              <Sparkles size={16} />
-              {t('course.generate')}
-            </button>
+      <div id="mobile-actions-bar" className="mobile-actions-sticky sm:hidden border-t dark:border-gray-700 shadow-lg safe-area-bottom">
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <div className="flex gap-2 flex-1">
+            {isEnabled('editorGenerateButtonEnabled') && (
+              <button
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
+              >
+                <Sparkles size={16} />
+                {t('course.generate')}
+              </button>
+            )}
             <div ref={aiActionsMobileRef} className="relative flex-1">
               <button
                 onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}

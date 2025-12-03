@@ -4,7 +4,8 @@ export type FeatureFlagKey =
   | 'languageDetector'
   | 'editorUiUnified'
   | 'validationStrictLocalization'
-  | 'blueprintRefineEnabled';
+  | 'blueprintRefineEnabled'
+  | 'editorGenerateButtonEnabled';
 
 export const FEATURE_FLAGS: Record<FeatureFlagKey, boolean> = {
   localizedChat: true,
@@ -13,6 +14,7 @@ export const FEATURE_FLAGS: Record<FeatureFlagKey, boolean> = {
   editorUiUnified: true,
   validationStrictLocalization: false,
   blueprintRefineEnabled: false,
+  editorGenerateButtonEnabled: false,
 };
 
 export const FEATURE_DOCS: Record<FeatureFlagKey, string> = {
@@ -22,6 +24,7 @@ export const FEATURE_DOCS: Record<FeatureFlagKey, string> = {
   editorUiUnified: 'Uniformizează clasele și stilurile editorului cu modalele premium (culori, raioane, umbre).',
   validationStrictLocalization: 'Dacă este activ, livrabilele cu fragmente nelocalizate vor bloca finalizarea generării.',
   blueprintRefineEnabled: 'Controlează afișarea butonului „Rafinează cu AI” în Review Blueprint.',
+  editorGenerateButtonEnabled: 'Controlează afișarea butonului „Generează Conținut” din editor.',
 };
 
 export const isEnabled = (key: FeatureFlagKey): boolean => FEATURE_FLAGS[key];

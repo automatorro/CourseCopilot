@@ -44,17 +44,17 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
     };
 
     return (
-        <div className="max-w-5xl mx-auto p-8">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700">
+        <div className="h-full"><div className="max-w-5xl mx-auto h-full p-8">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 flex flex-col h-full overflow-y-auto">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white rounded-t-2xl">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="bg-white/20 p-2 rounded-full">
-                            <CheckCircle size={24} />
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white rounded-t-2xl sticky top-0 z-30 shadow-md">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="bg-white/20 p-1.5 rounded-full">
+                            <CheckCircle size={20} />
                         </div>
-                        <h2 className="text-2xl font-bold">{t('blueprint.title')}</h2>
+                        <h2 className="text-xl font-bold">{t('blueprint.title')}</h2>
                     </div>
-                    <p className="text-indigo-100">
+                    <p className="text-indigo-100 text-sm">
                         {t('blueprint.subtitle')}
                     </p>
                 </div>
@@ -76,7 +76,7 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                 </div>
 
                 {/* Module Tree */}
-                <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div className="p-6 space-y-4 flex-1">
                     {(!blueprint.modules || blueprint.modules.length === 0) ? (
                         <div className="text-center p-8 text-gray-500 dark:text-gray-400">
                             {t('blueprint.noModules')}
@@ -158,7 +158,7 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                 </div>
 
                 {/* Actions */}
-                <div className="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-3 justify-between">
+                <div className="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-3 justify-between sticky bottom-0 z-20 backdrop-blur-sm">
                     <div className="flex gap-3">
                         {isEnabled('blueprintRefineEnabled') && (
                             <button
@@ -186,7 +186,7 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                     </button>
                 </div>
             </div>
-        </div>
+        </div></div>
     );
 };
 

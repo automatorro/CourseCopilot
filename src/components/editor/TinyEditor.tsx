@@ -36,15 +36,17 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
       'lists',
       'link',
       'image',
+      'autoresize',
     ],
     toolbar:
       'undo redo | bold italic underline | blocks | bullist numlist | link image',
     block_formats: 'Paragraph=p; Heading 1=h1; Heading 2=h2',
     branding: false,
     statusbar: true,
-    resize: true,
+    resize: false,
     toolbar_sticky: false,
     content_style: 'body{padding-bottom:240px;}',
+    autoresize_bottom_margin: 240,
     paste_data_images: true,
     images_upload_handler: async (blobInfo: any) => {
       try {

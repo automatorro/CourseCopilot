@@ -1,0 +1,73 @@
+/* Sticky Header UX Improvements for CourseWorkspacePage */
+
+/* Make the main editor container use full viewport height */
+.course-workspace-container {
+  height: 100vh !important;
+  overflow-y: auto !important;
+}
+
+/* Sticky editor header */
+.editor-header-sticky {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  background: white !important;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+}
+
+.dark .editor-header-sticky {
+  background: rgb(31 41 55) !important;
+}
+
+/* Sticky tab navigation */
+.editor-tabs-sticky {
+  position: sticky !important;
+  top: 60px !important;
+  z-index: 20 !important;
+  background: white !important;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05) !important;
+}
+
+.dark .editor-tabs-sticky {
+  background: rgb(31 41 55) !important;
+}
+
+/* Sticky desktop action buttons */
+.editor-actions-sticky {
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 30 !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.1) !important;
+}
+
+.dark .editor-actions-sticky {
+  background: rgba(31, 41, 55, 0.95) !important;
+}
+
+/* Mobile action bar improvements */
+.mobile-actions-sticky {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 50 !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.dark .mobile-actions-sticky {
+  background: rgba(31, 41, 55, 0.95) !important;
+}
+
+/* Remove padding from main content area to allow full scroll */
+.editor-main-content {
+  padding: 0 !important;
+}
+
+/* Ensure content area is scrollable */
+.editor-content-scrollable {
+  overflow-y: auto !important;
+  flex: 1 !important;
+}
