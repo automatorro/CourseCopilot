@@ -124,3 +124,35 @@ export interface CourseGenerationStatus {
   completed_steps: TrainerStepType[];
   error?: string;
 }
+
+// Slide IR (minimal viable)
+export enum SlideArchetype {
+  Title = 'title',
+  Explainer = 'explainer',
+  ImageText = 'image_text',
+  Quote = 'quote',
+  Agenda = 'agenda',
+  Exercise = 'exercise',
+  CaseStudy = 'case_study',
+  Summary = 'summary',
+}
+
+export interface SlideRules {
+  maxTitleChars?: number;
+  maxBullets?: number;
+  maxBulletLength?: number;
+  requiresImage?: boolean;
+}
+
+export interface SlideModel {
+  id: string;
+  slide_type: SlideArchetype;
+  title?: string;
+  subtitle?: string;
+  core_message?: string;
+  bullets?: string[];
+  image_url?: string | null;
+  trainer_notes?: string | null;
+  objective_links?: string[];
+  section_id?: string;
+}

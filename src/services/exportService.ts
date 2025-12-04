@@ -2,7 +2,8 @@ import PptxGenJS from 'pptxgenjs';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Header, ImageRun } from 'docx';
 import JSZip from 'jszip';
 
-import { Course, CourseStep } from '../types';
+import { Course, CourseStep, SlideModel, SlideArchetype, SlideRules } from '../types';
+import { isEnabled } from '../config/featureFlags';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -99,7 +100,7 @@ const addContentSlides = async (
         }
 
         if (section.images.length > 0) {
-            let yPos = 5.5;
+            const yPos = 5.5;
             for (const img of section.images.slice(0, 1)) {
                 try {
                     if (img.url.startsWith('data:') || img.url.startsWith('http')) {
@@ -279,6 +280,10 @@ const findStepByKey = (course: Course, keyPattern: string): CourseStep | null =>
 // ============================================================================
 
 export const exportCourseAsPptx = async (course: Course): Promise<void> => {
+    if (isEnabled('newPptxExporter')) {
+        await exportCourseAsPptxV2(course);
+        return;
+    }
     const pptx = new PptxGenJS();
     pptx.layout = 'LAYOUT_16x9';
 
@@ -302,6 +307,130 @@ export const exportCourseAsPptx = async (course: Course): Promise<void> => {
 
     const fileName = `${course.title.replace(/[^a-z0-9]/gi, '_')}.pptx`;
     await pptx.writeFile({ fileName });
+};
+
+// V2 exporter: builds SlideModel IR and renders archetypes deterministically
+const buildSlideModelsFromCourse = (course: Course): SlideModel[] => {
+    const models: SlideModel[] = [];
+    const steps = course.steps || [];
+    for (const step of steps) {
+        if (shouldExcludeFromSlides(step) || !step.content) continue;
+        const sections = parseContentSections(step.content);
+        sections.forEach((s, idx) => {
+            const id = `${step.id}_sec_${idx + 1}`;
+            const baseBullets = s.bulletPoints;
+            const image = s.images[0]?.url || null;
+            const archetype = chooseArchetypeFor(step.title_key, s.title, image);
+            const rules = getTemplateRules(archetype);
+            let m: SlideModel = {
+                id,
+                slide_type: archetype,
+                title: s.title,
+                bullets: baseBullets,
+                image_url: image,
+                section_id: undefined,
+                objective_links: [],
+                trainer_notes: null,
+            };
+            m = normalizeSlide(m, rules);
+            const valid = validateSlide(m, rules);
+            if (!valid) {
+                const fallbackRules = getTemplateRules(SlideArchetype.Explainer);
+                m.slide_type = SlideArchetype.Explainer;
+                m = normalizeSlide(m, fallbackRules);
+            }
+            models.push(m);
+        });
+    }
+    return models;
+};
+
+const renderSlideModels = (pptx: PptxGenJS, course: Course, models: SlideModel[]): void => {
+    models.forEach(m => {
+        const slide = pptx.addSlide();
+        if (m.slide_type === SlideArchetype.ImageText && m.image_url) {
+            slide.addText(m.title || '', { x: 0.5, y: 0.5, w: 5.5, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
+            const textY = 1.4;
+            const bullets = (m.bullets || []).join('\n');
+            if (bullets) {
+                slide.addText(bullets, { x: 0.5, y: textY, w: 5.5, h: 4.5, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
+            }
+            try {
+                slide.addImage({ data: m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 });
+            } catch (e) {
+                console.warn('Failed to add image in V2 renderer:', e);
+            }
+        } else {
+            slide.addText(m.title || '', { x: 0.5, y: 0.7, w: 9, h: 0.8, fontSize: 28, bold: true, color: '1F2937' });
+            const bullets = (m.bullets || []).join('\n');
+            if (bullets) {
+                slide.addText(bullets, { x: 0.5, y: 1.7, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
+            }
+        }
+        slide.addText(`${course.title}`, { x: 0.5, y: 6.8, w: 9, h: 0.3, fontSize: 10, color: '9CA3AF', align: 'right' });
+    });
+};
+
+const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
+    const pptx = new PptxGenJS();
+    pptx.layout = 'LAYOUT_16x9';
+    addTitleSlide(pptx, course);
+    const structureStep = findStepByKey(course, 'structure');
+    const videoScriptStep = findStepByKey(course, 'video_scripts');
+    addAgendaSlide(pptx, course, structureStep, videoScriptStep);
+    const models = buildSlideModelsFromCourse(course);
+    renderSlideModels(pptx, course, models);
+    addSummarySlide(pptx);
+    const fileName = `${course.title.replace(/[^a-z0-9]/gi, '_')}.pptx`;
+    await pptx.writeFile({ fileName });
+};
+
+const TEMPLATE_RULES: Record<SlideArchetype, SlideRules> = {
+    [SlideArchetype.Title]: { maxTitleChars: 60 },
+    [SlideArchetype.Explainer]: { maxTitleChars: 60, maxBullets: 5, maxBulletLength: 110 },
+    [SlideArchetype.ImageText]: { maxTitleChars: 60, maxBullets: 4, maxBulletLength: 100, requiresImage: true },
+    [SlideArchetype.Quote]: { maxTitleChars: 120 },
+    [SlideArchetype.Agenda]: { maxBullets: 8, maxBulletLength: 80 },
+    [SlideArchetype.Exercise]: { maxTitleChars: 80, maxBullets: 6, maxBulletLength: 120 },
+    [SlideArchetype.CaseStudy]: { maxTitleChars: 80, maxBullets: 5, maxBulletLength: 120 },
+    [SlideArchetype.Summary]: { maxBullets: 5, maxBulletLength: 80 },
+};
+
+const getTemplateRules = (a: SlideArchetype): SlideRules => TEMPLATE_RULES[a] || { maxTitleChars: 60 };
+
+const trimTo = (s: string, n: number): string => (s.length > n ? (s.slice(0, Math.max(0, n - 3)) + '…') : s);
+
+const normalizeSlide = (m: SlideModel, r: SlideRules): SlideModel => {
+    const title = m.title ? (r.maxTitleChars ? trimTo(m.title, r.maxTitleChars) : m.title) : m.title;
+    const maxB = typeof r.maxBullets === 'number' ? r.maxBullets : undefined;
+    const clipBullets = (m.bullets || []).slice(0, maxB || (m.bullets || []).length).map(b => {
+        const lim = r.maxBulletLength || 9999;
+        return trimTo(b, lim);
+    });
+    const image = r.requiresImage ? (m.image_url || null) : (m.image_url || null);
+    return { ...m, title, bullets: clipBullets, image_url: image };
+};
+
+const validateSlide = (m: SlideModel, r: SlideRules): boolean => {
+    if (r.maxTitleChars && (m.title || '').length > r.maxTitleChars) return false;
+    if (r.maxBullets && (m.bullets || []).length > r.maxBullets) return false;
+    const maxLen = r.maxBulletLength ?? null;
+    if (maxLen !== null && (m.bullets || []).some(b => b.length > maxLen)) return false;
+    if (r.requiresImage && !m.image_url) return false;
+    const density = ((m.title || '').length) + (m.bullets || []).reduce((acc, b) => acc + b.length, 0);
+    if (density > 1200) return false;
+    return true;
+};
+
+const chooseArchetypeFor = (titleKey: string, sectionTitle: string, imageUrl: string | null): SlideArchetype => {
+    const tk = titleKey.toLowerCase();
+    const st = sectionTitle.toLowerCase();
+    if (tk.includes('exercise') || st.includes('exerci')) return SlideArchetype.Exercise;
+    if (tk.includes('case') || st.includes('studiu')) return SlideArchetype.CaseStudy;
+    if (tk.includes('summary') || tk.includes('recap') || st.includes('rezumat')) return SlideArchetype.Summary;
+    if (tk.includes('quote') || st.includes('citat')) return SlideArchetype.Quote;
+    if (imageUrl) return SlideArchetype.ImageText;
+    return SlideArchetype.Explainer;
 };
 
 // ============================================================================

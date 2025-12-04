@@ -16,7 +16,8 @@ import { supabase } from '../services/supabaseClient';
 import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
-import { exportCourseAsZip } from '../services/exportService';
+import { exportCourseAsZip, exportCourseAsPptx } from '../services/exportService';
+import ExportModal from '../components/ExportModal';
 import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations } from '../lib/outputValidators';
 import { replaceBlobUrlsWithPublic, uploadBlobToStorage } from '../services/imageService';
 import { useToast } from '../contexts/ToastContext';
@@ -83,7 +84,9 @@ const CourseWorkspacePage: React.FC = () => {
   const [isGenerating] = useState(false);
   const [isProposingChanges, setIsProposingChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
@@ -595,14 +598,26 @@ const CourseWorkspacePage: React.FC = () => {
   };
 
   const handleDownload = async () => {
+    setShowExportModal(true);
+  };
+
+  const handleExport = async (format: 'pptx' | 'pdf' | 'zip') => {
     if (!course) return;
-    setIsDownloading(true);
+    setIsExporting(true);
     try {
-      await exportCourseAsZip(course, t);
+      if (format === 'pptx') {
+        await exportCourseAsPptx(course);
+      } else if (format === 'zip') {
+        await exportCourseAsZip(course, t);
+      } else {
+        showToast('Export PDF nu este disponibil încă.', 'info');
+      }
+      setShowExportModal(false);
     } catch (error) {
-      console.error("Failed to export course:", error);
+      console.error('Failed to export course:', error);
+      showToast('Exportul a eșuat.', 'error');
     } finally {
-      setIsDownloading(false);
+      setIsExporting(false);
     }
   };
 
@@ -1299,11 +1314,11 @@ const CourseWorkspacePage: React.FC = () => {
               {isCourseComplete && (
                 <button
                   onClick={handleDownload}
-                  disabled={isDownloading}
+                  disabled={isExporting}
                   className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
                 >
-                  {isDownloading ? <Loader2 className="animate-spin" size={16} /> : <DownloadCloud size={16} />}
-                  {t(isDownloading ? 'course.download.preparing' : 'course.download.button')}
+                  {isExporting ? <Loader2 className="animate-spin" size={16} /> : <DownloadCloud size={16} />}
+                  {t('export.title') || 'Exportă materialele'}
                 </button>
               )}
             </div>
@@ -1332,6 +1347,12 @@ const CourseWorkspacePage: React.FC = () => {
           </div>
         </div>
       </main>
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
       {/* Sticky mobile actions bar */}
       <div id="mobile-actions-bar" className="mobile-actions-sticky sm:hidden border-t dark:border-gray-700 shadow-lg safe-area-bottom">
           <div className="px-3 py-2 flex items-center justify-between gap-2">

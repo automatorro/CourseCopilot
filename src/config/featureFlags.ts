@@ -5,7 +5,8 @@ export type FeatureFlagKey =
   | 'editorUiUnified'
   | 'validationStrictLocalization'
   | 'blueprintRefineEnabled'
-  | 'editorGenerateButtonEnabled';
+  | 'editorGenerateButtonEnabled'
+  | 'newPptxExporter';
 
 export const FEATURE_FLAGS: Record<FeatureFlagKey, boolean> = {
   localizedChat: true,
@@ -15,6 +16,7 @@ export const FEATURE_FLAGS: Record<FeatureFlagKey, boolean> = {
   validationStrictLocalization: false,
   blueprintRefineEnabled: false,
   editorGenerateButtonEnabled: false,
+  newPptxExporter: true,
 };
 
 export const FEATURE_DOCS: Record<FeatureFlagKey, string> = {
@@ -25,6 +27,7 @@ export const FEATURE_DOCS: Record<FeatureFlagKey, string> = {
   validationStrictLocalization: 'Dacă este activ, livrabilele cu fragmente nelocalizate vor bloca finalizarea generării.',
   blueprintRefineEnabled: 'Controlează afișarea butonului „Rafinează cu AI” în Review Blueprint.',
   editorGenerateButtonEnabled: 'Controlează afișarea butonului „Generează Conținut” din editor.',
+  newPptxExporter: 'Activează noul pipeline determinist pentru export PPTX cu arhetipuri.',
 };
 
 export const isEnabled = (key: FeatureFlagKey): boolean => FEATURE_FLAGS[key];
