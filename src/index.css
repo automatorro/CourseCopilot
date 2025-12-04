@@ -64,6 +64,18 @@
            text-ink-700 dark:text-ink-200 hover:bg-ink-50/70 dark:hover:bg-ink-800/40 transition-colors;
   }
 
+  .btn-premium-sm {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold tracking-tight text-white 
+           bg-gradient-to-br from-accent-600 to-accent-700 shadow-premium transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] 
+           hover:shadow-md hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400;
+  }
+  .btn-premium--secondary-sm {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium 
+           bg-white/80 dark:bg-ink-800/60 text-ink-700 dark:text-ink-200 border border-ink-200 dark:border-ink-700 backdrop-blur-sm 
+           shadow-sm hover:bg-white dark:hover:bg-ink-800 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] 
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300;
+  }
+
   .input-premium {
     @apply w-full rounded-lg px-3 py-2 text-sm bg-white/70 dark:bg-ink-800/60 border border-ink-200 dark:border-ink-700 backdrop-blur-sm 
            placeholder:text-ink-400 focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-700 outline-none transition;

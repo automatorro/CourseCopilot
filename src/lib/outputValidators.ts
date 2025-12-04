@@ -25,7 +25,15 @@ export const validateModulesConsistency = (a: BlueprintModule[], b: BlueprintMod
 };
 
 export const detectNonLocalizedFragments = (text: string, languageCode: string) => {
-  const englishHints = [/This section/, /I can, however/, /Generation Paused/, /Processing\.\.\./];
+  const englishHints = [
+    /This section/,
+    /I can, however/,
+    /Generation Paused/,
+    /Processing\.\.\./,
+    /Welcome!/,
+    /We\'re thrilled|We are thrilled/,
+    /High[- ]level objectives|High level objectives/i
+  ];
   const hits = englishHints.filter(r => r.test(text));
   return {
     ok: hits.length === 0,
@@ -73,4 +81,29 @@ export const validateDurationsArray = (structureDurations: number[], workbookDur
     expected: structureDurations,
     actual: workbookDurations,
   };
+};
+
+export const alignWorkbookDurationsByStructure = (structureText: string, workbookText: string): string => {
+  const structureTitles = extractModuleTitles(structureText);
+  const structureDurations = extractModuleDurations(structureText);
+  if (structureTitles.length === 0 || structureDurations.length === 0) return workbookText;
+
+  const lines = workbookText.split(/\r?\n/);
+  const modRegex = /^(?:Modul(?:ul)?\s*)(\d+)\s*:\s*(.+)$/i;
+  const durRegex = /\((\d+)\s*(?:oră|ore)\)/i;
+
+  const outLines = lines.map(line => {
+    const m = line.match(modRegex);
+    if (!m) return line;
+    const idx = parseInt(m[1], 10) - 1;
+    const targetDuration = structureDurations[idx];
+    if (!targetDuration || isNaN(targetDuration)) return line;
+    if (durRegex.test(line)) {
+      const unit = targetDuration === 1 ? 'oră' : 'ore';
+      return line.replace(durRegex, `(${targetDuration} ${unit})`);
+    }
+    return line;
+  });
+
+  return outLines.join('\n');
 };

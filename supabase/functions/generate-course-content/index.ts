@@ -353,16 +353,20 @@ For a React course:
             **INSTRUCTIONS**:
             - Use Bloom's Taxonomy (Action Verbs).
             - Focus on observable behaviors.
+            - 6–8 items maximum, in the specified **LANGUAGE**.
+            - Headings and labels must be in the specified **LANGUAGE** (no English words like "High-Level", "Welcome").
             - Format as a bulleted list.
           `;
           break;
         case 'course_objectives':
           specificPrompt = `
-            **TASK**: Generate High-Level Course Objectives.
+            **TASK**: Generate Course Objectives (strategic).
             **GOAL**: Define the broader goals and business impact.
             **INSTRUCTIONS**:
             - Connect learning to business/personal outcomes.
             - Keep it inspiring but realistic.
+            - Write all headings and content strictly in the specified **LANGUAGE**.
+            - Do not use English phrases or mixed-language headings.
           `;
           break;
         case 'structure':
@@ -373,6 +377,8 @@ For a React course:
             - Create a logical flow (Simple to Complex).
             - Define time allocation for each module that TOTALS to ${blueprintDuration}.
             - Format as a hierarchical outline.
+            - All module titles and section titles must be in the specified **LANGUAGE**.
+            - Do not introduce English headings or labels.
             - CRITICAL: Ensure all modules combined equal ${blueprintDuration}, not more.
           `;
           break;
@@ -418,6 +424,8 @@ For a React course:
             - Provide 1-2 relevant examples or analogies for each major concept.
             - Create a "Hero's Journey" style story if appropriate.
             - Ensure examples fit the Target Audience industry/context.
+            - For each example, write 3–5 sentences: setup, challenge, resolution, and a takeaway.
+            - Use the specified **LANGUAGE** for titles and content, with no mixed-language output.
           `;
           break;
         case 'facilitator_notes':
@@ -448,6 +456,7 @@ For a React course:
             **INSTRUCTIONS**:
             - Combine Structure, Timing, Notes, and Exercises into a cohesive document.
             - Use a clear, readable format (e.g., tables for agenda).
+            - Keep headings and labels strictly in the specified **LANGUAGE**.
           `;
           break;
         case 'participant_workbook':
@@ -455,7 +464,10 @@ For a React course:
             **TASK**: Create the Participant Workbook.
             **GOAL**: Materials for the student to use during the course.
             **INSTRUCTIONS**:
-            - Include: Agenda, Key Concepts (summarized), Exercise worksheets (blank spaces), Reflection questions.
+            - Include: Key Concepts (summarized), Exercise worksheets (blank spaces), Reflection questions.
+            - Do NOT include the full agenda; reference sections can say "see Agenda" without copying it.
+            - Keep language consistent (titles and content in the specified **LANGUAGE**).
+            - Do not introduce new modules not present in the Structure. If adding a "Plan de acțiune personalizat" template, place it as a closing section (not numbered as a new module).
             - Tone: Encouraging and learner-centric.
           `;
           break;
@@ -490,8 +502,10 @@ For a React course:
 
         **OUTPUT RULES**:
         1. Output ONLY the requested content in Markdown.
-        2. Be thorough and professional.
-        3. STRICTLY adhere to the requested format.
+        2. Write ALL headings, labels, and content strictly in the specified **LANGUAGE**; no mixed-language, no English fillers (e.g., "Welcome!").
+        3. Maintain consistency with previously defined modules and titles; do not add new modules unless explicitly requested.
+        4. Be thorough and professional.
+        5. STRICTLY adhere to the requested format.
       `;
 
     } else {

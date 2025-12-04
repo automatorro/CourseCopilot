@@ -62,6 +62,7 @@
   "generation.completed": "{done} din {total} pași finalizați",
   "generation.processing": "Procesare...",
   "common.retry": "Reîncearcă",
+  "common.close": "Închide",
   "generation.steps.performanceObjectives": "Obiective de performanță",
   "generation.steps.courseObjectives": "Obiective de curs",
   "generation.steps.structure": "Structură și arhitectură",
@@ -84,6 +85,9 @@
   "validation.durationMatch": "Duratele modulelor sunt consistente",
   "validation.actions.retry": "Regenerează",
   "validation.actions.dismiss": "Ascunde raportul"
+  ,"validation.actions.saveDraft": "Salvează ca draft"
+  ,"validation.actions.regenerateAffected": "Regenerează livrabilele afectate"
+  ,"validation.actions.autoFixWorkbook": "Auto‑fix durate Workbook"
   ,"course.livrables.structure": "Structură completă",
   "course.livrables.examples": "Exemple și studii de caz",
   "course.livrables.participant_workbook": "Caietul participantului",
@@ -237,6 +241,9 @@
   "course.reviewModal.proposed": "Propus",
   "course.reviewModal.accept": "Acceptă Modificările",
   "course.reviewModal.reject": "Anulează",
+  "course.reviewModal.tab.preview": "Previzualizare",
+  "course.reviewModal.tab.text": "Text",
+  "course.reviewModal.tab.diff": "Diferențe",
   "billing.title": "Gestionează-ți Abonamentul",
   "billing.currentPlan": "Planul tău curent este",
   "billing.manage": "Gestionează Abonament",

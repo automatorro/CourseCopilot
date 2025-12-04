@@ -17,6 +17,7 @@ import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Ligh
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
 import { exportCourseAsZip } from '../services/exportService';
+import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations } from '../lib/outputValidators';
 import { replaceBlobUrlsWithPublic, uploadBlobToStorage } from '../services/imageService';
 import { useToast } from '../contexts/ToastContext';
 import ReviewChangesModal from '../components/ReviewChangesModal';
@@ -505,6 +506,44 @@ const CourseWorkspacePage: React.FC = () => {
     const mdContent = turndown.turndown(editedContent);
     const contentWithProcessedTokens = await processImageTokensForSave(mdContent);
     const processedContent = await replaceBlobUrlsWithPublic(contentWithProcessedTokens, user?.id || null, course?.id || null);
+
+    // Pre-save validation
+    try {
+      const byKey: Record<string, string> = Object.fromEntries((course.steps || []).map(s => [s.title_key, s.id === currentStep.id ? processedContent : (s.content || '')]));
+      const items: { ok: boolean; message: string }[] = [];
+      let nonLocalizedIssue = false;
+
+      if ((course.language || 'en').toLowerCase() !== 'en') {
+        const res = detectNonLocalizedFragments(byKey[currentStep.title_key] || '', course.language || 'ro');
+        if (!res.ok) {
+          nonLocalizedIssue = true;
+          items.push({ ok: false, message: t('validation.nonLocalized', { key: t(currentStep.title_key), hints: res.hints.join(', ') }) });
+        } else {
+          items.push({ ok: true, message: t('validation.okNonLocalized', { key: t(currentStep.title_key) }) });
+        }
+      }
+
+      if (byKey['course.livrables.structure'] && byKey['course.livrables.slides']) {
+        const cmp = compareModuleTitlesText(byKey['course.livrables.structure'], byKey['course.livrables.slides']);
+        items.push({ ok: cmp.ok, message: cmp.ok ? t('validation.modulesMatch') : t('validation.modulesMismatch') });
+      }
+
+      if (byKey['course.livrables.structure'] && byKey['course.livrables.participant_workbook']) {
+        const a = extractModuleDurations(byKey['course.livrables.structure']);
+        const b = extractModuleDurations(byKey['course.livrables.participant_workbook']);
+        const ok = a.length === b.length && a.every((d, i) => d === b[i]);
+        items.push({ ok, message: ok ? t('validation.durationMatch') : t('validation.durationMismatch') });
+      }
+
+      const anyIssue = items.some(i => !i.ok);
+      if (anyIssue) {
+        showToast(t('validation.titleIssues'), 'info');
+        if (isEnabled('validationStrictLocalization') && nonLocalizedIssue) {
+          setIsSaving(false);
+          return;
+        }
+      }
+    } catch {}
 
     const stepUpdatePayload: { content: string, is_completed?: boolean } = {
       content: processedContent

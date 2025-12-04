@@ -4,7 +4,7 @@ import { TrainerStepType, Course } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../contexts/I18nContext';
-import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations, validateDurationsArray } from '../lib/outputValidators';
+import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations, validateDurationsArray, alignWorkbookDurationsByStructure } from '../lib/outputValidators';
 import { isEnabled } from '../config/featureFlags';
 
 interface GenerationProgressModalProps {
@@ -37,13 +37,18 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 }) => {
     const { user } = useAuth();
     const { t } = useTranslation();
+    const safeT = (key: string, fallback: string) => {
+        const v = t(key);
+        return (typeof v === 'string' && v === key) ? fallback : v;
+    };
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [completedSteps, setCompletedSteps] = useState<TrainerStepType[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [validationReport, setValidationReport] = useState<{ ok: boolean; items: { ok: boolean; message: string }[] } | null>(null);
+    const [validationReport, setValidationReport] = useState<{ ok: boolean; items: { ok: boolean; message: string; key?: string; type?: string }[] } | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
     const accumulatedContentRef = useRef<any[]>([]); // Store content to pass as context
+    const pendingStepsRef = useRef<any[]>([]); // Steps ready to insert if user chooses to save despite warnings
 
     // Filter steps based on environment
     const relevantSteps = STEPS_ORDER.filter(step => {
@@ -96,6 +101,107 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         } catch (err: any) {
             console.error("Generation failed:", err);
             setError(err.message || "An unexpected error occurred.");
+            setIsGenerating(false);
+        }
+    };
+
+    const handleRegenerateAffected = async () => {
+        try {
+            if (!validationReport || validationReport.ok) return;
+            setIsGenerating(true);
+
+            const LIVRABLE_MAPPING: { key: string; sources: TrainerStepType[] }[] = [
+                { key: 'course.livrables.structure', sources: [TrainerStepType.PerformanceObjectives, TrainerStepType.CourseObjectives, TrainerStepType.Structure, TrainerStepType.TimingAndFlow] },
+                { key: 'course.livrables.examples', sources: [TrainerStepType.ExamplesAndStories] },
+                { key: 'course.livrables.participant_workbook', sources: [TrainerStepType.ParticipantWorkbook, TrainerStepType.CheatSheets] },
+                { key: 'course.livrables.trainer_manual', sources: [TrainerStepType.LearningMethods, TrainerStepType.FacilitatorNotes, TrainerStepType.FacilitatorManual] },
+                { key: 'course.livrables.exercises', sources: [TrainerStepType.Exercises, TrainerStepType.Projects] },
+                { key: 'course.livrables.slides', sources: [TrainerStepType.Slides] },
+                { key: 'course.livrables.video_scripts', sources: [TrainerStepType.VideoScripts] },
+            ];
+
+            const affectedKeys = new Set<string>();
+            for (const it of validationReport.items) {
+                if (it.type === 'nonLocalized' && it.key) affectedKeys.add(it.key);
+                if (it.type === 'modulesMismatch') affectedKeys.add('course.livrables.slides');
+                if (it.type === 'durationMismatch') affectedKeys.add('course.livrables.participant_workbook');
+            }
+
+            const stepTypesToRegenerate = new Set<TrainerStepType>();
+            for (const m of LIVRABLE_MAPPING) {
+                if (affectedKeys.has(m.key)) {
+                    m.sources.forEach(s => stepTypesToRegenerate.add(s));
+                }
+            }
+
+            const userId = course.user_id || user?.id;
+            if (!userId) throw new Error('User ID is missing.');
+
+            for (const s of stepTypesToRegenerate) {
+                const { data, error: fnError } = await supabase.functions.invoke('generate-course-content', {
+                    body: { action: 'generate_step_content', course, step_type: s, context_files: [] },
+                });
+                if (fnError) throw fnError;
+                const generatedContent = data.content;
+                const arr = accumulatedContentRef.current;
+                const idx = arr.findIndex((i: any) => i.step_type === s);
+                if (idx >= 0) arr[idx].content = generatedContent; else arr.push({ step_type: s, content: generatedContent });
+            }
+
+            await finalizeGeneration();
+        } catch (err: any) {
+            console.error('[GenerationProgressModal] Regenerate affected failed:', err);
+            setError(err.message || 'Failed to regenerate affected deliverables.');
+            setIsGenerating(false);
+        }
+    };
+
+    const handleAutoFixWorkbook = async () => {
+        try {
+            if (!validationReport || validationReport.ok) return;
+            const steps = pendingStepsRef.current || [];
+            if (steps.length === 0) return;
+
+            const structureStep = steps.find((s: any) => s.title_key === 'course.livrables.structure');
+            const workbookStep = steps.find((s: any) => s.title_key === 'course.livrables.participant_workbook');
+            if (!structureStep || !workbookStep) return;
+
+            const fixed = alignWorkbookDurationsByStructure(structureStep.content, workbookStep.content);
+            workbookStep.content = fixed;
+
+            const sd = extractModuleDurations(structureStep.content);
+            const wd = extractModuleDurations(workbookStep.content);
+            const v = validateDurationsArray(sd, wd);
+            const items = (validationReport.items || []).filter(it => it.type !== 'durationMismatch');
+            if (!v.ok) {
+                items.push({ ok: false, message: t('validation.durationMismatch'), type: 'durationMismatch', key: 'course.livrables.participant_workbook' });
+                setValidationReport({ ok: false, items });
+                return;
+            }
+            items.push({ ok: true, message: t('validation.durationMatch') });
+            const stillIssues = items.some(it => it.ok === false);
+            setValidationReport({ ok: !stillIssues, items });
+
+            if (!stillIssues) {
+                setIsGenerating(true);
+                const { error: deleteError } = await supabase
+                    .from('course_steps')
+                    .delete()
+                    .eq('course_id', course.id);
+                if (deleteError) throw deleteError;
+
+                const { error: insertError } = await supabase
+                    .from('course_steps')
+                    .insert(steps);
+                if (insertError) throw insertError;
+
+                setIsGenerating(false);
+                setValidationReport(null);
+                onComplete();
+            }
+        } catch (err: any) {
+            console.error('[GenerationProgressModal] Auto-fix workbook failed:', err);
+            setError(err.message || 'Failed to auto-fix workbook durations.');
             setIsGenerating(false);
         }
     };
@@ -223,16 +329,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 }
             ];
 
-            // 2. Delete existing steps to avoid duplicates
-            console.log('[GenerationProgressModal] Deleting existing steps for course:', course.id);
-            const { error: deleteError } = await supabase
-                .from('course_steps')
-                .delete()
-                .eq('course_id', course.id);
-
-            if (deleteError) throw deleteError;
-
-            // 3. Aggregate
+            // 2. Aggregate (prepare, but do not delete yet)
             const stepsToInsert = [];
             let orderCounter = 1;
 
@@ -262,11 +359,11 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 }
             }
 
-            console.log('[GenerationProgressModal] Steps to insert:', stepsToInsert);
+            console.log('[GenerationProgressModal] Steps prepared to insert:', stepsToInsert);
 
             // 4. Validation before insert
             const byKey: Record<string, string> = Object.fromEntries(stepsToInsert.map(s => [s.title_key, s.content]));
-            const items: { ok: boolean; message: string }[] = [];
+            const items: { ok: boolean; message: string; key?: string; type?: string }[] = [];
             let overallOk = true;
 
             // a) Non-localized fragments (if not EN)
@@ -277,7 +374,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                         if (isEnabled('validationStrictLocalization')) {
                             overallOk = false;
                         }
-                        items.push({ ok: false, message: t('validation.nonLocalized', { key: t(key), hints: res.hints.join(', ') }) });
+                        items.push({ ok: false, message: t('validation.nonLocalized', { key: t(key), hints: res.hints.join(', ') }), key, type: 'nonLocalized' });
                     } else {
                         items.push({ ok: true, message: t('validation.okNonLocalized', { key: t(key) }) });
                     }
@@ -289,7 +386,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 const cmp = compareModuleTitlesText(byKey['course.livrables.structure'], byKey['course.livrables.slides']);
                 if (!cmp.ok) {
                     overallOk = false;
-                    items.push({ ok: false, message: t('validation.modulesMismatch', { missing: (cmp.missingInB || []).join('; '), extra: (cmp.extraInB || []).join('; ') }) });
+                    items.push({ ok: false, message: t('validation.modulesMismatch', { missing: (cmp.missingInB || []).join('; '), extra: (cmp.extraInB || []).join('; ') }), type: 'modulesMismatch' });
                 } else {
                     items.push({ ok: true, message: t('validation.modulesMatch') });
                 }
@@ -302,7 +399,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 const v = validateDurationsArray(sd, wd);
                 if (!v.ok) {
                     overallOk = false;
-                    items.push({ ok: false, message: t('validation.durationMismatch') });
+                    items.push({ ok: false, message: t('validation.durationMismatch'), type: 'durationMismatch', key: 'course.livrables.participant_workbook' });
                 } else {
                     items.push({ ok: true, message: t('validation.durationMatch') });
                 }
@@ -313,10 +410,19 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             if (!overallOk) {
                 setIsGenerating(false);
                 console.warn('[GenerationProgressModal] Validation failed. Not inserting steps.');
+                pendingStepsRef.current = stepsToInsert; // Allow user to save as draft
                 return; // Stop here, show report in UI
             }
 
-            // 5. Insert if validation ok
+            // 5. Delete existing and insert if validation ok
+            console.log('[GenerationProgressModal] Deleting existing steps for course:', course.id);
+            const { error: deleteError } = await supabase
+                .from('course_steps')
+                .delete()
+                .eq('course_id', course.id);
+
+            if (deleteError) throw deleteError;
+
             if (stepsToInsert.length > 0) {
                 const { error: insertError } = await supabase
                     .from('course_steps')
@@ -337,6 +443,37 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         } catch (err: any) {
             console.error("Finalization failed:", err);
             setError("Failed to save generated materials: " + err.message);
+            setIsGenerating(false);
+        }
+    };
+
+    const handleSaveDraft = async () => {
+        try {
+            const steps = pendingStepsRef.current || [];
+            if (steps.length === 0) {
+                setValidationReport(null);
+                return;
+            }
+            setIsGenerating(true);
+
+            console.log('[GenerationProgressModal] Saving draft despite warnings...');
+            const { error: deleteError } = await supabase
+                .from('course_steps')
+                .delete()
+                .eq('course_id', course.id);
+            if (deleteError) throw deleteError;
+
+            const { error: insertError } = await supabase
+                .from('course_steps')
+                .insert(steps);
+            if (insertError) throw insertError;
+
+            setValidationReport(null);
+            setIsGenerating(false);
+            onComplete();
+        } catch (err: any) {
+            console.error('[GenerationProgressModal] Save draft failed:', err);
+            setError(err.message || 'Failed to save draft.');
             setIsGenerating(false);
         }
     };
@@ -387,13 +524,24 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                                 ))}
                             </ul>
                             {!validationReport.ok && (
-                                <div className="mt-3 flex gap-2">
-                                    <button onClick={startGeneration} className="btn-premium">
-                                        {t('validation.actions.retry')}
+                                <div className="mt-3 flex flex-wrap gap-2 md:justify-start">
+                                    <button onClick={startGeneration} className="btn-premium-sm w-full sm:w-auto">
+                                        {safeT('validation.actions.retry', 'Regenerează')}
                                     </button>
-                                    <button onClick={() => setValidationReport(null)} className="btn-premium--secondary">
-                                        {t('validation.actions.dismiss')}
+                                    <button onClick={() => setValidationReport(null)} className="btn-premium--secondary-sm w-full sm:w-auto">
+                                        {safeT('validation.actions.dismiss', 'Ascunde raportul')}
                                     </button>
+                                    <button onClick={handleSaveDraft} className="btn-premium-sm w-full sm:w-auto">
+                                        {safeT('validation.actions.saveDraft', 'Salvează ca draft')}
+                                    </button>
+                                    <button onClick={handleRegenerateAffected} className="btn-premium-sm w-full sm:w-auto">
+                                        {safeT('validation.actions.regenerateAffected', 'Regenerează livrabilele afectate')}
+                                    </button>
+                                    {validationReport.items.some(it => it.type === 'durationMismatch') && (
+                                        <button onClick={handleAutoFixWorkbook} className="btn-premium-sm w-full sm:w-auto">
+                                            {safeT('validation.actions.autoFixWorkbook', 'Auto‑fix durate Workbook')}
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -472,6 +620,19 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                             </span>
                         )}
                     </div>
+
+                    {!isGenerating && !validationReport && (
+                        <div className="mt-3 flex flex-wrap gap-2 md:justify-end">
+                            {(pendingStepsRef.current?.length || 0) > 0 && (
+                                <button onClick={handleSaveDraft} className="btn-premium-sm w-full sm:w-auto">
+                                    {safeT('validation.actions.saveDraft', 'Salvează ca draft')}
+                                </button>
+                            )}
+                            <button onClick={onClose} className="btn-premium--secondary-sm w-full sm:w-auto">
+                                {safeT('common.close', 'Închide')}
+                            </button>
+                        </div>
+                    )}
 
                     {/* Progress Bar */}
                     <div className="mt-3 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">

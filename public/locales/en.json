@@ -62,6 +62,7 @@
   "generation.completed": "{done} of {total} steps completed",
   "generation.processing": "Processing...",
   "common.retry": "Retry",
+  "common.close": "Close",
   "generation.steps.performanceObjectives": "Performance Objectives",
   "generation.steps.courseObjectives": "Course Objectives",
   "generation.steps.structure": "Structure & Architecture",
@@ -84,6 +85,9 @@
   "validation.durationMatch": "Module durations consistent",
   "validation.actions.retry": "Regenerate",
   "validation.actions.dismiss": "Dismiss"
+  ,"validation.actions.saveDraft": "Save as Draft"
+  ,"validation.actions.regenerateAffected": "Regenerate affected deliverables"
+  ,"validation.actions.autoFixWorkbook": "Auto‑fix Workbook durations"
   ,"course.livrables.structure": "Complete Structure",
   "course.livrables.examples": "Examples & Case Studies",
   "course.livrables.participant_workbook": "Participant Workbook",
@@ -237,6 +241,9 @@
   "course.reviewModal.proposed": "Proposed",
   "course.reviewModal.accept": "Accept Changes",
   "course.reviewModal.reject": "Cancel",
+  "course.reviewModal.tab.preview": "Preview",
+  "course.reviewModal.tab.text": "Text",
+  "course.reviewModal.tab.diff": "Differences",
   "billing.title": "Manage Your Subscription",
   "billing.currentPlan": "Your current plan is",
   "billing.manage": "Manage Subscription",

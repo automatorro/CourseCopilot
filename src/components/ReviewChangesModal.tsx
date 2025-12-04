@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from '../contexts/I18nContext';
 import { X, Check, GitPullRequestArrow } from 'lucide-react';
 
@@ -16,8 +16,40 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
   onReject,
 }) => {
   const { t } = useTranslation();
-  const [view, setView] = useState<'render' | 'text'>('render');
+  const [view, setView] = useState<'render' | 'text' | 'diff'>('render');
   const toText = (s: string) => (s || '').replace(/<[^>]+>/g, '').trim();
+
+  const diffTokens = useMemo(() => {
+    const a = toText(originalContent);
+    const b = toText(proposedContent);
+    const aWords = a.split(/(\s+)/);
+    const bWords = b.split(/(\s+)/);
+    const n = aWords.length;
+    const m = bWords.length;
+    const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        if (aWords[i] === bWords[j]) dp[i][j] = dp[i + 1][j + 1] + 1; else dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const result: Array<{ type: 'equal' | 'del' | 'add'; text: string }> = [];
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (aWords[i] === bWords[j]) {
+        result.push({ type: 'equal', text: aWords[i] });
+        i++; j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        result.push({ type: 'del', text: aWords[i] });
+        i++;
+      } else {
+        result.push({ type: 'add', text: bWords[j] });
+        j++;
+      }
+    }
+    while (i < n) { result.push({ type: 'del', text: aWords[i++] }); }
+    while (j < m) { result.push({ type: 'add', text: bWords[j++] }); }
+    return result;
+  }, [originalContent, proposedContent]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s' }}>
@@ -34,13 +66,19 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
                 onClick={() => setView('render')}
                 className={`px-3 py-1 text-sm ${view === 'render' ? 'bg-primary-600 text-white' : 'bg-transparent'} hover:bg-primary-600 hover:text-white`}
               >
-                Previzualizare
+                {t('course.reviewModal.tab.preview')}
               </button>
               <button
                 onClick={() => setView('text')}
                 className={`px-3 py-1 text-sm ${view === 'text' ? 'bg-primary-600 text-white' : 'bg-transparent'} hover:bg-primary-600 hover:text-white`}
               >
-                Text
+                {t('course.reviewModal.tab.text')}
+              </button>
+              <button
+                onClick={() => setView('diff')}
+                className={`px-3 py-1 text-sm ${view === 'diff' ? 'bg-primary-600 text-white' : 'bg-transparent'} hover:bg-primary-600 hover:text-white`}
+              >
+                {t('course.reviewModal.tab.diff')}
               </button>
             </div>
             <button onClick={onReject} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -58,8 +96,18 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
             </div>
             {view === 'render' ? (
               <div className="flex-1 overflow-auto p-4 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: originalContent }} />
-            ) : (
+            ) : view === 'text' ? (
               <textarea readOnly value={toText(originalContent)} className="flex-1 w-full p-4 text-sm bg-transparent border-none focus:ring-0 resize-none font-mono" />
+            ) : (
+              <div className="flex-1 overflow-auto p-4 text-sm font-mono">
+                <div>
+                  {diffTokens.map((tok, idx) => (
+                    <span key={idx} className={
+                      tok.type === 'equal' ? '' : tok.type === 'del' ? 'bg-red-100 text-red-800 line-through' : 'bg-green-100 text-green-800'
+                    }>{tok.text}</span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -70,8 +118,20 @@ const ReviewChangesModal: React.FC<ReviewChangesModalProps> = ({
             </div>
             {view === 'render' ? (
               <div className="flex-1 overflow-auto p-4 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: proposedContent }} />
-            ) : (
+            ) : view === 'text' ? (
               <textarea readOnly value={toText(proposedContent)} className="flex-1 w-full p-4 text-sm bg-transparent border-none focus:ring-0 resize-none font-mono" />
+            ) : (
+              <div className="flex-1 overflow-auto p-4 text-sm font-mono">
+                <div>
+                  {diffTokens.map((tok, idx) => (
+                    tok.type === 'equal'
+                      ? <span key={idx} className="opacity-50">{tok.text}</span>
+                      : tok.type === 'add'
+                        ? <span key={idx} className="bg-green-100 text-green-800">{tok.text}</span>
+                        : null
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
