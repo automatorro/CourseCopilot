@@ -227,6 +227,8 @@
   "course.completed": "Curs Finalizat!",
   "course.download.button": "Descarcă Curs",
   "course.download.preparing": "Se pregătește descărcarea...",
+  "export.title": "Exportă materialele",
+  "export.subtitle": "Alege un format pentru descărcare:",
   "course.helpModal.title": "Bun venit în Spațiul de Lucru!",
   "course.helpModal.intro": "Acesta este spațiul tău creativ. Iată cum funcționează:",
   "course.helpModal.step1.title": "1. Urmează Pașii",
@@ -273,4 +275,8 @@
   "footer.poweredBy": "Susținut de Google Gemini.",
   "footer.home": "Acasă",
   "footer.pricing": "Prețuri"
+  ,
+  "export.pptx.subtitle": "Descarcă doar setul de slide-uri (PPTX)",
+  "export.pdf.subtitle": "Descarcă manualul cursului în PDF (în curând)",
+  "export.zip.subtitle": "Descarcă toate materialele în format DOCX, ca arhivă ZIP"
 }

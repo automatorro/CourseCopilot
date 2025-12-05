@@ -1429,7 +1429,7 @@ const CourseWorkspacePage: React.FC = () => {
       {isSidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setIsSidebarOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-5/6 max-w-xs bg-white dark:bg-gray-800 shadow-xl">
+          <div className="absolute left-0 top-0 h-full w-5/6 max-w-xs bg-white dark:bg-gray-800 shadow-xl flex flex-col">
             <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
               <div className="flex items-center gap-2">
                 <button
@@ -1446,7 +1446,7 @@ const CourseWorkspacePage: React.FC = () => {
                 <X size={18} />
               </button>
             </div>
-            <div className="p-4 overflow-y-auto h-full">
+            <div className="p-4 overflow-y-auto flex-1">
               {userCourses.length > 0 && (
                 <div className="mb-4">
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Schimbă cursul</label>

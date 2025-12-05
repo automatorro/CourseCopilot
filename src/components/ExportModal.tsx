@@ -41,7 +41,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
                         </div>
                         <div className="ml-4 text-left">
                             <h4 className="font-bold text-gray-900 dark:text-white">PowerPoint (.pptx)</h4>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Editable slides with speaker notes.</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('export.pptx.subtitle') || 'Download only the Slides set (PPTX)'}</p>
                         </div>
                     </button>
 
@@ -55,7 +55,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
                         </div>
                         <div className="ml-4 text-left">
                             <h4 className="font-bold text-gray-900 dark:text-white">PDF Document (.pdf)</h4>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Professional manual format.</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('export.pdf.subtitle') || 'Download course manual as PDF (coming soon)'}</p>
                         </div>
                     </button>
 
@@ -69,7 +69,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
                         </div>
                         <div className="ml-4 text-left">
                             <h4 className="font-bold text-gray-900 dark:text-white">ZIP Archive (.zip)</h4>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">All raw files and assets.</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('export.zip.subtitle') || 'Download all materials as DOCX inside a ZIP'}</p>
                         </div>
                     </button>
                 </div>

@@ -227,6 +227,8 @@
   "course.completed": "Course Completed!",
   "course.download.button": "Download Course",
   "course.download.preparing": "Preparing Download...",
+  "export.title": "Export Course Materials",
+  "export.subtitle": "Choose a format to download:",
   "course.helpModal.title": "Welcome to the Course Workspace!",
   "course.helpModal.intro": "This is your creative space. Here's how it works:",
   "course.helpModal.step1.title": "1. Follow the Steps",
@@ -273,4 +275,8 @@
   "footer.poweredBy": "Powered by Google Gemini.",
   "footer.home": "Home",
   "footer.pricing": "Pricing"
+  ,
+  "export.pptx.subtitle": "Download only the Slides set (PPTX)",
+  "export.pdf.subtitle": "Download course manual as PDF (coming soon)",
+  "export.zip.subtitle": "Download all materials as DOCX inside a ZIP"
 }

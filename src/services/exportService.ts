@@ -3,6 +3,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Head
 import JSZip from 'jszip';
 
 import { Course, CourseStep, SlideModel, SlideArchetype, SlideRules } from '../types';
+import { replaceBlobUrlsWithPublic } from './imageService';
 import { isEnabled } from '../config/featureFlags';
 
 // ============================================================================
@@ -157,41 +158,42 @@ const addSummarySlide = (pptx: PptxGenJS): void => {
 
 const parseContentSections = (markdown: string): ContentSection[] => {
     const sections: ContentSection[] = [];
-    const rawSections = markdown.split(/\n(?=## )/);
-
-    for (const rawSection of rawSections) {
-        const lines = rawSection.trim().split('\n');
-        const titleLine = lines[0] || '';
-        const title = titleLine.replace(/^##\s*/, '').trim();
-
-        if (!title) continue;
-
-        const bulletPoints: string[] = [];
-        const images: { url: string; alt: string }[] = [];
-
-        for (const line of lines.slice(1)) {
-            if (line.match(/^[\*\-]\s+/)) {
-                const bullet = line.replace(/^[\*\-]\s+/, '').trim();
-                if (bullet.length > 0 && bullet.length < 150) {
-                    bulletPoints.push(bullet);
-                }
-            }
-
-            const imgMatch = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
-            if (imgMatch) {
-                images.push({ alt: imgMatch[1], url: imgMatch[2] });
-            }
+    const lines = markdown.split('\n');
+    let currentTitle: string | null = null;
+    let currentBullets: string[] = [];
+    let currentImages: { url: string; alt: string }[] = [];
+    const flush = () => {
+        if (!currentTitle) return;
+        sections.push({ title: currentTitle, bulletPoints: currentBullets, images: currentImages, rawContent: '' });
+        currentTitle = null;
+        currentBullets = [];
+        currentImages = [];
+    };
+    for (const raw of lines) {
+        const line = raw.trim();
+        const isH2 = line.startsWith('## ');
+        const isBoldTitle = line.startsWith('**') && line.endsWith('**') && line.length > 4;
+        if (isH2 || isBoldTitle) {
+            flush();
+            let t = isH2 ? line.substring(3) : line.substring(2, line.length - 2);
+            t = t.replace(/^Slide\s*\d+\s*:\s*/i, '').trim();
+            currentTitle = t;
+            continue;
         }
-
-        sections.push({
-            title,
-            bulletPoints,
-            images,
-            rawContent: rawSection
-        });
+        if (line.startsWith('* ') || line.startsWith('- ')) {
+            let b = line.substring(2).trim();
+            b = b.replace(/\*\*|__|`/g, '').trim();
+            if (b.length > 0 && b.length < 150) currentBullets.push(b);
+            continue;
+        }
+        const imgMatch = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+        if (imgMatch) {
+            currentImages.push({ alt: imgMatch[1], url: imgMatch[2] });
+            continue;
+        }
     }
-
-    return sections;
+    flush();
+    return sections.filter(s => !!s.title);
 };
 
 const parseVideoScripts = (markdown: string): Record<string, string> => {
@@ -310,7 +312,7 @@ export const exportCourseAsPptx = async (course: Course): Promise<void> => {
 };
 
 // V2 exporter: builds SlideModel IR and renders archetypes deterministically
-const buildSlideModelsFromCourse = (course: Course): SlideModel[] => {
+const buildSlideModelsFromCourse = (course: Course, scripts: Record<string, string>): SlideModel[] => {
     const models: SlideModel[] = [];
     const steps = course.steps || [];
     for (const step of steps) {
@@ -333,6 +335,8 @@ const buildSlideModelsFromCourse = (course: Course): SlideModel[] => {
                 trainer_notes: null,
             };
             m = normalizeSlide(m, rules);
+            const note = findMatchingScript(scripts, s.title);
+            if (note) m.trainer_notes = note;
             const valid = validateSlide(m, rules);
             if (!valid) {
                 const fallbackRules = getTemplateRules(SlideArchetype.Explainer);
@@ -348,39 +352,104 @@ const buildSlideModelsFromCourse = (course: Course): SlideModel[] => {
 const renderSlideModels = (pptx: PptxGenJS, course: Course, models: SlideModel[]): void => {
     models.forEach(m => {
         const slide = pptx.addSlide();
-        if (m.slide_type === SlideArchetype.ImageText && m.image_url) {
-            slide.addText(m.title || '', { x: 0.5, y: 0.5, w: 5.5, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
-            const textY = 1.4;
-            const bullets = (m.bullets || []).join('\n');
-            if (bullets) {
-                slide.addText(bullets, { x: 0.5, y: textY, w: 5.5, h: 4.5, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
-            }
-            try {
-                slide.addImage({ data: m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 });
-            } catch (e) {
-                console.warn('Failed to add image in V2 renderer:', e);
-            }
-        } else {
-            slide.addText(m.title || '', { x: 0.5, y: 0.7, w: 9, h: 0.8, fontSize: 28, bold: true, color: '1F2937' });
-            const bullets = (m.bullets || []).join('\n');
-            if (bullets) {
-                slide.addText(bullets, { x: 0.5, y: 1.7, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
-            }
+        const bulletsText = (m.bullets || []).join('\n');
+        switch (m.slide_type) {
+            case SlideArchetype.ImageText:
+                slide.addText(m.title || '', { x: 0.5, y: 0.5, w: 5.5, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
+                if (bulletsText) {
+                    slide.addText(bulletsText, { x: 0.5, y: 1.4, w: 5.5, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
+                }
+                try {
+                    if (m.image_url) slide.addImage({ data: m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 });
+                } catch (e) {
+                    console.warn('Failed to add image in V2 renderer:', e);
+                }
+                break;
+            case SlideArchetype.Quote:
+                slide.addText(m.title || '', { x: 0.8, y: 1.2, w: 8.4, h: 3.2, fontSize: 32, italic: true, color: '111827', align: 'center' });
+                break;
+            case SlideArchetype.Exercise:
+                slide.addText('', { x: 0, y: 0, w: 10, h: 0.9, fill: { color: 'ECFDF5' } });
+                slide.addText('Exercițiu', { x: 0.5, y: 0.2, w: 9, h: 0.5, fontSize: 18, bold: true, color: '065F46' });
+                slide.addText(m.title || '', { x: 0.5, y: 0.9, w: 9, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
+                if (bulletsText) {
+                    slide.addText(bulletsText, { x: 0.5, y: 1.8, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
+                }
+                break;
+            case SlideArchetype.CaseStudy:
+                slide.addText('', { x: 0, y: 0, w: 10, h: 0.9, fill: { color: 'DBEAFE' } });
+                slide.addText('Studiu de caz', { x: 0.5, y: 0.2, w: 9, h: 0.5, fontSize: 18, bold: true, color: '1E40AF' });
+                slide.addText(m.title || '', { x: 0.5, y: 0.9, w: 9, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
+                if (bulletsText) {
+                    slide.addText(bulletsText, { x: 0.5, y: 1.8, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
+                }
+                break;
+            case SlideArchetype.Summary:
+            case SlideArchetype.Explainer:
+            default:
+                slide.addText(m.title || '', { x: 0.5, y: 0.7, w: 9, h: 0.8, fontSize: 28, bold: true, color: '1F2937' });
+                if (bulletsText) {
+                    slide.addText(bulletsText, { x: 0.5, y: 1.7, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
+                }
+                break;
+        }
+        if (m.trainer_notes) {
+            slide.addNotes(m.trainer_notes);
         }
         slide.addText(`${course.title}`, { x: 0.5, y: 6.8, w: 9, h: 0.3, fontSize: 10, color: '9CA3AF', align: 'right' });
     });
+};
+
+const buildSlideModelsFromContent = (markdown: string, titleKey: string, scripts: Record<string, string>): SlideModel[] => {
+    const models: SlideModel[] = [];
+    const sections = parseContentSections(markdown);
+    sections.forEach((s, idx) => {
+        const id = `${titleKey}_sec_${idx + 1}`;
+        const image = s.images[0]?.url || null;
+        const archetype = chooseArchetypeFor(titleKey, s.title, image);
+        const rules = getTemplateRules(archetype);
+        let m: SlideModel = {
+            id,
+            slide_type: archetype,
+            title: s.title,
+            bullets: s.bulletPoints,
+            image_url: image,
+            section_id: undefined,
+            objective_links: [],
+            trainer_notes: null,
+        };
+        m = normalizeSlide(m, rules);
+        const note = findMatchingScript(scripts, s.title);
+        if (note) m.trainer_notes = note;
+        const valid = validateSlide(m, rules);
+        if (!valid) {
+            const fallbackRules = getTemplateRules(SlideArchetype.Explainer);
+            m.slide_type = SlideArchetype.Explainer;
+            m = normalizeSlide(m, fallbackRules);
+        }
+        models.push(m);
+    });
+    return models;
 };
 
 const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
     const pptx = new PptxGenJS();
     pptx.layout = 'LAYOUT_16x9';
     addTitleSlide(pptx, course);
-    const structureStep = findStepByKey(course, 'structure');
+    const slidesStep = findStepByKey(course, 'course.livrables.slides');
     const videoScriptStep = findStepByKey(course, 'video_scripts');
-    addAgendaSlide(pptx, course, structureStep, videoScriptStep);
-    const models = buildSlideModelsFromCourse(course);
-    renderSlideModels(pptx, course, models);
-    addSummarySlide(pptx);
+    const scripts = videoScriptStep ? parseVideoScripts(videoScriptStep.content) : {};
+    if (slidesStep && slidesStep.content) {
+        const contentWithPublic = await replaceBlobUrlsWithPublic(slidesStep.content, course.user_id, course.id);
+        const models = buildSlideModelsFromContent(contentWithPublic, slidesStep.title_key, scripts);
+        renderSlideModels(pptx, course, models);
+    } else {
+        const structureStep = findStepByKey(course, 'structure');
+        addAgendaSlide(pptx, course, structureStep, videoScriptStep);
+        const models = buildSlideModelsFromCourse(course, scripts);
+        renderSlideModels(pptx, course, models);
+        addSummarySlide(pptx);
+    }
     const fileName = `${course.title.replace(/[^a-z0-9]/gi, '_')}.pptx`;
     await pptx.writeFile({ fileName });
 };
