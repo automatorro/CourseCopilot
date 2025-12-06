@@ -91,19 +91,20 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     editorRef.current.setContent(nextHtml || '');
     isLocalChangeRef.current = false;
   }, [refreshSignal]);
+  const scriptSrc = TINY_API_KEY ? undefined : 'https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js';
   return (
     <div ref={containerRef} style={{ minHeight: editorHeight }}>
-    <Editor
-      tinymceScriptSrc="/node_modules/tinymce/tinymce.min.js"
-      apiKey={TINY_API_KEY}
-      value={value}
-      onInit={(_evt, editor) => { editorRef.current = editor; editor.setContent(value || ''); }}
-      onEditorChange={(content) => {
-        isLocalChangeRef.current = true;
-        onChange(content || '');
-      }}
-      init={initConfig}
-    />
+      <Editor
+        tinymceScriptSrc={scriptSrc}
+        apiKey={TINY_API_KEY || 'no-api-key'}
+        value={value}
+        onInit={(_evt, editor) => { editorRef.current = editor; editor.setContent(value || ''); }}
+        onEditorChange={(content) => {
+          isLocalChangeRef.current = true;
+          onChange(content || '');
+        }}
+        init={initConfig}
+      />
     </div>
   );
 };
