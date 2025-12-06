@@ -53,8 +53,11 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
         const file = new File([blobInfo.blob()], blobInfo.filename(), { type: blobInfo.blob().type });
         const url = await uploadEditorImageToSupabase(file, user?.id);
         return url;
-      } catch (err: any) {
-        throw new Error(err?.message || 'Image upload failed');
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          throw new Error(err.message || 'Image upload failed');
+        }
+        throw new Error('Image upload failed');
       }
     },
     setup: (editor: any) => {

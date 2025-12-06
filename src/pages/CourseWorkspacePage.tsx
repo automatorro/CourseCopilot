@@ -1281,7 +1281,13 @@ const CourseWorkspacePage: React.FC = () => {
               </div>
             ) : (
               <div className="flex-1 min-h-0 pb-40 sm:pb-28">
-                {looksLikeHtml(editedContent) ? (
+                {currentStep.title_key === 'course.steps.manual' || currentStep.title_key === 'course.steps.cheat_sheets' ? (
+                  (() => {
+                    const isHtml = looksLikeHtml(editedContent);
+                    const html = isHtml ? (editedContent || '') : marked.parse(resolveTokensForPreview(editedContent || ''));
+                    return <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
+                  })()
+                ) : looksLikeHtml(editedContent) ? (
                   <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: editedContent }} />
                 ) : (
                   <div className="p-4 sm:p-5">
