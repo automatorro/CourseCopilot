@@ -3,10 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { marked } from 'marked';
-
-// @ts-ignore
-import * as turndownPluginGfm from 'turndown-plugin-gfm';
-// const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
 import TurndownService from 'turndown';
 
 import { Course, CourseStep, CourseBlueprint } from '../types';
@@ -418,7 +414,7 @@ const CourseWorkspacePage: React.FC = () => {
       if (saved && saved.length > 0) {
         setEditedContent(saved);
       }
-    } catch { }
+    } catch (e) { console.warn('Autosave read failed', e); }
   }, [course, activeStepIndex]);
 
   useEffect(() => {
@@ -429,7 +425,7 @@ const CourseWorkspacePage: React.FC = () => {
     const interval = setInterval(() => {
       try {
         localStorage.setItem(key, editedContent || '');
-      } catch { }
+      } catch (e) { console.warn('Autosave write failed', e); }
     }, 7000);
     return () => clearInterval(interval);
   }, [course, activeStepIndex, editedContent]);
@@ -467,9 +463,10 @@ const CourseWorkspacePage: React.FC = () => {
       setOriginalForProposal(editedContent);
       setProposedContent(refinedHtml);
       showToast('Propunere generată. Verifică și acceptă modificarea.', 'success');
-    } catch (e: any) {
-      showToast(e?.message || 'Rafinarea a eșuat.', 'error');
-    } finally {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Rafinarea a eșuat.';
+      showToast(msg, 'error');
+      } finally {
       setIsProposingChanges(false);
     }
   };
@@ -568,7 +565,7 @@ const CourseWorkspacePage: React.FC = () => {
           return;
         }
       }
-    } catch {}
+    } catch (e) { console.warn('Validation check failed', e); }
 
     const stepUpdatePayload: { content: string, is_completed?: boolean } = {
       content: processedContent
@@ -690,14 +687,14 @@ const CourseWorkspacePage: React.FC = () => {
 
   const handleSubmitLink = () => {
     if (!textareaRef.current) return;
-    const urlPattern = /^(https?:\/\/)[\w.-]+(?:\.[\w\.-]+)+(?:[\w\-\.~:\/?#\[\]@!$&'()*+,;=%]*)?$/i;
     const textarea = textareaRef.current;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selected = editedContent.substring(start, end);
     const text = selected && selected.length > 0 ? selected : (linkText || 'Link');
     const url = linkUrl.trim();
-    const valid = urlPattern.test(url);
+    let valid = false;
+    try { const u = new URL(url); valid = u.protocol.startsWith('http'); } catch { valid = false; }
     setLinkUrlValid(valid);
     if (!url || !valid) { return; }
     const insert = `[${text}](${url})`;
@@ -709,13 +706,13 @@ const CourseWorkspacePage: React.FC = () => {
 
   const handleSubmitImage = () => {
     if (!textareaRef.current) return;
-    const urlPattern = /^(https?:\/\/)[\w.-]+(?:\.[\w\.-]+)+(?:[\w\-\.~:\/?#\[\]@!$&'()*+,;=%]*)?$/i;
     const textarea = textareaRef.current;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const alt = imageAlt?.trim() || 'Image';
     const url = imageUrl.trim();
-    const valid = urlPattern.test(url);
+    let valid = false;
+    try { const u = new URL(url); valid = u.protocol.startsWith('http'); } catch { valid = false; }
     setImageUrlValid(valid);
     if (!url || !valid) { return; }
     const insert = `![${alt}](${url})`;

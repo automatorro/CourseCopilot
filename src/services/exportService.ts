@@ -239,7 +239,7 @@ const parseContentSections = (markdown: string): ContentSection[] => {
             if (!t) return false;
             if (t.startsWith('## ')) return false;
             if (/^\*\s|^-\s|^\d+\.\s|^•\s/.test(t)) return false;
-            if (/!\[[^\]]*\]\([^\)]+\)/.test(t)) return false;
+            if (/!\[[^\]]*\]\([^)]+\)/.test(t)) return false;
             if (/<img[^>]*>/i.test(t)) return false;
             return true;
         });
@@ -338,8 +338,8 @@ const parseModulesFromStructure = (markdown: string): string => {
     for (const line of lines) {
         if (line.match(/^(Modul|Module)\s+\d+:/i)) {
             modules.push(line.trim());
-        } else if (line.match(/^\s*[\*\-]\s+\*\*Lecția/i)) {
-            modules.push('  ' + line.trim().replace(/^\s*[\*\-]\s+/, ''));
+        } else if (line.match(/^\s*[*-]\s+\*\*Lecția/i)) {
+            modules.push('  ' + line.trim().replace(/^\s*[*-]\s+/, ''));
         }
     }
 

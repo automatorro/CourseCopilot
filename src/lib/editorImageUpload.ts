@@ -21,11 +21,14 @@ export const uploadEditorImageToSupabase = async (file: File, userId?: string): 
 
   try {
     return await tryUpload(primaryBucket);
-  } catch (_e: any) {
+  } catch (_e) {
     try {
       return await tryUpload(fallbackBucket);
-    } catch (e2: any) {
-      throw e2;
+    } catch (e2) {
+      if (e2 instanceof Error) {
+        throw e2;
+      }
+      throw new Error('Upload to Supabase failed');
     }
   }
 };
