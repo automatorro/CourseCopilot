@@ -80,6 +80,10 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     const current = editor.getContent({ format: 'html' }) || '';
     if (nextHtml !== current) {
       editor.setContent(nextHtml || '');
+      try {
+        editor.selection?.setCursorLocation();
+        editor.selection?.collapse(false);
+      } catch {}
     }
     isLocalChangeRef.current = false;
   }, [value]);
@@ -89,6 +93,10 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     const isHtml = /<[a-z][\s\S]*>/i.test(value || '');
     const nextHtml = isHtml ? (value || '') : (value || '');
     editorRef.current.setContent(nextHtml || '');
+    try {
+      editorRef.current.selection?.setCursorLocation();
+      editorRef.current.selection?.collapse(false);
+    } catch {}
     isLocalChangeRef.current = false;
   }, [refreshSignal]);
   const scriptSrc = `https://cdn.tiny.cloud/1/${TINY_API_KEY || 'no-api-key'}/tinymce/6/tinymce.min.js`;
@@ -98,7 +106,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
         tinymceScriptSrc={scriptSrc}
         apiKey={TINY_API_KEY || 'no-api-key'}
         value={value}
-        onInit={(_evt, editor) => { editorRef.current = editor; editor.setContent(value || ''); }}
+        onInit={(_evt, editor) => { editorRef.current = editor; editor.setContent(value || ''); try { editor.selection?.setCursorLocation(); editor.selection?.collapse(false); } catch {} }}
         onEditorChange={(content) => {
           isLocalChangeRef.current = true;
           onChange(content || '');
