@@ -91,7 +91,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     editorRef.current.setContent(nextHtml || '');
     isLocalChangeRef.current = false;
   }, [refreshSignal]);
-  const scriptSrc = TINY_API_KEY ? undefined : 'https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js';
+  const scriptSrc = `https://cdn.tiny.cloud/1/${TINY_API_KEY || 'no-api-key'}/tinymce/6/tinymce.min.js`;
   return (
     <div ref={containerRef} style={{ minHeight: editorHeight }}>
       <Editor
