@@ -507,7 +507,29 @@ const CourseWorkspacePage: React.FC = () => {
     // Process image tokens first, then convert any remaining blob: URLs to public Storage URLs before saving
     const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
     const mdContent = turndown.turndown(editedContent);
-    const contentWithProcessedTokens = await processImageTokensForSave(mdContent);
+    const normalizeExternalImageLinks = (md: string): string => {
+      try {
+        let out = md;
+        out = out.replace(/https?:\/\/unsplash\.com\/photos\/[\S)]+/gi, (m) => {
+          const last = (m.split('/') .pop() || '').split('?')[0];
+          const id = last.includes('-') ? (last.split('-').pop() || last) : last;
+          return `https://source.unsplash.com/${id}/1600x900`;
+        });
+        out = out.replace(/https?:\/\/(?:www\.)?pexels\.com\/photo\/[\w-]*?(\d+)\/?/gi, (_m, id) => {
+          const safeId = String(id);
+          return `https://images.pexels.com/photos/${safeId}/pexels-photo-${safeId}.jpeg?auto=compress&cs=tinysrgb&w=1600&h=900`;
+        });
+        out = out.replace(/https?:\/\/(?:www\.)?pixabay\.com\/photos\/[\w-]*?(\d+)\/?/gi, (_m, id) => {
+          const safeId = String(id);
+          return `https://cdn.pixabay.com/photo/${safeId}_1280.jpg`;
+        });
+        return out;
+      } catch {
+        return md;
+      }
+    };
+    const mdNormalized = normalizeExternalImageLinks(mdContent);
+    const contentWithProcessedTokens = await processImageTokensForSave(mdNormalized);
     const processedContent = await replaceBlobUrlsWithPublic(contentWithProcessedTokens, user?.id || null, course?.id || null);
 
     // Pre-save validation

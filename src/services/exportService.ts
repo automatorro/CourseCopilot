@@ -15,7 +15,30 @@ interface ContentSection {
     bulletPoints: string[];
     images: { url: string; alt: string }[];
     rawContent: string;
+    bodyText?: string;
 }
+
+const normalizeExternalImageLinks = (md: string): string => {
+    try {
+        let out = md;
+        out = out.replace(/https?:\/\/unsplash\.com\/photos\/[\S)]+/gi, (m) => {
+            const last = (m.split('/') .pop() || '').split('?')[0];
+            const id = last.includes('-') ? (last.split('-').pop() || last) : last;
+            return `https://source.unsplash.com/${id}/1600x900`;
+        });
+        out = out.replace(/https?:\/\/(?:www\.)?pexels\.com\/photo\/[\w-]*?(\d+)\/?/gi, (_m: string, id: string) => {
+            const safeId = String(id);
+            return `https://images.pexels.com/photos/${safeId}/pexels-photo-${safeId}.jpeg?auto=compress&cs=tinysrgb&w=1600&h=900`;
+        });
+        out = out.replace(/https?:\/\/(?:www\.)?pixabay\.com\/photos\/[\w-]*?(\d+)\/?/gi, (_m: string, id: string) => {
+            const safeId = String(id);
+            return `https://cdn.pixabay.com/photo/${safeId}_1280.jpg`;
+        });
+        return out;
+    } catch {
+        return md;
+    }
+};
 
 // ============================================================================
 // HELPER FUNCTIONS - SLIDE GENERATORS
@@ -81,7 +104,9 @@ const addContentSlides = async (
     course: Course,
     videoScripts: Record<string, string>
 ): Promise<void> => {
-    const sections = parseContentSections(step.content);
+    const pre = normalizeExternalImageLinks(step.content);
+    const withPublic = await replaceBlobUrlsWithPublic(pre, course.user_id, course.id);
+    const sections = parseContentSections(withPublic);
 
     for (const section of sections) {
         const slide = pptx.addSlide();
@@ -98,18 +123,30 @@ const addContentSlides = async (
                 fontSize: 18, bullet: true, color: '374151',
                 lineSpacing: 28
             });
+        } else if (section.bodyText) {
+            slide.addText(section.bodyText, {
+                x: 0.5, y: 1.5, w: '90%', h: 4.8,
+                fontSize: 20, color: '374151',
+                lineSpacing: 28
+            });
         }
 
         if (section.images.length > 0) {
             const yPos = 5.5;
             for (const img of section.images.slice(0, 1)) {
                 try {
-                    if (img.url.startsWith('data:') || img.url.startsWith('http')) {
-                        slide.addImage({
-                            data: img.url,
-                            x: 0.5, y: yPos, w: 8, h: 1.5
-                        });
+                    let dataUrl: string | null = null;
+                    if (img.url.startsWith('http')) {
+                        dataUrl = await fetchToDataUrl(img.url);
                     }
+                    const isData = img.url.startsWith('data:') || !!dataUrl;
+                    const opts: PptxGenJS.ImageProps = isData
+                        ? { data: dataUrl || img.url, x: 0.5, y: yPos, w: 8, h: 1.5 }
+                        : img.url.startsWith('http')
+                            ? { path: img.url, x: 0.5, y: yPos, w: 8, h: 1.5 }
+                            : null as unknown as PptxGenJS.ImageProps;
+                    if (!opts) continue;
+                    slide.addImage(opts);
                 } catch (e) {
                     console.warn('Failed to add image:', e);
                 }
@@ -152,6 +189,22 @@ const addSummarySlide = (pptx: PptxGenJS): void => {
     });
 };
 
+const fetchToDataUrl = async (url: string): Promise<string | null> => {
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch {
+        return null;
+    }
+};
+
 // ============================================================================
 // PARSER FUNCTIONS
 // ============================================================================
@@ -162,12 +215,40 @@ const parseContentSections = (markdown: string): ContentSection[] => {
     let currentTitle: string | null = null;
     let currentBullets: string[] = [];
     let currentImages: { url: string; alt: string }[] = [];
+    let currentRaw: string[] = [];
     const flush = () => {
-        if (!currentTitle) return;
-        sections.push({ title: currentTitle, bulletPoints: currentBullets, images: currentImages, rawContent: '' });
+        if (!currentTitle) {
+            currentRaw = [];
+            return;
+        }
+        const rawJoined = normalizeMarkdownImages(currentRaw.join('\n'));
+        const htmlImgs = Array.from(rawJoined.matchAll(/<img[\s\S]*?src=["']([^"']+)["'][\s\S]*?>/ig));
+        htmlImgs.forEach(m => {
+            const url = m[1];
+            const altMatch = (m[0].match(/alt=["']([^"']*)["']/i) || [null, '']);
+            const alt = altMatch[1] || '';
+            currentImages.push({ url, alt });
+        });
+        const plainImgs = Array.from(rawJoined.matchAll(/(https?:\/\/[^\s)]+?\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?)/ig));
+        plainImgs.forEach(m => {
+            const url = m[1];
+            currentImages.push({ url, alt: '' });
+        });
+        const bodyLines = rawJoined.split('\n').filter(l => {
+            const t = l.trim();
+            if (!t) return false;
+            if (t.startsWith('## ')) return false;
+            if (/^\*\s|^-\s|^\d+\.\s|^•\s/.test(t)) return false;
+            if (/!\[[^\]]*\]\([^\)]+\)/.test(t)) return false;
+            if (/<img[^>]*>/i.test(t)) return false;
+            return true;
+        });
+        const bodyText = bodyLines.join('\n').trim() || undefined;
+        sections.push({ title: currentTitle, bulletPoints: currentBullets, images: currentImages, rawContent: rawJoined, bodyText });
         currentTitle = null;
         currentBullets = [];
         currentImages = [];
+        currentRaw = [];
     };
     for (const raw of lines) {
         const line = raw.trim();
@@ -180,15 +261,21 @@ const parseContentSections = (markdown: string): ContentSection[] => {
             currentTitle = t;
             continue;
         }
-        if (line.startsWith('* ') || line.startsWith('- ')) {
+        currentRaw.push(raw);
+        if (line.startsWith('* ') || line.startsWith('- ') || /^\d+\.\s/.test(line) || line.startsWith('• ')) {
             let b = line.substring(2).trim();
             b = b.replace(/\*\*|__|`/g, '').trim();
-            if (b.length > 0 && b.length < 150) currentBullets.push(b);
+            if (b.length > 0) currentBullets.push(b);
             continue;
         }
-        const imgMatch = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
-        if (imgMatch) {
-            currentImages.push({ alt: imgMatch[1], url: imgMatch[2] });
+        const mdImg = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+        if (mdImg) {
+            currentImages.push({ alt: mdImg[1], url: mdImg[2] });
+            continue;
+        }
+        const htmlImg = line.match(/<img[^>]*src=["']([^"']+)["'][^>]*alt=["']?([^"']*)["']?[^>]*>/i);
+        if (htmlImg) {
+            currentImages.push({ alt: htmlImg[2] || '', url: htmlImg[1] });
             continue;
         }
     }
@@ -349,8 +436,8 @@ const buildSlideModelsFromCourse = (course: Course, scripts: Record<string, stri
     return models;
 };
 
-const renderSlideModels = (pptx: PptxGenJS, course: Course, models: SlideModel[]): void => {
-    models.forEach(m => {
+const renderSlideModels = async (pptx: PptxGenJS, course: Course, models: SlideModel[]): Promise<void> => {
+    for (const m of models) {
         const slide = pptx.addSlide();
         const bulletsText = (m.bullets || []).join('\n');
         switch (m.slide_type) {
@@ -360,7 +447,17 @@ const renderSlideModels = (pptx: PptxGenJS, course: Course, models: SlideModel[]
                     slide.addText(bulletsText, { x: 0.5, y: 1.4, w: 5.5, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
                 }
                 try {
-                    if (m.image_url) slide.addImage({ data: m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 });
+                    if (m.image_url) {
+                        let dataUrl: string | null = null;
+                        if (!m.image_url.startsWith('data:') && m.image_url.startsWith('http')) {
+                            dataUrl = await fetchToDataUrl(m.image_url);
+                        }
+                        const isData = m.image_url.startsWith('data:') || !!dataUrl;
+                        const opts: PptxGenJS.ImageProps = isData
+                            ? { data: dataUrl || m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 }
+                            : { path: m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 };
+                        slide.addImage(opts);
+                    }
                 } catch (e) {
                     console.warn('Failed to add image in V2 renderer:', e);
                 }
@@ -397,7 +494,7 @@ const renderSlideModels = (pptx: PptxGenJS, course: Course, models: SlideModel[]
             slide.addNotes(m.trainer_notes);
         }
         slide.addText(`${course.title}`, { x: 0.5, y: 6.8, w: 9, h: 0.3, fontSize: 10, color: '9CA3AF', align: 'right' });
-    });
+    }
 };
 
 const buildSlideModelsFromContent = (markdown: string, titleKey: string, scripts: Record<string, string>): SlideModel[] => {
@@ -442,12 +539,12 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
     if (slidesStep && slidesStep.content) {
         const contentWithPublic = await replaceBlobUrlsWithPublic(slidesStep.content, course.user_id, course.id);
         const models = buildSlideModelsFromContent(contentWithPublic, slidesStep.title_key, scripts);
-        renderSlideModels(pptx, course, models);
+        await renderSlideModels(pptx, course, models);
     } else {
         const structureStep = findStepByKey(course, 'structure');
         addAgendaSlide(pptx, course, structureStep, videoScriptStep);
         const models = buildSlideModelsFromCourse(course, scripts);
-        renderSlideModels(pptx, course, models);
+        await renderSlideModels(pptx, course, models);
         addSummarySlide(pptx);
     }
     const fileName = `${course.title.replace(/[^a-z0-9]/gi, '_')}.pptx`;
@@ -577,7 +674,9 @@ const buildDocxParagraphs = async (content: string): Promise<Paragraph[]> => {
 };
 
 const createDocx = async (step: CourseStep, courseTitle: string, stepTitle: string): Promise<Blob> => {
-    const children = await buildDocxParagraphs(step.content);
+    const pre = normalizeExternalImageLinks(step.content);
+    const withPublic = await replaceBlobUrlsWithPublic(pre, step.user_id || null, step.course_id || null);
+    const children = await buildDocxParagraphs(withPublic);
     const doc = new Document({
         sections: [{
             headers: {
