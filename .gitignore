@@ -1,15 +1,5 @@
 node_modules/
 dist/
-.vite/
-.cache/
-
-# env files
-.env
-.env.*
-
-# OS and editor junk
 .DS_Store
-Thumbs.db
-*.log
-.idea/
-.vscode/
+.env*
+*.local
