@@ -9,7 +9,7 @@ import { PRICING_PLANS } from '../constants';
 import { supabase } from '../services/supabaseClient';
 import { deleteCourseById } from '../services/courseService';
 import { PlusCircle, Loader2, Edit, Copy, Download, Trash2, Rocket } from 'lucide-react';
-import { exportCourseAsZip } from '../services/exportService';
+import { exportCourseAsZip, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
 import ConfirmModal from '../components/ConfirmModal';
 
 const GettingStartedGuide: React.FC = () => {
@@ -167,6 +167,13 @@ const DashboardPage: React.FC = () => {
     const courseToDownload = courses.find(c => c.id === courseId);
     if (courseToDownload) {
       try {
+        const models = await getSlideModelsForPreview(courseToDownload);
+        const hasCritical = models.some(m => (getPedagogicWarnings(m) || []).some(w => w.startsWith('[CRITICAL]')));
+        if (hasCritical) {
+          showToast('Există probleme critice în slide-uri. Rezolvă-le în Previzualizare înainte de export.', 'error');
+          navigate(`/course/${courseId}`);
+          return;
+        }
         await exportCourseAsZip(courseToDownload, t);
       } catch (error) {
         console.error("Failed to export course:", error);

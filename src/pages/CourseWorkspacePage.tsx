@@ -12,8 +12,9 @@ import { supabase } from '../services/supabaseClient';
 import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
-import { exportCourseAsZip, exportCourseAsPptx } from '../services/exportService';
+import { exportCourseAsZip, exportCourseAsPptx, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
 import ExportModal from '../components/ExportModal';
+import SlidesPreviewModal from '../components/SlidesPreviewModal';
 import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations } from '../lib/outputValidators';
 import { replaceBlobUrlsWithPublic, uploadBlobToStorage } from '../services/imageService';
 import { useToast } from '../contexts/ToastContext';
@@ -83,6 +84,7 @@ const CourseWorkspacePage: React.FC = () => {
   const [isDownloading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showSlidesPreview, setShowSlidesPreview] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
@@ -617,6 +619,16 @@ const CourseWorkspacePage: React.FC = () => {
   };
 
   const handleDownload = async () => {
+    if (!course) return;
+    try {
+      const models = await getSlideModelsForPreview(course);
+      const hasCritical = models.some(m => (getPedagogicWarnings(m) || []).some(w => w.startsWith('[CRITICAL]')));
+      if (hasCritical) {
+        showToast('Există probleme critice în slide-uri. Rezolvă-le în Previzualizare înainte de export.', 'error');
+        setShowSlidesPreview(true);
+        return;
+      }
+    } catch {}
     setShowExportModal(true);
   };
 
@@ -624,6 +636,14 @@ const CourseWorkspacePage: React.FC = () => {
     if (!course) return;
     setIsExporting(true);
     try {
+      const models = await getSlideModelsForPreview(course);
+      const hasCritical = models.some(m => (getPedagogicWarnings(m) || []).some(w => w.startsWith('[CRITICAL]')));
+      if (hasCritical) {
+        showToast('Există probleme critice în slide-uri. Rezolvă-le în Previzualizare înainte de export.', 'error');
+        setShowSlidesPreview(true);
+        setIsExporting(false);
+        return;
+      }
       if (format === 'pptx') {
         await exportCourseAsPptx(course);
       } else if (format === 'zip') {
@@ -1346,6 +1366,13 @@ const CourseWorkspacePage: React.FC = () => {
                   {t('export.title') || 'Exportă materialele'}
                 </button>
               )}
+              <button
+                onClick={() => setShowSlidesPreview(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                title="Previzualizează slide-urile"
+              >
+                <Pilcrow size={16} /> Preview Slides
+              </button>
             </div>
             <div className="flex gap-2">
               {currentStep.is_completed && hasUnsavedChanges && (
@@ -1377,7 +1404,140 @@ const CourseWorkspacePage: React.FC = () => {
         onClose={() => setShowExportModal(false)}
         onExport={handleExport}
         isExporting={isExporting}
+        course={course}
       />
+      {showSlidesPreview && course && (
+        <SlidesPreviewModal
+          isOpen={showSlidesPreview}
+          onClose={() => setShowSlidesPreview(false)}
+          course={course}
+          onApplySuggestion={(s: string, targetTitle?: string) => {
+            const appendAtEnd = (text: string) => {
+              const next = `${editedContent}${editedContent.endsWith('\n') ? '' : '\n\n'}${text}`;
+              setEditedContent(next);
+              setShowSlidesPreview(false);
+              setActiveTab('editor');
+              setTimeout(() => textareaRef.current?.focus(), 0);
+              showToast('Sugestie aplicată în editor.', 'success');
+            };
+            const insertAtCursor = (text: string) => {
+              const textarea = textareaRef.current;
+              if (!textarea) { appendAtEnd(text); return; }
+              const start = textarea.selectionStart;
+              const end = textarea.selectionEnd;
+              const next = `${editedContent.substring(0, start)}${text}${editedContent.substring(end)}`;
+              setEditedContent(next);
+              setShowSlidesPreview(false);
+              setActiveTab('editor');
+              setTimeout(() => textarea.focus(), 0);
+              showToast('Sugestie aplicată în editor.', 'success');
+            };
+            const insertIntoSectionByTitle = (text: string, title?: string) => {
+              if (!title) { insertAtCursor(text); return; }
+              const content = editedContent || '';
+              const lines = content.split('\n');
+              let offset = 0;
+              let startOffset: number | null = null;
+              let endOffset: number | null = null;
+              const norm = (s: string) => s.toLowerCase().replace(/^slide\s*\d+\s*:\s*/i, '').trim();
+              const target = norm(title);
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const trimmed = line.trim();
+                const isHeading = /^#{1,6}\s+/.test(trimmed);
+                const isBoldTitle = trimmed.startsWith('**') && trimmed.endsWith('**') && trimmed.length > 4;
+                const lineTitle = isHeading ? trimmed.replace(/^#{1,6}\s+/, '') : (isBoldTitle ? trimmed.slice(2, -2) : '');
+                if ((isHeading || isBoldTitle) && norm(lineTitle).includes(target)) {
+                  startOffset = offset;
+                  for (let j = i + 1, off = offset + line.length + 1; j < lines.length; j++) {
+                    const ln = lines[j];
+                    const t2 = ln.trim();
+                    const isH = /^#{1,6}\s+/.test(t2) || (t2.startsWith('**') && t2.endsWith('**') && t2.length > 4);
+                    if (isH) { endOffset = off; break; }
+                    off += ln.length + 1;
+                  }
+                  if (endOffset === null) endOffset = content.length;
+                  break;
+                }
+                offset += line.length + 1;
+              }
+              if (startOffset === null || endOffset === null) { insertAtCursor(text); return; }
+              const next = `${content.substring(0, endOffset)}${content.endsWith('\n') ? '' : '\n'}${text}\n${content.substring(endOffset)}`;
+              setEditedContent(next);
+              setShowSlidesPreview(false);
+              setActiveTab('editor');
+              setTimeout(() => textareaRef.current?.focus(), 0);
+              showToast('Sugestie aplicată în secțiunea slide-ului.', 'success');
+            };
+            const modifySelectionLines = (transform: (lines: string[]) => string[]) => {
+              const textarea = textareaRef.current;
+              if (!textarea) { appendAtEnd(transform([]).join('\n')); return; }
+              const start = textarea.selectionStart;
+              const end = textarea.selectionEnd;
+              const lineStartIdx = editedContent.lastIndexOf('\n', start - 1) + 1;
+              const lineEndIdx = editedContent.indexOf('\n', end);
+              const effectiveEnd = lineEndIdx === -1 ? editedContent.length : lineEndIdx;
+              const linesText = editedContent.substring(lineStartIdx, effectiveEnd);
+              const lines = linesText.split('\n');
+              const nextLines = transform(lines);
+              const next = `${editedContent.substring(0, lineStartIdx)}${nextLines.join('\n')}${editedContent.substring(effectiveEnd)}`;
+              setEditedContent(next);
+              setShowSlidesPreview(false);
+              setActiveTab('editor');
+              setTimeout(() => textarea.focus(), 0);
+              showToast('Sugestie aplicată în editor.', 'success');
+            };
+            const sLower = s.toLowerCase();
+            if (sLower.includes('pași')) {
+              insertIntoSectionByTitle('- Pas 1: ...\n- Pas 2: ...\n- Pas 3: ...\n', targetTitle);
+              return;
+            }
+            if (sLower.includes('verbe de aplicare')) {
+              insertIntoSectionByTitle('- Verbe de aplicare: aplică, utilizează, implementează\n', targetTitle);
+              return;
+            }
+            if (sLower.includes('imagine')) {
+              setShowSlidesPreview(false);
+              setActiveTab('editor');
+              setShowImageStudio(true);
+              return;
+            }
+            if (sLower.includes('context') && sLower.includes('problemă') && sLower.includes('soluție') && sLower.includes('rezultat')) {
+              insertIntoSectionByTitle('- Context: ...\n- Problemă: ...\n- Soluție: ...\n- Rezultat: ...\n', targetTitle);
+              return;
+            }
+            if (sLower.includes('concluzii') || sLower.includes('criterii de evaluare')) {
+              insertIntoSectionByTitle('- Concluzii: ...\n- Criterii de evaluare: ...\n', targetTitle);
+              return;
+            }
+            if (sLower.includes('conținut prea dens') || sLower.includes('reduce numărul de bullets') || sLower.includes('reduce bullets')) {
+              modifySelectionLines((lines) => {
+                const bullets = lines.filter(l => l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l));
+                if (bullets.length === 0) return lines;
+                const kept = bullets.slice(0, 4);
+                const others = lines.filter(l => !(l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l)));
+                return [...kept, ...others];
+              });
+              return;
+            }
+            if (sLower.includes('titlu prea lung') || sLower.includes('scurtează titlul')) {
+              modifySelectionLines((lines) => lines.map(l => l.startsWith('#') ? (l.length > 60 ? (l.slice(0, 57) + '…') : l) : l));
+              return;
+            }
+            if (sLower.includes('bullets prea lungi') || sLower.includes('scurtează formulările')) {
+              modifySelectionLines((lines) => lines.map(l => {
+                if (l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l)) {
+                  return l.length > 110 ? (l.slice(0, 107) + '…') : l;
+                }
+                return l;
+              }));
+              return;
+            }
+            // Fallback: append suggestion text if no rule matched
+            appendAtEnd(`- ${s}`);
+          }}
+        />
+      )}
       {/* Sticky mobile actions bar */}
       <div id="mobile-actions-bar" className="mobile-actions-sticky sm:hidden border-t dark:border-gray-700 shadow-lg safe-area-bottom">
           <div className="px-3 py-2 flex items-center justify-between gap-2">

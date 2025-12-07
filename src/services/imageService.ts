@@ -62,7 +62,9 @@ export const replaceBlobUrlsWithPublic = async (
       const blob = new Blob([u8arr], { type: mime });
       const publicUrl = await uploadBlobToStorage(blob, userId, courseId);
       updated = updated.split(`(${dataUrl})`).join(`(${publicUrl})`);
-    } catch {}
+    } catch (e) {
+      void e;
+    }
   }
   return updated;
 };
@@ -86,8 +88,44 @@ export const replaceBlobUrlsWithData = async (md: string): Promise<string> => {
         reader.readAsDataURL(blob);
       });
       updated = updated.split(`(${blobUrl})`).join(`(${dataUrl})`);
-    } catch {
+    } catch (e) {
+      void e;
       // leave as-is on failure
+    }
+  }
+  return updated;
+};
+
+export const ensurePublicExternalImages = async (
+  md: string,
+  userId: string | null,
+  courseId: string | null
+): Promise<string> => {
+  const normalized = normalizeMarkdownImages(md);
+  let updated = normalized;
+  const urlRegex = /(https?:\/\/[^\s)]+?\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?)/ig;
+  const allMatches = Array.from(new Set(Array.from(normalized.matchAll(urlRegex)).map(m => m[1])));
+  for (const url of allMatches) {
+    const isAlreadyPublic = /course-assets/.test(url);
+    if (isAlreadyPublic) continue;
+    try {
+      let blob: Blob | null = null;
+      try {
+        const res = await fetch(url);
+        if (res.ok) blob = await res.blob();
+      } catch (e) {
+        void e;
+      }
+      if (!blob) {
+        const proxied = `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=png`;
+        const res2 = await fetch(proxied);
+        if (!res2.ok) continue;
+        blob = await res2.blob();
+      }
+      const publicUrl = await uploadBlobToStorage(blob, userId, courseId);
+      updated = updated.split(url).join(publicUrl);
+    } catch (e) {
+      void e;
     }
   }
   return updated;

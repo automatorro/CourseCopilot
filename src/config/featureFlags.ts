@@ -16,7 +16,7 @@ export const FEATURE_FLAGS: Record<FeatureFlagKey, boolean> = {
   validationStrictLocalization: false,
   blueprintRefineEnabled: false,
   editorGenerateButtonEnabled: false,
-  newPptxExporter: true,
+  newPptxExporter: false,
 };
 
 export const FEATURE_DOCS: Record<FeatureFlagKey, string> = {

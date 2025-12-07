@@ -1,16 +1,39 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { FileText, Presentation, FileArchive, X } from 'lucide-react';
 import { useTranslation } from '../contexts/I18nContext';
+import { isEnabled } from '../config/featureFlags';
+import { Course } from '../types';
+import { getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
 
 interface ExportModalProps {
     isOpen: boolean;
     onClose: () => void;
     onExport: (format: 'pptx' | 'pdf' | 'zip') => void;
     isExporting: boolean;
+    course?: Course | null;
 }
 
-const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, isExporting }) => {
+const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, isExporting, course }) => {
     const { t } = useTranslation();
+    const [hasCritical, setHasCritical] = useState(false);
+    const [checking, setChecking] = useState(false);
+
+    useEffect(() => {
+        const check = async () => {
+            if (!isOpen || !course) { setHasCritical(false); return; }
+            setChecking(true);
+            try {
+                const models = await getSlideModelsForPreview(course);
+                const crit = models.some(m => (getPedagogicWarnings(m) || []).some(w => w.startsWith('[CRITICAL]')));
+                setHasCritical(crit);
+            } catch {
+                setHasCritical(false);
+            } finally {
+                setChecking(false);
+            }
+        };
+        check();
+    }, [isOpen, course]);
 
     if (!isOpen) return null;
 
@@ -26,6 +49,12 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
                     </button>
                 </div>
 
+                {hasCritical && (
+                    <div className="px-6 py-3 border-b border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-300 text-sm">
+                        Există probleme critice în slide-uri. Rezolvă-le în Previzualizare înainte de export.
+                    </div>
+                )}
+
                 <div className="p-6 space-y-4">
                     <p className="text-gray-600 dark:text-gray-300 mb-4">
                         {t('export.subtitle') || 'Choose a format to download your course materials:'}
@@ -33,15 +62,15 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
 
                     <button
                         onClick={() => onExport('pptx')}
-                        disabled={isExporting}
+                        disabled={isExporting || hasCritical || checking}
                         className="w-full flex items-center p-4 border-2 border-orange-100 dark:border-orange-900/30 rounded-xl hover:border-orange-500 dark:hover:border-orange-500 bg-orange-50 dark:bg-orange-900/10 transition-all group"
                     >
                         <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg text-orange-600 dark:text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-colors">
                             <Presentation size={24} />
                         </div>
                         <div className="ml-4 text-left">
-                            <h4 className="font-bold text-gray-900 dark:text-white">PowerPoint (.pptx)</h4>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('export.pptx.subtitle') || 'Download only the Slides set (PPTX)'}</p>
+                            <h4 className="font-bold text-gray-900 dark:text-white">PowerPoint (.pptx){isEnabled('newPptxExporter') ? ' — Beta' : ''}</h4>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('export.pptx.subtitle') || (hasCritical ? 'Export blocat: rezolvă problemele critice în slide-uri' : (isEnabled('newPptxExporter') ? 'New deterministic exporter' : 'Legacy exporter'))}</p>
                         </div>
                     </button>
 

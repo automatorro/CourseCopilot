@@ -3,7 +3,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Head
 import JSZip from 'jszip';
 
 import { Course, CourseStep, SlideModel, SlideArchetype, SlideRules } from '../types';
-import { replaceBlobUrlsWithPublic } from './imageService';
+import { replaceBlobUrlsWithPublic, ensurePublicExternalImages } from './imageService';
 import { isEnabled } from '../config/featureFlags';
 
 // ============================================================================
@@ -370,8 +370,12 @@ const findStepByKey = (course: Course, keyPattern: string): CourseStep | null =>
 
 export const exportCourseAsPptx = async (course: Course): Promise<void> => {
     if (isEnabled('newPptxExporter')) {
-        await exportCourseAsPptxV2(course);
-        return;
+        try {
+            await exportCourseAsPptxV2(course);
+            return;
+        } catch (e) {
+            console.warn('[Export] V2 exporter failed, falling back to legacy:', e);
+        }
     }
     const pptx = new PptxGenJS();
     pptx.layout = 'LAYOUT_16x9';
@@ -398,6 +402,140 @@ export const exportCourseAsPptx = async (course: Course): Promise<void> => {
     await pptx.writeFile({ fileName });
 };
 
+const linkSlideModelsToBlueprint = (course: Course, models: SlideModel[]): SlideModel[] => {
+    const bp = course.blueprint;
+    if (!bp || !Array.isArray(bp.modules)) return models;
+    const byTitle: Record<string, { sectionId: string; objective: string }> = {};
+    for (const m of bp.modules) {
+        for (const s of m.sections || []) {
+            const k = (s.title || '').toLowerCase().trim();
+            if (!k) continue;
+            byTitle[k] = { sectionId: s.id, objective: m.learning_objective };
+        }
+    }
+    return models.map(mm => {
+        const t = (mm.title || '').toLowerCase().trim();
+        const link = byTitle[t];
+        if (!link) return mm;
+        const objective_links = Array.isArray(mm.objective_links) ? mm.objective_links : [];
+        const nextObj = link.objective ? [link.objective] : objective_links;
+        return { ...mm, section_id: link.sectionId, objective_links: nextObj };
+    });
+};
+
+export const getSlideModelsForPreview = async (course: Course): Promise<SlideModel[]> => {
+    const slidesStep = findStepByKey(course, 'course.livrables.slides');
+    const videoScriptStep = findStepByKey(course, 'video_scripts');
+    const scripts = videoScriptStep ? parseVideoScripts(videoScriptStep.content) : {};
+    if (slidesStep && slidesStep.content) {
+        const contentWithPublic = await replaceBlobUrlsWithPublic(slidesStep.content, course.user_id, course.id);
+        let models = buildSlideModelsFromContent(contentWithPublic, slidesStep.title_key, scripts);
+        models = linkSlideModelsToBlueprint(course, models);
+        return models;
+    }
+    let models = buildSlideModelsFromCourse(course, scripts);
+    models = linkSlideModelsToBlueprint(course, models);
+    return models;
+};
+
+export const getPedagogicWarnings = (m: SlideModel): string[] => {
+    const rules = getTemplateRules(m.slide_type);
+    const warnings: string[] = [];
+    const titleLen = (m.title || '').length;
+    if (rules.maxTitleChars && titleLen > rules.maxTitleChars) warnings.push('[WARN] Titlu prea lung pentru arhetip');
+    const bullets = m.bullets || [];
+    if (rules.maxBullets && bullets.length > rules.maxBullets) warnings.push('[WARN] Prea multe bullets');
+    const maxLen = rules.maxBulletLength ?? null;
+    if (maxLen !== null && bullets.some(b => b.length > maxLen)) warnings.push('[WARN] Bullets prea lungi');
+
+    const density = ((m.title || '').length) + bullets.reduce((acc, b) => acc + b.length, 0);
+    if (density > 1000) warnings.push('[WARN] Conținut prea dens pentru un singur slide');
+
+    if (m.slide_type === SlideArchetype.ImageText && !m.image_url) warnings.push('[CRITICAL] Lipsește imaginea la Image+Text');
+
+    const textAll = ((m.title || '') + ' ' + bullets.join(' ')).toLowerCase();
+    const BLOOM = {
+        remember: ['definește','defini','enumeră','listează','identifică','recunoaște','descrie','menționează'],
+        understand: ['explică','interpretează','clarifică','rezumă','exemplifică','parafrazează','ilustrează'],
+        apply: ['aplică','utilizează','folosește','implementează','exersează','execută','proiectează','realizează'],
+        analyze: ['analizează','compară','descompune','relatează','examinează','categorizează','corelează'],
+        evaluate: ['evaluează','argumentează','justifică','critică','decide','apreciază','verifică'],
+        create: ['creează','sintetizează','compune','inovează','construiește','elaborează','proiectează']
+    } as const;
+    const bloomOrder = ['remember','understand','apply','analyze','evaluate','create'] as const;
+    const detectBloomLevel = (t: string): number => {
+        for (let i = bloomOrder.length - 1; i >= 0; i--) {
+            const level = bloomOrder[i];
+            const verbs = BLOOM[level];
+            if (verbs.some(v => t.includes(v))) return i;
+        }
+        return -1;
+    };
+    const minLevelForArchetype = (a: SlideArchetype): number => {
+        if (a === SlideArchetype.Exercise) return bloomOrder.indexOf('apply');
+        if (a === SlideArchetype.CaseStudy) return bloomOrder.indexOf('analyze');
+        if (a === SlideArchetype.Summary) return bloomOrder.indexOf('understand');
+        if (a === SlideArchetype.Explainer) return bloomOrder.indexOf('understand');
+        if (a === SlideArchetype.ImageText) return bloomOrder.indexOf('understand');
+        return bloomOrder.indexOf('remember');
+    };
+    const bloomDetected = detectBloomLevel(textAll);
+    const bloomRequired = minLevelForArchetype(m.slide_type);
+    if (bloomDetected >= 0 && bloomDetected < bloomRequired) warnings.push('[WARN] Nivel Bloom prea scăzut pentru arhetip');
+
+    if (m.slide_type === SlideArchetype.Exercise) {
+        if (bullets.length < 3) warnings.push('[CRITICAL] Exercițiu fără pași suficienți');
+        const hasApply = BLOOM.apply.some(v => textAll.includes(v));
+        if (!hasApply) warnings.push('[WARN] Exercițiul ar trebui să ceară aplicare');
+    }
+
+    if (m.slide_type === SlideArchetype.CaseStudy) {
+        const keys = ['context','problemă','soluție','rezultat'];
+        const hits = keys.filter(k => textAll.includes(k)).length;
+        if (hits < 2) warnings.push('[WARN] Studiu de caz fără structură clară');
+        const hasEvaluate = BLOOM.evaluate.some(v => textAll.includes(v));
+        if (!hasEvaluate) warnings.push('[INFO] Adaugă evaluare/concluzii pentru un studiu de caz robust');
+    }
+
+    if (m.slide_type === SlideArchetype.Summary) {
+        const integrationHints = ['reflectă','plan','transfer','integrează','recapitulare','reține'];
+        const hasIntegration = integrationHints.some(v => textAll.includes(v));
+        if (!hasIntegration) warnings.push('[INFO] Îndeamnă la reflecție/plan de acțiune în rezumat');
+    }
+
+    return warnings;
+};
+
+const splitSentences = (text: string): string[] => {
+    const clean = text.replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    const parts = clean.split(/(?<=[.!?])\s+/);
+    return parts.map(p => p.replace(/^[*•-]\s*/, '').trim()).filter(Boolean);
+};
+
+const deriveBulletsFromBody = (body: string): string[] => {
+    const sents = splitSentences(body);
+    return sents.slice(0, 6);
+};
+
+const getImageDims = (url: string): Promise<{ w: number; h: number }> => {
+    return new Promise((resolve) => {
+        try {
+            const img = new Image();
+            img.onload = () => resolve({ w: img.naturalWidth || 1600, h: img.naturalHeight || 900 });
+            img.onerror = () => resolve({ w: 1600, h: 900 });
+            img.src = url;
+        } catch {
+            resolve({ w: 1600, h: 900 });
+        }
+    });
+};
+
+const fitContain = (boxW: number, boxH: number, imgW: number, imgH: number): { w: number; h: number } => {
+    const scale = Math.min(boxW / imgW, boxH / imgH);
+    return { w: Math.max(0.1, imgW * scale), h: Math.max(0.1, imgH * scale) };
+};
+
 // V2 exporter: builds SlideModel IR and renders archetypes deterministically
 const buildSlideModelsFromCourse = (course: Course, scripts: Record<string, string>): SlideModel[] => {
     const models: SlideModel[] = [];
@@ -407,7 +545,7 @@ const buildSlideModelsFromCourse = (course: Course, scripts: Record<string, stri
         const sections = parseContentSections(step.content);
         sections.forEach((s, idx) => {
             const id = `${step.id}_sec_${idx + 1}`;
-            const baseBullets = s.bulletPoints;
+            const baseBullets = s.bulletPoints.length > 0 ? s.bulletPoints : deriveBulletsFromBody(s.bodyText || '');
             const image = s.images[0]?.url || null;
             const archetype = chooseArchetypeFor(step.title_key, s.title, image);
             const rules = getTemplateRules(archetype);
@@ -453,9 +591,15 @@ const renderSlideModels = async (pptx: PptxGenJS, course: Course, models: SlideM
                             dataUrl = await fetchToDataUrl(m.image_url);
                         }
                         const isData = m.image_url.startsWith('data:') || !!dataUrl;
+                        const box = { x: 6.1, y: 0.7, w: 3.4, h: 5.0 };
+                        const pad = 0.15;
+                        const dims = await getImageDims(dataUrl || m.image_url);
+                        const fit = fitContain(box.w - pad * 2, box.h - pad * 2, dims.w, dims.h);
+                        const xPos = box.x + pad + ((box.w - pad * 2) - fit.w) / 2;
+                        const yPos = box.y + pad + ((box.h - pad * 2) - fit.h) / 2;
                         const opts: PptxGenJS.ImageProps = isData
-                            ? { data: dataUrl || m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 }
-                            : { path: m.image_url, x: 6.2, y: 0.8, w: 3.2, h: 4.8 };
+                            ? { data: dataUrl || m.image_url, x: xPos, y: yPos, w: fit.w, h: fit.h }
+                            : { path: m.image_url, x: xPos, y: yPos, w: fit.w, h: fit.h };
                         slide.addImage(opts);
                     }
                 } catch (e) {
@@ -509,7 +653,7 @@ const buildSlideModelsFromContent = (markdown: string, titleKey: string, scripts
             id,
             slide_type: archetype,
             title: s.title,
-            bullets: s.bulletPoints,
+            bullets: s.bulletPoints.length > 0 ? s.bulletPoints : deriveBulletsFromBody(s.bodyText || ''),
             image_url: image,
             section_id: undefined,
             objective_links: [],
@@ -538,12 +682,15 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
     const scripts = videoScriptStep ? parseVideoScripts(videoScriptStep.content) : {};
     if (slidesStep && slidesStep.content) {
         const contentWithPublic = await replaceBlobUrlsWithPublic(slidesStep.content, course.user_id, course.id);
-        const models = buildSlideModelsFromContent(contentWithPublic, slidesStep.title_key, scripts);
+        const contentAllPublic = await ensurePublicExternalImages(contentWithPublic, course.user_id, course.id);
+        let models = buildSlideModelsFromContent(contentAllPublic, slidesStep.title_key, scripts);
+        models = linkSlideModelsToBlueprint(course, models);
         await renderSlideModels(pptx, course, models);
     } else {
         const structureStep = findStepByKey(course, 'structure');
         addAgendaSlide(pptx, course, structureStep, videoScriptStep);
-        const models = buildSlideModelsFromCourse(course, scripts);
+        let models = buildSlideModelsFromCourse(course, scripts);
+        models = linkSlideModelsToBlueprint(course, models);
         await renderSlideModels(pptx, course, models);
         addSummarySlide(pptx);
     }
@@ -562,11 +709,11 @@ const TEMPLATE_RULES: Record<SlideArchetype, SlideRules> = {
     [SlideArchetype.Summary]: { maxBullets: 5, maxBulletLength: 80 },
 };
 
-const getTemplateRules = (a: SlideArchetype): SlideRules => TEMPLATE_RULES[a] || { maxTitleChars: 60 };
+export const getTemplateRules = (a: SlideArchetype): SlideRules => TEMPLATE_RULES[a] || { maxTitleChars: 60 };
 
 const trimTo = (s: string, n: number): string => (s.length > n ? (s.slice(0, Math.max(0, n - 3)) + '…') : s);
 
-const normalizeSlide = (m: SlideModel, r: SlideRules): SlideModel => {
+export const normalizeSlide = (m: SlideModel, r: SlideRules): SlideModel => {
     const title = m.title ? (r.maxTitleChars ? trimTo(m.title, r.maxTitleChars) : m.title) : m.title;
     const maxB = typeof r.maxBullets === 'number' ? r.maxBullets : undefined;
     const clipBullets = (m.bullets || []).slice(0, maxB || (m.bullets || []).length).map(b => {
@@ -577,7 +724,7 @@ const normalizeSlide = (m: SlideModel, r: SlideRules): SlideModel => {
     return { ...m, title, bullets: clipBullets, image_url: image };
 };
 
-const validateSlide = (m: SlideModel, r: SlideRules): boolean => {
+export const validateSlide = (m: SlideModel, r: SlideRules): boolean => {
     if (r.maxTitleChars && (m.title || '').length > r.maxTitleChars) return false;
     if (r.maxBullets && (m.bullets || []).length > r.maxBullets) return false;
     const maxLen = r.maxBulletLength ?? null;
@@ -588,7 +735,7 @@ const validateSlide = (m: SlideModel, r: SlideRules): boolean => {
     return true;
 };
 
-const chooseArchetypeFor = (titleKey: string, sectionTitle: string, imageUrl: string | null): SlideArchetype => {
+export const chooseArchetypeFor = (titleKey: string, sectionTitle: string, imageUrl: string | null): SlideArchetype => {
     const tk = titleKey.toLowerCase();
     const st = sectionTitle.toLowerCase();
     if (tk.includes('exercise') || st.includes('exerci')) return SlideArchetype.Exercise;
