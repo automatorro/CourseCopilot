@@ -37,15 +37,26 @@ const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     { title: t('course.helpModal.step2.title'), desc: t('course.helpModal.step2.desc'), icon: Sparkles },
     { title: t('course.helpModal.step3.title'), desc: t('course.helpModal.step3.desc'), icon: Wand },
   ];
+  const userSteps = [
+    t('course.helpModal.userSteps.step1'),
+    t('course.helpModal.userSteps.step2'),
+    t('course.helpModal.userSteps.step3'),
+    t('course.helpModal.userSteps.step4'),
+    t('course.helpModal.userSteps.step5'),
+    t('course.helpModal.userSteps.step6'),
+    t('course.helpModal.userSteps.step7'),
+    t('course.helpModal.userSteps.step8'),
+    t('course.helpModal.userSteps.step9'),
+  ];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s' }}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all">
-        <div className="p-6 text-center border-b dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all max-h-[85vh] overflow-y-auto">
+        <div className="p-4 sm:p-6 text-center border-b dark:border-gray-700">
           <h2 className="text-2xl font-bold">{t('course.helpModal.title')}</h2>
           <p className="text-gray-500 dark:text-gray-400 mt-1">{t('course.helpModal.intro')}</p>
         </div>
-        <div className="p-8 space-y-6">
+        <div className="p-6 sm:p-8 space-y-6">
           {helpItems.map((item, index) => (
             <div key={index} className="flex items-start gap-4">
               <div className="flex-shrink-0 bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-300 rounded-full h-10 w-10 flex items-center justify-center">
@@ -57,8 +68,19 @@ const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
             </div>
           ))}
+          <div className="mt-6">
+            <h3 className="text-lg font-bold mb-3">{t('course.helpModal.userSteps.title')}</h3>
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('course.helpModal.userSteps.intro')}</p>
+              <div className="space-y-2">
+                {userSteps.map((s, idx) => (
+                  <p key={idx} className="flex items-center gap-3"><span className="flex-shrink-0 bg-primary-600 text-white rounded-full h-6 w-6 flex items-center justify-center font-bold text-sm">{idx + 1}</span> <span>{s}</span></p>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="p-6 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end">
+        <div className="p-4 sm:p-6 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end">
           <button onClick={onClose} className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 flex items-center gap-2">
             {t('course.helpModal.button')} <ChevronRight size={16} />
           </button>
@@ -1191,6 +1213,13 @@ const CourseWorkspacePage: React.FC = () => {
       <aside className="hidden lg:block w-1/4 max-w-sm p-6 bg-white dark:bg-gray-800/50 border-r dark:border-gray-700 overflow-y-auto">
         <div className="flex items-center justify-between mb-2 gap-3">
           <h2 className="text-xl font-bold truncate">{course.title}</h2>
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700"
+            title={t('course.helpModal.open')}
+          >
+            {t('course.helpModal.open')}
+          </button>
         </div>
         {userCourses.length > 0 && (
           <div className="mb-4">
@@ -1652,10 +1681,20 @@ const CourseWorkspacePage: React.FC = () => {
 
               {/* Legacy Import Removed - Replaced by FileManager */}
 
-              {/* Knowledge Base / Reference Materials (Mobile) */}
-              <div className="mb-6">
-                <FileManager courseId={course.id} />
-              </div>
+      {/* Knowledge Base / Reference Materials (Mobile) */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold">Resurse</h3>
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700"
+            title={t('course.helpModal.open')}
+          >
+            {t('course.helpModal.open')}
+          </button>
+        </div>
+        <FileManager courseId={course.id} />
+      </div>
 
               <nav>
                 <ul>
