@@ -161,6 +161,7 @@ const BlueprintReview: React.FC<BlueprintReviewProps> = ({
                 <div className="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-3 justify-between sticky bottom-0 z-20 backdrop-blur-sm">
                     <div className="flex gap-3">
                         {isEnabled('blueprintRefineEnabled') && (
+                            // INTENȚIONAT: Controlăm vizibilitatea „Rafinează cu AI” prin flag
                             <button
                                 onClick={onRefine}
                                 className="btn-secondary flex items-center gap-2"

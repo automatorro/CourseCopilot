@@ -50,12 +50,15 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const authHeader = req.headers.get('Authorization');
+    const globalHeaders: Record<string, string> = {};
+    if (authHeader && typeof authHeader === 'string' && authHeader.trim().length > 0) {
+      globalHeaders['Authorization'] = authHeader;
+    }
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader! } },
+      global: { headers: globalHeaders },
     });
 
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const stepTitle = step ? (STEP_TITLES[step.title_key] || "Unknown Step") : "General";
     let prompt;
@@ -68,9 +71,15 @@ serve(async (req) => {
         .select('filename, extracted_text')
         .in('id', context_files);
 
-      if (!error && files) {
+      if (!error && Array.isArray(files)) {
+        const parts = files.map((f: { filename: string; extracted_text: string | null }) => {
+          const name = (f.filename || '').trim();
+          const text = (f.extracted_text || '').trim().replace(/\s+/g, ' ');
+          const snippet = text.length > 800 ? text.substring(0, 800) + '…' : text;
+          return `• ${name}: ${snippet}`;
+        });
+        fileContext = parts.join('\n');
       }
-
     }
 
 
@@ -202,7 +211,9 @@ For a React course:
     } else if (action === 'chat_onboarding') {
       isJsonMode = true;
       const conversationHistory = messages || chat_history || [];
-      const history = conversationHistory.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
+      const history = (conversationHistory as Array<{ role: string; content: string }>)
+        .map((m) => `${(m.role || 'user').toUpperCase()}: ${m.content || ''}`)
+        .join('\n');
 
       prompt = `
           **SYSTEM**: You are an expert Instructional Designer and Curriculum Architect.
@@ -303,6 +314,13 @@ For a React course:
       // --- REFINE SELECTION PROMPT ---
       const { selectedText, actionType } = refinePayload || {};
 
+      if (!selectedText || String(selectedText).trim().length === 0) {
+        return new Response(JSON.stringify({ error: 'Empty selection' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400
+        });
+      }
+
 
       prompt = `
           **ROLE:** You are a senior instructional design editor.
@@ -331,7 +349,9 @@ For a React course:
 
       // Build context from previous steps (critical for continuity)
       const previousContext = previous_steps
-        ? previous_steps.map((s: any) => `\n--- PREVIOUS STEP: ${s.step_type} ---\n${s.content.substring(0, 2000)}`).join('\n')
+        ? (previous_steps as Array<{ step_type: string; content: string }>)
+            .map((s) => `\n--- PREVIOUS STEP: ${s.step_type} ---\n${(s.content || '').substring(0, 2000)}`)
+            .join('\n')
         : "";
 
       // Extract blueprint duration for enforcement
@@ -512,10 +532,12 @@ For a React course:
       // --- GENERATION PROMPT ---
 
       // 1. Build Context from Previous Steps
-      const previousStepsContext = course.steps
-        ?.filter((s: any) => s.step_order < step.step_order && s.content)
-        .map((s: any) => `--- PREVIOUS STEP: ${STEP_TITLES[s.title_key]} ---\n${s.content.substring(0, 500)}...\n`) // Truncate for token limit
-        .join('\n');
+      const previousStepsContext = Array.isArray(course.steps)
+        ? (course.steps as Array<{ step_order: number; content?: string; title_key: string }>)
+            .filter((s) => typeof s.step_order === 'number' && s.step_order < step.step_order && !!s.content)
+            .map((s) => `--- PREVIOUS STEP: ${STEP_TITLES[s.title_key]} ---\n${(s.content || '').substring(0, 500)}...\n`)
+            .join('\n')
+        : undefined;
 
       // 2. Define Pedagogical Guidance based on Environment
       let pedagogicalGuidance = "";
@@ -642,25 +664,45 @@ For a React course:
         `;
     }
 
-    // Call Gemini API
-    const generationConfig = isJsonMode ? { responseMimeType: "application/json" } : undefined;
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig
-    });
-    const response = await result.response;
-    const text = response.text();
-
-    return new Response(JSON.stringify({ content: text }), {
+    const models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
+    let lastErr: unknown = undefined;
+    for (const m of models) {
+      try {
+        const model = genAI.getGenerativeModel({ model: m });
+        const generationConfig = isJsonMode ? { responseMimeType: "application/json" } : undefined;
+        const result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig
+        });
+        const response = await result.response;
+        const text = response.text();
+        return new Response(JSON.stringify({ content: text }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        });
+      } catch (e) {
+        lastErr = e;
+        const msg = e instanceof Error ? e.message : String(e);
+        const retryable = msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("PERMISSION_DENIED");
+        if (!retryable) {
+          throw e;
+        }
+      }
+    }
+    const finalMsg = lastErr instanceof Error ? lastErr.message : String(lastErr || "Unknown error");
+    const isRateLimit = finalMsg.includes("429") || finalMsg.toLowerCase().includes("quota");
+    return new Response(JSON.stringify({ error: finalMsg }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200
+      status: isRateLimit ? 429 : 500
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     console.error("Error in Edge Function:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const isRateLimit = message.includes("429") || message.toLowerCase().includes("quota");
+    return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500
+      status: isRateLimit ? 429 : 500
     });
   }
 });

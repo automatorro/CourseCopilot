@@ -56,19 +56,34 @@ const invokeContentFunction = async (
     const { data, error } = await supabase.functions.invoke('generate-course-content', { body });
 
     if (error) {
-      console.error('Error invoking Supabase Edge Function:', error);
-      return `Error from server: ${error.message}.`;
+      const errObj = error as unknown as { context?: Response; status?: number; message: string };
+      const ctx = errObj.context;
+      let status: number | undefined = errObj.status;
+      let serverMsg: string | undefined;
+      try {
+        if (ctx && typeof (ctx as any).status === 'number') status = (ctx as any).status;
+        if (ctx && typeof ctx.clone === 'function') {
+          const cloned = ctx.clone();
+          const ct = cloned.headers?.get?.('content-type') || '';
+          if (ct.includes('application/json')) {
+            const json = await cloned.json();
+            serverMsg = (json as any)?.error || (json as any)?.message || JSON.stringify(json);
+          } else {
+            serverMsg = await cloned.text();
+          }
+        }
+      } catch (e) { void e; }
+      const message = `Server error (${status || 'unknown'}): ${serverMsg || errObj.message}`;
+      throw new Error(message);
     }
 
     if (!data || typeof data.content !== 'string') {
-      console.error('Unexpected response format from Edge Function. Expected { content: string }, received:', data);
-      return 'Error: Received an invalid or empty response from the generation service.';
+      throw new Error('Serviciul de generare a returnat un răspuns invalid.');
     }
 
     return data.content;
   } catch (err: any) {
-    console.error(`Client-side error during '${action}':`, err);
-    return `An unexpected error occurred: ${err.message}.`;
+    throw err;
   }
 };
 
@@ -93,6 +108,22 @@ export const improveCourseContent = async (course: Course, step: CourseStep, ori
  */
 export const refineCourseContent = async (course: Course, step: CourseStep, fullContent: string, selectedText: string, actionType: string): Promise<string> => {
   return invokeContentFunction('refine', course, step, fullContent, { selectedText, actionType });
+};
+
+export const pingEdgeFunction = async (): Promise<string> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('generate-course-content', { body: { action: 'ping' } });
+    if (error) {
+      const status = (error as any)?.status;
+      const context = (error as any)?.context;
+      console.error('Ping error:', { message: error.message, status, context });
+      return `Ping failed (${status || 'unknown'}): ${context?.message || error.message}`;
+    }
+    return typeof data?.message === 'string' ? data.message : 'pong';
+  } catch (e: any) {
+    console.error('Ping client-side error:', e);
+    return `Ping failed: ${e.message}`;
+  }
 };
 
 /**

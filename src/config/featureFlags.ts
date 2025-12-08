@@ -5,6 +5,7 @@ export type FeatureFlagKey =
   | 'editorUiUnified'
   | 'validationStrictLocalization'
   | 'blueprintRefineEnabled'
+  | 'editorRefineButtonEnabled'
   | 'editorGenerateButtonEnabled'
   | 'newPptxExporter';
 
@@ -15,6 +16,9 @@ export const FEATURE_FLAGS: Record<FeatureFlagKey, boolean> = {
   editorUiUnified: true,
   validationStrictLocalization: false,
   blueprintRefineEnabled: false,
+  // INTENȚIONAT: Ascunde butoanele „Rafinează cu AI” din editorul de conținut,
+  // păstrând funcționalitatea din cod pentru utilizări viitoare/administrative.
+  editorRefineButtonEnabled: false,
   editorGenerateButtonEnabled: false,
   newPptxExporter: false,
 };
@@ -26,6 +30,7 @@ export const FEATURE_DOCS: Record<FeatureFlagKey, string> = {
   editorUiUnified: 'Uniformizează clasele și stilurile editorului cu modalele premium (culori, raioane, umbre).',
   validationStrictLocalization: 'Dacă este activ, livrabilele cu fragmente nelocalizate vor bloca finalizarea generării.',
   blueprintRefineEnabled: 'Controlează afișarea butonului „Rafinează cu AI” în Review Blueprint.',
+  editorRefineButtonEnabled: 'Controlează afișarea butonului „Rafinează cu AI” din editorul de conținut (desktop + mobil).',
   editorGenerateButtonEnabled: 'Controlează afișarea butonului „Generează Conținut” din editor.',
   newPptxExporter: 'Activează noul pipeline determinist pentru export PPTX cu arhetipuri.',
 };

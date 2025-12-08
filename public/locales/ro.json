@@ -235,8 +235,6 @@
   "course.helpModal.step1.desc": "Parcurge procesul de creare a cursului folosind pașii din stânga, de la structură la testul final.",
   "course.helpModal.step2.title": "2. Generează Conținut",
   "course.helpModal.step2.desc": "Pentru fiecare pas, apasă 'Generează Conținut' pentru ca AI-ul să creeze o primă versiune pentru tine.",
-  "course.helpModal.step3.title": "3. Rafinează cu AI (Sfat Pro!)",
-  "course.helpModal.step3.desc": "Pentru a îmbunătăți doar o parte din text, pur și simplu selecteaz-o cu mouse-ul, apoi folosește acțiunile din 'Rafinează cu AI'. Dacă nu selectezi text, acțiunea se aplică la tot conținutul.",
   "course.helpModal.open": "Cum funcționează",
   "course.helpModal.userSteps.title": "Pașii pentru tine",
   "course.helpModal.userSteps.intro": "Ce ai de făcut, pas cu pas:",

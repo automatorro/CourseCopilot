@@ -123,9 +123,26 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
 
         } catch (error) {
             console.error('Chat error:', error);
+            const errObj = error as unknown as { context?: Response; status?: number; message: string };
+            let status = errObj.status;
+            let serverMsg: string | undefined;
+            try {
+                const ctx = errObj.context;
+                if (ctx && typeof (ctx as any).status === 'number') status = (ctx as any).status;
+                if (ctx && typeof ctx.clone === 'function') {
+                    const cloned = ctx.clone();
+                    const ct = cloned.headers?.get?.('content-type') || '';
+                    if (ct.includes('application/json')) {
+                        const json = await cloned.json();
+                        serverMsg = (json as any)?.error || (json as any)?.message || JSON.stringify(json);
+                    } else {
+                        serverMsg = await cloned.text();
+                    }
+                }
+            } catch { /* ignore */ }
             const errorMsg: AIMessage = {
                 role: 'assistant',
-                content: 'I apologize, but I encountered an error processing your request. Please try again.',
+                content: `Îmi pare rău, a apărut o eroare (${status ?? 'necunoscut'}): ${serverMsg || errObj.message}.`,
                 timestamp: Date.now(),
                 action: 'error',
             };

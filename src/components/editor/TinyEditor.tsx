@@ -18,6 +18,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
   const editorRef = useRef<any>(null);
   const isLocalChangeRef = useRef<boolean>(false);
   const [editorHeight, setEditorHeight] = useState<number>(520);
+  
   useEffect(() => {
     const calc = () => {
       const top = containerRef.current?.getBoundingClientRect().top ?? 0;
@@ -27,9 +28,15 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
       setEditorHeight(available);
     };
     calc();
+    // Use a small delay to ensure layout is settled
+    const timer = setTimeout(calc, 100);
     window.addEventListener('resize', calc);
-    return () => window.removeEventListener('resize', calc);
+    return () => {
+      window.removeEventListener('resize', calc);
+      clearTimeout(timer);
+    };
   }, []);
+
   const initConfig = useMemo(() => ({
     menubar: false,
     plugins: [
@@ -44,8 +51,9 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     branding: false,
     statusbar: true,
     resize: false,
-    toolbar_sticky: false,
-    content_style: 'body{padding-bottom:240px;}',
+    // Disable JS sticky to rely on CSS sticky for reliable scrolling inside custom container
+    toolbar_sticky: false, 
+    content_style: 'html{scroll-padding-top:calc(var(--editor-header-h,60px) + var(--editor-tabs-h,48px) + 8px);} body{padding-bottom:240px;}',
     autoresize_bottom_margin: 240,
     paste_data_images: true,
     images_upload_handler: async (blobInfo: any) => {

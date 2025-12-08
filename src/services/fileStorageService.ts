@@ -1,6 +1,10 @@
 import { supabase } from './supabaseClient';
 import { CourseFile } from '../types';
 
+// Cache simplu în memorie pentru fișierele cursului, cu TTL pentru consistență
+const filesCache: Record<string, { ts: number; files: CourseFile[] }> = {};
+const FILES_CACHE_TTL_MS = 60_000;
+
 /**
  * Extract text from uploaded file based on file type
  */
@@ -116,6 +120,9 @@ export async function uploadCourseFile(
             return { success: false, error: 'Failed to save file metadata.' };
         }
 
+        // Invalidează cache-ul pentru acest curs
+        delete filesCache[courseId];
+
         return { success: true, fileId: fileRecord.id };
     } catch (error: any) {
         console.error('Upload error:', error);
@@ -127,6 +134,12 @@ export async function uploadCourseFile(
  * Get all files for a course
  */
 export async function getCourseFiles(courseId: string): Promise<CourseFile[]> {
+    const now = Date.now();
+    const cached = filesCache[courseId];
+    if (cached && (now - cached.ts) < FILES_CACHE_TTL_MS) {
+        return cached.files;
+    }
+
     const { data, error } = await supabase
         .from('course_files')
         .select('*')
@@ -138,7 +151,9 @@ export async function getCourseFiles(courseId: string): Promise<CourseFile[]> {
         return [];
     }
 
-    return data || [];
+    const files = data || [];
+    filesCache[courseId] = { ts: now, files };
+    return files;
 }
 
 /**
@@ -149,7 +164,7 @@ export async function deleteCourseFile(fileId: string): Promise<{ success: boole
         // Get file metadata first
         const { data: file, error: fetchError } = await supabase
             .from('course_files')
-            .select('storage_path')
+            .select('storage_path, course_id')
             .eq('id', fileId)
             .single();
 
@@ -175,6 +190,11 @@ export async function deleteCourseFile(fileId: string): Promise<{ success: boole
         if (dbError) {
             console.error('Database delete error:', dbError);
             return { success: false, error: 'Failed to delete file.' };
+        }
+
+        // Invalidează cache-ul pentru cursul afectat
+        if (file?.course_id) {
+            delete filesCache[file.course_id as string];
         }
 
         return { success: true };
