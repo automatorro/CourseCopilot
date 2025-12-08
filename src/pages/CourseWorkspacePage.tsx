@@ -35,7 +35,6 @@ const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const helpItems = [
     { title: t('course.helpModal.step1.title'), desc: t('course.helpModal.step1.desc'), icon: BookOpen },
     { title: t('course.helpModal.step2.title'), desc: t('course.helpModal.step2.desc'), icon: Sparkles },
-    { title: t('course.helpModal.step3.title'), desc: t('course.helpModal.step3.desc'), icon: Wand },
   ];
   const userSteps = [
     t('course.helpModal.userSteps.step1'),
@@ -49,8 +48,14 @@ const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     t('course.helpModal.userSteps.step9'),
   ];
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s' }}>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s', zIndex: 10000 }} role="dialog" aria-modal="true">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all max-h-[85vh] overflow-y-auto">
         <div className="p-4 sm:p-6 text-center border-b dark:border-gray-700">
           <h2 className="text-2xl font-bold">{t('course.helpModal.title')}</h2>
@@ -116,6 +121,8 @@ const CourseWorkspacePage: React.FC = () => {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [proposedContent, setProposedContent] = useState<string | null>(null);
   const [originalForProposal, setOriginalForProposal] = useState<string | null>(null);
+  
+  const [localRefinements, setLocalRefinements] = useState<Record<string, boolean>>({});
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showImageStudio, setShowImageStudio] = useState(false);
@@ -140,6 +147,66 @@ const CourseWorkspacePage: React.FC = () => {
   const [localImageFile, setLocalImageFile] = useState<File | null>(null);
   const [localImageError, setLocalImageError] = useState<string | null>(null);
   const [showGenerationModal, setShowGenerationModal] = useState(false);
+  const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
+
+  const resolveTokensForPreview = useCallback((md: string) => {
+    return md.replace(/!\[([^\]]*)\]\(@img\{([^}]+)\}\)/g, (_m, alt, id) => {
+      const entry = imageMap[id];
+      const url = entry?.publicUrl || entry?.previewUrl || '';
+      const safeAlt = (alt || entry?.alt || 'Image').trim();
+      if (!url) return `![${safeAlt}](data:image/gif;base64,R0lGODlhAQABAAAAACw=)`;
+      return `![${safeAlt}](${url})`;
+    });
+  }, [imageMap]);
+
+  const looksLikeHtml = useCallback((s: string) => /^\s*<(p|div|h[1-6]|ul|ol|li|blockquote|pre|table|section|article|span|b|i|strong|em|u|a|img)/i.test(s), []);
+
+  useEffect(() => {
+    // Force specific CSS variables for sticky positioning
+    document.documentElement.style.setProperty('--editor-tabs-h', '48px');
+    document.documentElement.style.setProperty('--editor-header-h', '0px'); // Header is no longer sticky
+    
+    const updateOffsets = () => {
+       // Kept for resize listener but forcing values for stability
+       document.documentElement.style.setProperty('--editor-tabs-h', '48px');
+    };
+    
+    window.addEventListener('resize', updateOffsets);
+    return () => window.removeEventListener('resize', updateOffsets);
+  }, []);
+
+  useEffect(() => {
+    const steps = course?.steps || [];
+    const indices = [activeStepIndex - 1, activeStepIndex + 1].filter(i => i >= 0 && i < steps.length);
+    indices.forEach((i) => {
+      const s = steps[i];
+      const key = s.id || `idx-${i}`;
+      if (previewCache[key]) return;
+      const content = s.content || '';
+      const html = looksLikeHtml(content) ? content : (marked.parse(resolveTokensForPreview(content)) as string);
+      setPreviewCache(prev => ({ ...prev, [key]: html }));
+    });
+  }, [activeStepIndex, course?.steps, resolveTokensForPreview, looksLikeHtml]);
+
+  // Debounce scroll updates via requestAnimationFrame pentru performanță
+  useEffect(() => {
+    const container = document.querySelector('.course-workspace-container') as HTMLElement | null;
+    if (!container) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        const y = container.scrollTop || 0;
+        document.documentElement.style.setProperty('--scroll-y', `${Math.floor(y)}`);
+        raf = 0;
+      });
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   useEffect(() => {
     void showLinkPanel; void showImagePanel; void showTablePanel;
@@ -201,17 +268,7 @@ const CourseWorkspacePage: React.FC = () => {
   // Helper functions for image token system
   const genImageId = useCallback(() => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, []);
 
-  const resolveTokensForPreview = useCallback((md: string) => {
-    return md.replace(/!\[([^\]]*)\]\(@img\{([^}]+)\}\)/g, (_m, alt, id) => {
-      const entry = imageMap[id];
-      const url = entry?.publicUrl || entry?.previewUrl || '';
-      const safeAlt = (alt || entry?.alt || 'Image').trim();
-      if (!url) return `![${safeAlt}](data:image/gif;base64,R0lGODlhAQABAAAAACw=)`;
-      return `![${safeAlt}](${url})`;
-    });
-  }, [imageMap]);
-
-  const looksLikeHtml = useCallback((s: string) => /^\s*<(p|div|h[1-6]|ul|ol|li|blockquote|pre|table|section|article|span|b|i|strong|em|u|a|img)/i.test(s), []);
+  
 
   // Process @img tokens and upload images to storage, replacing tokens with public URLs
   const processImageTokensForSave = useCallback(async (md: string) => {
@@ -479,13 +536,23 @@ const CourseWorkspacePage: React.FC = () => {
         throw new Error('Selectează text sau adaugă conținut pentru rafinare.');
       }
 
+      if (!selectedText || !selectedText.trim()) {
+        throw new Error('Selectează un fragment de text pentru rafinare.');
+      }
+
       const refinedText = await refineCourseContent(course, currentStep, payloadMd, selectedText, actionType);
       if (!refinedText || refinedText.trim().length === 0) {
         throw new Error('Serviciul de AI nu a returnat conținut. Încearcă din nou.');
       }
       const refinedHtml = marked.parse(refinedText || '', { breaks: true }) as string;
       setOriginalForProposal(editedContent);
-      setProposedContent(refinedHtml);
+      let previewHtml = refinedHtml;
+      if (selectionRef.current.end > selectionRef.current.start) {
+        const { start, end } = selectionRef.current;
+        previewHtml = (editedContent.substring(0, start) + refinedHtml + editedContent.substring(end));
+      }
+      setProposedContent(previewHtml);
+      console.log('[Refine] Proposed content prepared', { length: previewHtml.length, hasOriginal: !!editedContent });
       showToast('Propunere generată. Verifică și acceptă modificarea.', 'success');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Rafinarea a eșuat.';
@@ -502,8 +569,18 @@ const CourseWorkspacePage: React.FC = () => {
       const { start, end } = selectionRef.current;
       const newContent = editedContent.substring(0, start) + proposedContent + editedContent.substring(end);
       setEditedContent(newContent);
+      if (course && course.steps) {
+        const currentStep = course.steps[activeStepIndex];
+        const key = currentStep.id || `idx-${activeStepIndex}`;
+        setLocalRefinements(prev => ({ ...prev, [key]: true }));
+      }
     } else {
       setEditedContent(proposedContent);
+      if (course && course.steps) {
+        const currentStep = course.steps[activeStepIndex];
+        const key = currentStep.id || `idx-${activeStepIndex}`;
+        setLocalRefinements(prev => ({ ...prev, [key]: true }));
+      }
     }
 
     setProposedContent(null);
@@ -650,7 +727,7 @@ const CourseWorkspacePage: React.FC = () => {
         setShowSlidesPreview(true);
         return;
       }
-    } catch {}
+    } catch (e) { void e; }
     setShowExportModal(true);
   };
 
@@ -1188,15 +1265,13 @@ const CourseWorkspacePage: React.FC = () => {
   const canGenerate = canEdit && !currentStep.is_completed;
   const canRefine = canEdit && !!editedContent && !!selectedText.trim();
 
-
-
-
+  
   return (
     <div className="course-workspace-container flex flex-col lg:flex-row overflow-x-hidden">
       {isHelpModalOpen && <HelpModal onClose={handleCloseHelpModal} />}
-      {proposedContent !== null && originalForProposal !== null && (
+      {proposedContent !== null && (
         <ReviewChangesModal
-          originalContent={originalForProposal}
+          originalContent={originalForProposal ?? editedContent}
           proposedContent={proposedContent}
           onAccept={handleAcceptChanges}
           onReject={handleRejectChanges}
@@ -1210,7 +1285,7 @@ const CourseWorkspacePage: React.FC = () => {
       )}
 
       {/* Sidebar */}
-      <aside className="hidden lg:block w-1/4 max-w-sm p-6 bg-white dark:bg-gray-800/50 border-r dark:border-gray-700 overflow-y-auto">
+      <aside className="hidden lg:block w-1/4 max-w-sm p-6 bg-white dark:bg-gray-800/50 border-r dark:border-gray-700 overflow-y-auto sticky top-[var(--sidebar-offset,60px)] h-[calc(100vh-var(--sidebar-offset,60px))]">
         <div className="flex items-center justify-between mb-2 gap-3">
           <h2 className="text-xl font-bold truncate">{course.title}</h2>
           <button
@@ -1249,13 +1324,13 @@ const CourseWorkspacePage: React.FC = () => {
         <nav>
           <ul>
             {(course.steps ?? []).map((step: CourseStep, index: number) => (
-              <li key={step.id || `${index}-${step.title_key}`}>
+              <li key={step.id || `${index}-${step.title_key}` }>
                 <button
                   onClick={() => setActiveStepIndex(index)}
                   disabled={index > 0 && !((course.steps ?? [])[index - 1]?.is_completed)}
                   className={`w-full text-left p-3 my-1 rounded-lg flex items-center gap-3 transition-colors ${activeStepIndex === index
-                    ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed'
+                    ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                    : 'border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/20 disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
                 >
                   {step.is_completed ? <CheckCircle className="text-green-500" size={20} /> : <Circle className="text-gray-400" size={20} />}
@@ -1269,7 +1344,8 @@ const CourseWorkspacePage: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col p-6 lg:p-10 pb-24 sm:pb-10">
-        <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-visible">
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+          <div id="main-scroll-container" className="flex-1 overflow-y-auto relative scroll-container">
           <div className="editor-header-sticky p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
             <button
               onClick={() => window.location.href = '/#/dashboard'}
@@ -1282,17 +1358,44 @@ const CourseWorkspacePage: React.FC = () => {
             <button className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setIsSidebarOpen(true)} aria-label="Deschide pașii">
               <ListTodo size={18} />
             </button>
-            <h1 className="text-lg sm:text-2xl font-bold">{t(currentStep.title_key)}</h1>
+            <div className="flex-1 flex items-center justify-between gap-3">
+              <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2">
+                {t(currentStep.title_key)}
+                {(localRefinements[(currentStep.id || `idx-${activeStepIndex}`)]) && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">Editare locală</span>
+                )}
+              </h1>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveStepIndex(i => Math.max(0, i - 1))}
+                  disabled={activeStepIndex === 0}
+                  className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                  title="Înapoi"
+                  aria-label="Pas anterior"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={() => setActiveStepIndex(i => Math.min((course?.steps?.length || 1) - 1, i + 1))}
+                  disabled={activeStepIndex >= ((course?.steps?.length || 1) - 1)}
+                  className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                  title="Înainte"
+                  aria-label="Pas următor"
+                >
+                  →
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="editor-tabs-sticky border-b dark:border-gray-700 px-4 bg-white dark:bg-gray-800">
-            <nav className="-mb-px flex space-x-4" aria-label="Tabs">
-              <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
-              <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
+          <div className="editor-tabs-sticky px-4 bg-white dark:bg-gray-800 h-[48px] flex items-center border-b border-gray-200 dark:border-gray-700 mb-0 !mb-0 pb-0 !pb-0">
+            <nav className="flex space-x-4 h-full" aria-label="Tabs">
+              <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
+              <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
             </nav>
           </div>
 
-          <div className="flex-1 flex flex-col min-h-0">
+          <div className="editor-wrapper-container flex-1 flex flex-col min-h-0 mt-0 !mt-0 pt-0 !pt-0">
             {isBusy && (
               <div className="absolute inset-1 bg-gray-100/50 dark:bg-gray-900/50 flex items-center justify-center z-20 rounded-2xl shadow-lg">
                 <div className="text-center p-6 bg-white/90 dark:bg-gray-800/90 rounded-xl shadow-lg backdrop-blur-sm">
@@ -1347,6 +1450,7 @@ const CourseWorkspacePage: React.FC = () => {
             )}
           </div>
 
+          </div>
           <div id="workspace-actions" className="editor-actions-sticky hidden sm:flex p-6 border-t dark:border-gray-700 justify-between items-center">
             <div className="flex gap-2 flex-wrap">
               {isEnabled('editorGenerateButtonEnabled') && (
@@ -1360,30 +1464,33 @@ const CourseWorkspacePage: React.FC = () => {
                 </button>
               )}
 
-              <div ref={aiActionsDesktopRef} className="relative">
-                <button
-                  onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
-                  disabled={!canRefine}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!selectedText.trim() ? 'Select text first to refine it' : t('course.refine.tooltip')}
-                >
-                  <Wand size={16} />
-                  {t('course.refine.button')}
-                </button>
-                {isAiActionsOpen && (
-                  <div className="absolute bottom-full mb-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-30">
-                    <button onClick={() => handleAiAction('simplify')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                      <Pilcrow size={16} /> {t('course.refine.simplify')}
-                    </button>
-                    <button onClick={() => handleAiAction('expand')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                      <Combine size={16} /> {t('course.refine.expand')}
-                    </button>
-                    <button onClick={() => handleAiAction('example')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                      <Lightbulb size={16} /> {t('course.refine.example')}
-                    </button>
-                  </div>
-                )}
-              </div>
+              {isEnabled('editorRefineButtonEnabled') && (
+                // INTENȚIONAT: Ascundem „Rafinează cu AI” în editor (desktop)
+                <div ref={aiActionsDesktopRef} className="relative">
+                  <button
+                    onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
+                    disabled={!canRefine}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!selectedText.trim() ? 'Select text first to refine it' : t('course.refine.tooltip')}
+                  >
+                    <Wand size={16} />
+                    {t('course.refine.button')}
+                  </button>
+                  {isAiActionsOpen && (
+                    <div className="absolute bottom-full mb-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-30">
+                      <button onClick={() => handleAiAction('simplify')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                        <Pilcrow size={16} /> {t('course.refine.simplify')}
+                      </button>
+                      <button onClick={() => handleAiAction('expand')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                        <Combine size={16} /> {t('course.refine.expand')}
+                      </button>
+                      <button onClick={() => handleAiAction('example')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                        <Lightbulb size={16} /> {t('course.refine.example')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {isCourseComplete && (
                 <button
@@ -1581,30 +1688,33 @@ const CourseWorkspacePage: React.FC = () => {
                 {t('course.generate')}
               </button>
             )}
-            <div ref={aiActionsMobileRef} className="relative flex-1">
-              <button
-                onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
-                disabled={!canRefine}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!selectedText.trim() ? 'Select text first to refine it' : t('course.refine.tooltip')}
-              >
-                <Wand size={16} />
-                {t('course.refine.button')}
-              </button>
-              {isAiActionsOpen && (
-                <div className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
-                  <button onClick={() => handleAiAction('simplify')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                    <Pilcrow size={16} /> {t('course.refine.simplify')}
-                  </button>
-                  <button onClick={() => handleAiAction('expand')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                    <Combine size={16} /> {t('course.refine.expand')}
-                  </button>
-                  <button onClick={() => handleAiAction('example')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
-                    <Lightbulb size={16} /> {t('course.refine.example')}
-                  </button>
-                </div>
-              )}
-            </div>
+            {isEnabled('editorRefineButtonEnabled') && (
+              // INTENȚIONAT: Ascundem „Rafinează cu AI” în editor (mobil)
+              <div ref={aiActionsMobileRef} className="relative flex-1">
+                <button
+                  onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
+                  disabled={!canRefine}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!selectedText.trim() ? 'Select text first to refine it' : t('course.refine.tooltip')}
+                >
+                  <Wand size={16} />
+                  {t('course.refine.button')}
+                </button>
+                {isAiActionsOpen && (
+                  <div className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
+                    <button onClick={() => handleAiAction('simplify')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                      <Pilcrow size={16} /> {t('course.refine.simplify')}
+                    </button>
+                    <button onClick={() => handleAiAction('expand')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                      <Combine size={16} /> {t('course.refine.expand')}
+                    </button>
+                    <button onClick={() => handleAiAction('example')} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                      <Lightbulb size={16} /> {t('course.refine.example')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex-shrink-0">
             {isCourseComplete ? (
@@ -1641,7 +1751,7 @@ const CourseWorkspacePage: React.FC = () => {
         <div className="pb-[env(safe-area-inset-bottom)]" />
       </div>
       {isSidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-[200] lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setIsSidebarOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-5/6 max-w-xs bg-white dark:bg-gray-800 shadow-xl flex flex-col">
             <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
@@ -1660,7 +1770,7 @@ const CourseWorkspacePage: React.FC = () => {
                 <X size={18} />
               </button>
             </div>
-            <div className="p-4 overflow-y-auto flex-1">
+            <div className="p-5 overflow-y-auto flex-1" style={{ willChange: 'scroll-position' }}>
               {userCourses.length > 0 && (
                 <div className="mb-4">
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Schimbă cursul</label>
@@ -1703,9 +1813,9 @@ const CourseWorkspacePage: React.FC = () => {
                       <button
                         onClick={() => { setActiveStepIndex(index); setIsSidebarOpen(false); }}
                         disabled={index > 0 && !((course?.steps ?? [])[index - 1]?.is_completed)}
-                        className={`w-full text-left p-3 my-1 rounded-lg flex items-center gap-3 transition-colors ${activeStepIndex === index
-                          ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300'
-                          : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed'
+                        className={`w-full text-left p-4 my-1 rounded-lg flex items-center gap-3 transition-colors ${activeStepIndex === index
+                          ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                          : 'border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/20 disabled:opacity-50 disabled:cursor-not-allowed'
                           }`}
                       >
                         {step.is_completed ? <CheckCircle className="text-green-500" size={20} /> : <Circle className="text-gray-400" size={20} />}
