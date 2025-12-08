@@ -10,7 +10,8 @@ export type TinyEditorProps = {
   onSelectionChange?: (text: string) => void;
 };
 
-const TINY_API_KEY: string = (import.meta as any).env?.VITE_TINYMCE_API_KEY || '';
+const TINY_API_KEY: string = 'm77i9ej70f6eqmu2dr6dkyr93pd0ygz3l88ch2goovg45ks8';
+console.log('TinyMCE API Key loaded (hardcoded):', TINY_API_KEY);
 
 const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal, onSelectionChange }) => {
   const { user } = useAuth();
@@ -18,7 +19,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
   const editorRef = useRef<any>(null);
   const isLocalChangeRef = useRef<boolean>(false);
   const [editorHeight, setEditorHeight] = useState<number>(520);
-  
+
   useEffect(() => {
     const calc = () => {
       const top = containerRef.current?.getBoundingClientRect().top ?? 0;
@@ -52,7 +53,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     statusbar: true,
     resize: false,
     // Disable JS sticky to rely on CSS sticky for reliable scrolling inside custom container
-    toolbar_sticky: false, 
+    toolbar_sticky: false,
     content_style: 'html{scroll-padding-top:calc(var(--editor-header-h,60px) + var(--editor-tabs-h,48px) + 8px);} body{padding-bottom:240px;}',
     autoresize_bottom_margin: 240,
     paste_data_images: true,
@@ -94,7 +95,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
       try {
         editor.selection?.setCursorLocation();
         editor.selection?.collapse(false);
-      } catch {}
+      } catch { }
     }
     isLocalChangeRef.current = false;
   }, [value]);
@@ -107,7 +108,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     try {
       editorRef.current.selection?.setCursorLocation();
       editorRef.current.selection?.collapse(false);
-    } catch {}
+    } catch { }
     isLocalChangeRef.current = false;
   }, [refreshSignal]);
   const scriptSrc = `https://cdn.tiny.cloud/1/${TINY_API_KEY || 'no-api-key'}/tinymce/6/tinymce.min.js`;
@@ -117,7 +118,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
         tinymceScriptSrc={scriptSrc}
         apiKey={TINY_API_KEY || 'no-api-key'}
         value={value}
-        onInit={(_evt, editor) => { editorRef.current = editor; editor.setContent(value || ''); try { editor.selection?.setCursorLocation(); editor.selection?.collapse(false); } catch {} }}
+        onInit={(_evt, editor) => { editorRef.current = editor; editor.setContent(value || ''); try { editor.selection?.setCursorLocation(); editor.selection?.collapse(false); } catch { } }}
         onEditorChange={(content) => {
           isLocalChangeRef.current = true;
           onChange(content || '');

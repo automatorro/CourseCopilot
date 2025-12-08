@@ -84,7 +84,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
                         </div>
                         <div className="ml-4 text-left">
                             <h4 className="font-bold text-gray-900 dark:text-white">PDF Document (.pdf)</h4>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('export.pdf.subtitle') || 'Download course manual as PDF (coming soon)'}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('export.pdf.subtitle') || 'Download course manual as PDF'}</p>
                         </div>
                     </button>
 

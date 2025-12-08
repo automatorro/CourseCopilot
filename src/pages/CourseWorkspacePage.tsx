@@ -12,7 +12,7 @@ import { supabase } from '../services/supabaseClient';
 import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
-import { exportCourseAsZip, exportCourseAsPptx, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
+import { exportCourseAsZip, exportCourseAsPptx, exportCourseAsPdf, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
 import ExportModal from '../components/ExportModal';
 import SlidesPreviewModal from '../components/SlidesPreviewModal';
 import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations } from '../lib/outputValidators';
@@ -121,7 +121,7 @@ const CourseWorkspacePage: React.FC = () => {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [proposedContent, setProposedContent] = useState<string | null>(null);
   const [originalForProposal, setOriginalForProposal] = useState<string | null>(null);
-  
+
   const [localRefinements, setLocalRefinements] = useState<Record<string, boolean>>({});
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -165,12 +165,12 @@ const CourseWorkspacePage: React.FC = () => {
     // Force specific CSS variables for sticky positioning
     document.documentElement.style.setProperty('--editor-tabs-h', '48px');
     document.documentElement.style.setProperty('--editor-header-h', '0px'); // Header is no longer sticky
-    
+
     const updateOffsets = () => {
-       // Kept for resize listener but forcing values for stability
-       document.documentElement.style.setProperty('--editor-tabs-h', '48px');
+      // Kept for resize listener but forcing values for stability
+      document.documentElement.style.setProperty('--editor-tabs-h', '48px');
     };
-    
+
     window.addEventListener('resize', updateOffsets);
     return () => window.removeEventListener('resize', updateOffsets);
   }, []);
@@ -268,7 +268,7 @@ const CourseWorkspacePage: React.FC = () => {
   // Helper functions for image token system
   const genImageId = useCallback(() => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, []);
 
-  
+
 
   // Process @img tokens and upload images to storage, replacing tokens with public URLs
   const processImageTokensForSave = useCallback(async (md: string) => {
@@ -557,7 +557,7 @@ const CourseWorkspacePage: React.FC = () => {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Rafinarea a eșuat.';
       showToast(msg, 'error');
-      } finally {
+    } finally {
       setIsProposingChanges(false);
     }
   };
@@ -609,7 +609,7 @@ const CourseWorkspacePage: React.FC = () => {
       try {
         let out = md;
         out = out.replace(/https?:\/\/unsplash\.com\/photos\/[\S)]+/gi, (m) => {
-          const last = (m.split('/') .pop() || '').split('?')[0];
+          const last = (m.split('/').pop() || '').split('?')[0];
           const id = last.includes('-') ? (last.split('-').pop() || last) : last;
           return `https://source.unsplash.com/${id}/1600x900`;
         });
@@ -745,10 +745,10 @@ const CourseWorkspacePage: React.FC = () => {
       }
       if (format === 'pptx') {
         await exportCourseAsPptx(course);
+      } else if (format === 'pdf') {
+        await exportCourseAsPdf(course);
       } else if (format === 'zip') {
         await exportCourseAsZip(course, t);
-      } else {
-        showToast('Export PDF nu este disponibil încă.', 'info');
       }
       setShowExportModal(false);
     } catch (error) {
@@ -1265,7 +1265,7 @@ const CourseWorkspacePage: React.FC = () => {
   const canGenerate = canEdit && !currentStep.is_completed;
   const canRefine = canEdit && !!editedContent && !!selectedText.trim();
 
-  
+
   return (
     <div className="course-workspace-container flex flex-col lg:flex-row overflow-x-hidden">
       {isHelpModalOpen && <HelpModal onClose={handleCloseHelpModal} />}
@@ -1324,7 +1324,7 @@ const CourseWorkspacePage: React.FC = () => {
         <nav>
           <ul>
             {(course.steps ?? []).map((step: CourseStep, index: number) => (
-              <li key={step.id || `${index}-${step.title_key}` }>
+              <li key={step.id || `${index}-${step.title_key}`}>
                 <button
                   onClick={() => setActiveStepIndex(index)}
                   disabled={index > 0 && !((course.steps ?? [])[index - 1]?.is_completed)}
@@ -1346,109 +1346,109 @@ const CourseWorkspacePage: React.FC = () => {
       <main className="flex-1 flex flex-col p-6 lg:p-10 pb-24 sm:pb-10">
         <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
           <div id="main-scroll-container" className="flex-1 overflow-y-auto relative scroll-container">
-          <div className="editor-header-sticky p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
-            <button
-              onClick={() => window.location.href = '/#/dashboard'}
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mr-2"
-              title="Înapoi la cursurile mele"
-              aria-label="Înapoi la dashboard"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <button className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setIsSidebarOpen(true)} aria-label="Deschide pașii">
-              <ListTodo size={18} />
-            </button>
-            <div className="flex-1 flex items-center justify-between gap-3">
-              <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2">
-                {t(currentStep.title_key)}
-                {(localRefinements[(currentStep.id || `idx-${activeStepIndex}`)]) && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">Editare locală</span>
-                )}
-              </h1>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setActiveStepIndex(i => Math.max(0, i - 1))}
-                  disabled={activeStepIndex === 0}
-                  className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-                  title="Înapoi"
-                  aria-label="Pas anterior"
-                >
-                  ←
-                </button>
-                <button
-                  onClick={() => setActiveStepIndex(i => Math.min((course?.steps?.length || 1) - 1, i + 1))}
-                  disabled={activeStepIndex >= ((course?.steps?.length || 1) - 1)}
-                  className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-                  title="Înainte"
-                  aria-label="Pas următor"
-                >
-                  →
-                </button>
+            <div className="editor-header-sticky p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
+              <button
+                onClick={() => window.location.href = '/#/dashboard'}
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mr-2"
+                title="Înapoi la cursurile mele"
+                aria-label="Înapoi la dashboard"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <button className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setIsSidebarOpen(true)} aria-label="Deschide pașii">
+                <ListTodo size={18} />
+              </button>
+              <div className="flex-1 flex items-center justify-between gap-3">
+                <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2">
+                  {t(currentStep.title_key)}
+                  {(localRefinements[(currentStep.id || `idx-${activeStepIndex}`)]) && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">Editare locală</span>
+                  )}
+                </h1>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveStepIndex(i => Math.max(0, i - 1))}
+                    disabled={activeStepIndex === 0}
+                    className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                    title="Înapoi"
+                    aria-label="Pas anterior"
+                  >
+                    ←
+                  </button>
+                  <button
+                    onClick={() => setActiveStepIndex(i => Math.min((course?.steps?.length || 1) - 1, i + 1))}
+                    disabled={activeStepIndex >= ((course?.steps?.length || 1) - 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                    title="Înainte"
+                    aria-label="Pas următor"
+                  >
+                    →
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="editor-tabs-sticky px-4 bg-white dark:bg-gray-800 h-[48px] flex items-center border-b border-gray-200 dark:border-gray-700 mb-0 !mb-0 pb-0 !pb-0">
-            <nav className="flex space-x-4 h-full" aria-label="Tabs">
-              <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
-              <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
-            </nav>
-          </div>
+            <div className="editor-tabs-sticky px-4 bg-white dark:bg-gray-800 h-[48px] flex items-center border-b border-gray-200 dark:border-gray-700 mb-0 !mb-0 pb-0 !pb-0">
+              <nav className="flex space-x-4 h-full" aria-label="Tabs">
+                <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
+                <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
+              </nav>
+            </div>
 
-          <div className="editor-wrapper-container flex-1 flex flex-col min-h-0 mt-0 !mt-0 pt-0 !pt-0">
-            {isBusy && (
-              <div className="absolute inset-1 bg-gray-100/50 dark:bg-gray-900/50 flex items-center justify-center z-20 rounded-2xl shadow-lg">
-                <div className="text-center p-6 bg-white/90 dark:bg-gray-800/90 rounded-xl shadow-lg backdrop-blur-sm">
-                  <Loader2 className="animate-spin text-primary-500 mx-auto" size={40} />
-                  <p className="mt-3 text-lg font-semibold">{isGenerating ? t('course.generating') : t('course.refine.button')}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('course.generating.waitMessage')}</p>
-                </div>
-              </div>
-            )}
-            {activeTab === 'editor' ? (
-              <div className="flex-1 flex flex-col">
-                <div className="flex-1 relative min-h-0 pb-40 sm:pb-28">
-                  <TinyEditor
-                    key={`${currentStep.id}-${activeTab}`}
-                    value={editedContent}
-                    refreshSignal={editorRefreshTick}
-                    onChange={setEditedContent}
-                    onSelectionChange={(text) => {
-                      setSelectedText(text);
-                      const html = editedContent || '';
-                      const trimmed = (text || '').trim();
-                      if (trimmed.length === 0) {
-                        selectionRef.current = { start: 0, end: 0 };
-                        return;
-                      }
-                      const idx = html.indexOf(trimmed);
-                      if (idx >= 0) {
-                        selectionRef.current = { start: idx, end: idx + trimmed.length };
-                      } else {
-                        selectionRef.current = { start: 0, end: 0 };
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 min-h-0 pb-40 sm:pb-28">
-                {currentStep.title_key === 'course.steps.manual' || currentStep.title_key === 'course.steps.cheat_sheets' ? (
-                  (() => {
-                    const isHtml = looksLikeHtml(editedContent);
-                    const html = isHtml ? (editedContent || '') : marked.parse(resolveTokensForPreview(editedContent || ''));
-                    return <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
-                  })()
-                ) : looksLikeHtml(editedContent) ? (
-                  <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: editedContent }} />
-                ) : (
-                  <div className="p-4 sm:p-5">
-                    <MarkdownPreview content={resolveTokensForPreview(editedContent)} />
+            <div className="editor-wrapper-container flex-1 flex flex-col min-h-0 mt-0 !mt-0 pt-0 !pt-0">
+              {isBusy && (
+                <div className="absolute inset-1 bg-gray-100/50 dark:bg-gray-900/50 flex items-center justify-center z-20 rounded-2xl shadow-lg">
+                  <div className="text-center p-6 bg-white/90 dark:bg-gray-800/90 rounded-xl shadow-lg backdrop-blur-sm">
+                    <Loader2 className="animate-spin text-primary-500 mx-auto" size={40} />
+                    <p className="mt-3 text-lg font-semibold">{isGenerating ? t('course.generating') : t('course.refine.button')}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{t('course.generating.waitMessage')}</p>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+              {activeTab === 'editor' ? (
+                <div className="flex-1 flex flex-col">
+                  <div className="flex-1 relative min-h-0 pb-40 sm:pb-28">
+                    <TinyEditor
+                      key={`${currentStep.id}-${activeTab}`}
+                      value={editedContent}
+                      refreshSignal={editorRefreshTick}
+                      onChange={setEditedContent}
+                      onSelectionChange={(text) => {
+                        setSelectedText(text);
+                        const html = editedContent || '';
+                        const trimmed = (text || '').trim();
+                        if (trimmed.length === 0) {
+                          selectionRef.current = { start: 0, end: 0 };
+                          return;
+                        }
+                        const idx = html.indexOf(trimmed);
+                        if (idx >= 0) {
+                          selectionRef.current = { start: idx, end: idx + trimmed.length };
+                        } else {
+                          selectionRef.current = { start: 0, end: 0 };
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 pb-40 sm:pb-28">
+                  {currentStep.title_key === 'course.steps.manual' || currentStep.title_key === 'course.steps.cheat_sheets' ? (
+                    (() => {
+                      const isHtml = looksLikeHtml(editedContent);
+                      const html = isHtml ? (editedContent || '') : marked.parse(resolveTokensForPreview(editedContent || ''));
+                      return <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
+                    })()
+                  ) : looksLikeHtml(editedContent) ? (
+                    <div className="p-4 sm:p-5 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: editedContent }} />
+                  ) : (
+                    <div className="p-4 sm:p-5">
+                      <MarkdownPreview content={resolveTokensForPreview(editedContent)} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
           </div>
           <div id="workspace-actions" className="editor-actions-sticky hidden sm:flex p-6 border-t dark:border-gray-700 justify-between items-center">
@@ -1676,8 +1676,8 @@ const CourseWorkspacePage: React.FC = () => {
       )}
       {/* Sticky mobile actions bar */}
       <div id="mobile-actions-bar" className="mobile-actions-sticky sm:hidden border-t dark:border-gray-700 shadow-lg safe-area-bottom">
-          <div className="px-3 py-2 flex items-center justify-between gap-2">
-            <div className="flex gap-2 flex-1">
+        <div className="px-3 py-2 flex items-center justify-between gap-2">
+          <div className="flex gap-2 flex-1">
             {isEnabled('editorGenerateButtonEnabled') && (
               <button
                 onClick={handleGenerate}
@@ -1791,20 +1791,20 @@ const CourseWorkspacePage: React.FC = () => {
 
               {/* Legacy Import Removed - Replaced by FileManager */}
 
-      {/* Knowledge Base / Reference Materials (Mobile) */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold">Resurse</h3>
-          <button
-            onClick={() => setIsHelpModalOpen(true)}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700"
-            title={t('course.helpModal.open')}
-          >
-            {t('course.helpModal.open')}
-          </button>
-        </div>
-        <FileManager courseId={course.id} />
-      </div>
+              {/* Knowledge Base / Reference Materials (Mobile) */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold">Resurse</h3>
+                  <button
+                    onClick={() => setIsHelpModalOpen(true)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700"
+                    title={t('course.helpModal.open')}
+                  >
+                    {t('course.helpModal.open')}
+                  </button>
+                </div>
+                <FileManager courseId={course.id} />
+              </div>
 
               <nav>
                 <ul>

@@ -5,6 +5,7 @@ import JSZip from 'jszip';
 import { Course, CourseStep, SlideModel, SlideArchetype, SlideRules } from '../types';
 import { replaceBlobUrlsWithPublic, ensurePublicExternalImages } from './imageService';
 import { isEnabled } from '../config/featureFlags';
+import { exportCourseAsPdf } from './pdfExporter';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -22,7 +23,7 @@ const normalizeExternalImageLinks = (md: string): string => {
     try {
         let out = md;
         out = out.replace(/https?:\/\/unsplash\.com\/photos\/[\S)]+/gi, (m) => {
-            const last = (m.split('/') .pop() || '').split('?')[0];
+            const last = (m.split('/').pop() || '').split('?')[0];
             const id = last.includes('-') ? (last.split('-').pop() || last) : last;
             return `https://source.unsplash.com/${id}/1600x900`;
         });
@@ -455,14 +456,14 @@ export const getPedagogicWarnings = (m: SlideModel): string[] => {
 
     const textAll = ((m.title || '') + ' ' + bullets.join(' ')).toLowerCase();
     const BLOOM = {
-        remember: ['definește','defini','enumeră','listează','identifică','recunoaște','descrie','menționează'],
-        understand: ['explică','interpretează','clarifică','rezumă','exemplifică','parafrazează','ilustrează'],
-        apply: ['aplică','utilizează','folosește','implementează','exersează','execută','proiectează','realizează'],
-        analyze: ['analizează','compară','descompune','relatează','examinează','categorizează','corelează'],
-        evaluate: ['evaluează','argumentează','justifică','critică','decide','apreciază','verifică'],
-        create: ['creează','sintetizează','compune','inovează','construiește','elaborează','proiectează']
+        remember: ['definește', 'defini', 'enumeră', 'listează', 'identifică', 'recunoaște', 'descrie', 'menționează'],
+        understand: ['explică', 'interpretează', 'clarifică', 'rezumă', 'exemplifică', 'parafrazează', 'ilustrează'],
+        apply: ['aplică', 'utilizează', 'folosește', 'implementează', 'exersează', 'execută', 'proiectează', 'realizează'],
+        analyze: ['analizează', 'compară', 'descompune', 'relatează', 'examinează', 'categorizează', 'corelează'],
+        evaluate: ['evaluează', 'argumentează', 'justifică', 'critică', 'decide', 'apreciază', 'verifică'],
+        create: ['creează', 'sintetizează', 'compune', 'inovează', 'construiește', 'elaborează', 'proiectează']
     } as const;
-    const bloomOrder = ['remember','understand','apply','analyze','evaluate','create'] as const;
+    const bloomOrder = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'] as const;
     const detectBloomLevel = (t: string): number => {
         for (let i = bloomOrder.length - 1; i >= 0; i--) {
             const level = bloomOrder[i];
@@ -490,7 +491,7 @@ export const getPedagogicWarnings = (m: SlideModel): string[] => {
     }
 
     if (m.slide_type === SlideArchetype.CaseStudy) {
-        const keys = ['context','problemă','soluție','rezultat'];
+        const keys = ['context', 'problemă', 'soluție', 'rezultat'];
         const hits = keys.filter(k => textAll.includes(k)).length;
         if (hits < 2) warnings.push('[WARN] Studiu de caz fără structură clară');
         const hasEvaluate = BLOOM.evaluate.some(v => textAll.includes(v));
@@ -498,7 +499,7 @@ export const getPedagogicWarnings = (m: SlideModel): string[] => {
     }
 
     if (m.slide_type === SlideArchetype.Summary) {
-        const integrationHints = ['reflectă','plan','transfer','integrează','recapitulare','reține'];
+        const integrationHints = ['reflectă', 'plan', 'transfer', 'integrează', 'recapitulare', 'reține'];
         const hasIntegration = integrationHints.some(v => textAll.includes(v));
         if (!hasIntegration) warnings.push('[INFO] Îndeamnă la reflecție/plan de acțiune în rezumat');
     }
@@ -844,18 +845,6 @@ const createDocx = async (step: CourseStep, courseTitle: string, stepTitle: stri
     return Packer.toBlob(doc);
 };
 
-const triggerDownload = (blob: Blob, fileName: string): void => {
-    console.log(`[Export] Triggering download for: ${fileName}, size=${blob.size}, type=${blob.type}`);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-};
-
 export const exportCourseAsZip = async (course: Course, t: (key: string) => string): Promise<void> => {
     console.log('[Export] Starting zip export for:', course.title);
     const zip = new JSZip();
@@ -867,15 +856,32 @@ export const exportCourseAsZip = async (course: Course, t: (key: string) => stri
         zip.file(fileName, blob);
     }
 
-    // Force application/octet-stream to prevent browser from trying to display it
+    // Generate ZIP with proper MIME type
     const zipBlob = await zip.generateAsync({
         type: 'blob',
-        mimeType: 'application/octet-stream'
+        mimeType: 'application/zip'
     });
 
     const safeCourseTitle = course.title.replace(/[^a-z0-9]/gi, '_');
     const finalFileName = `course_${safeCourseTitle}.zip`;
 
     console.log('[Export] Zip generated, triggering download for:', finalFileName);
-    triggerDownload(zipBlob, finalFileName);
+
+    // Trigger download using standard approach
+    const url = URL.createObjectURL(zipBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = finalFileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+
+    // Cleanup
+    setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }, 100);
 };
+
+// Re-export PDF export function
+export { exportCourseAsPdf };
