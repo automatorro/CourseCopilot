@@ -141,7 +141,18 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 const { data, error: fnError } = await supabase.functions.invoke('generate-course-content', {
                     body: { action: 'generate_step_content', course, step_type: s, context_files: [] },
                 });
-                if (fnError) throw fnError;
+                if (fnError) {
+                    const ctx = (fnError as any)?.context;
+                    let msg = (fnError as any)?.message || 'Edge Function error';
+                    const bodyText = ctx?.body || ctx?.error || ctx;
+                    if (typeof bodyText === 'string') {
+                        try {
+                            const parsed = JSON.parse(bodyText);
+                            if (parsed && typeof parsed.error === 'string') msg = parsed.error;
+                        } catch { /* ignore */ }
+                    }
+                    throw new Error(msg);
+                }
                 const generatedContent = data.content;
                 const arr = accumulatedContentRef.current;
                 const idx = arr.findIndex((i: any) => i.step_type === s);
@@ -224,16 +235,27 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             }
 
             // 1. Call Edge Function
-            const { data, error: fnError } = await supabase.functions.invoke('generate-course-content', {
-                body: {
-                    action: 'generate_step_content',
-                    course: course,
-                    step_type: step.type,
-                    previous_steps: accumulatedContentRef.current
-                }
-            });
+                const { data, error: fnError } = await supabase.functions.invoke('generate-course-content', {
+                    body: {
+                        action: 'generate_step_content',
+                        course: course,
+                        step_type: step.type,
+                        previous_steps: accumulatedContentRef.current
+                    }
+                });
 
-            if (fnError) throw new Error(fnError.message);
+            if (fnError) {
+                const ctx = (fnError as any)?.context;
+                let msg = (fnError as any)?.message || 'Edge Function error';
+                const bodyText = ctx?.body || ctx?.error || ctx;
+                if (typeof bodyText === 'string') {
+                    try {
+                        const parsed = JSON.parse(bodyText);
+                        if (parsed && typeof parsed.error === 'string') msg = parsed.error;
+                    } catch { /* ignore */ }
+                }
+                throw new Error(msg);
+            }
             if (data.error) throw new Error(data.error);
 
             const generatedContent = data.content;

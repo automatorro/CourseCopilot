@@ -4,11 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../contexts/I18nContext';
 import { useToast } from '../contexts/ToastContext';
 import NewCourseModal from '../components/NewCourseModal';
+import UploadCourseModal from '../components/UploadCourseModal';
+import { supabase } from '../services/supabaseClient';
 import { Course, GenerationEnvironment } from '../types';
 import { PRICING_PLANS } from '../constants';
-import { supabase } from '../services/supabaseClient';
 import { deleteCourseById } from '../services/courseService';
-import { PlusCircle, Loader2, Edit, Copy, Download, Trash2, Rocket } from 'lucide-react';
+import { PlusCircle, Loader2, Edit, Copy, Download, Trash2, Rocket, X } from 'lucide-react';
 import { exportCourseAsZip, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -36,6 +37,12 @@ const DashboardPage: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isChoiceOpen, setIsChoiceOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [pingOk, setPingOk] = useState<boolean | null>(null);
+  type ProviderStatus = { googleConfigured: boolean; moonshotConfigured: boolean; activeProvider: 'google' | 'moonshot' | 'none' };
+  const [providerInfo, setProviderInfo] = useState<ProviderStatus | null>(null);
   const [loadingStates, setLoadingStates] = useState<{ [key: string]: boolean }>({});
 
   // Delete Confirmation State
@@ -74,6 +81,32 @@ const DashboardPage: React.FC = () => {
       isMounted = false;
     };
   }, [user, showToast]);
+
+  const runHealthCheck = async (notify: boolean = true) => {
+    try {
+      if (healthLoading) return;
+      setHealthLoading(true);
+      const { data: pingData, error: pingError } = await supabase.functions.invoke('generate-course-content', { body: { action: 'ping' } });
+      const ok = !pingError && pingData?.message === 'pong';
+      setPingOk(ok);
+      const { data: provData, error: provError } = await supabase.functions.invoke('generate-course-content', { body: { action: 'provider_status' } });
+      if (!provError && provData) setProviderInfo(provData as ProviderStatus);
+      const providerName = provError || !provData ? '—' : provData.activeProvider === 'google' ? t('health.google') : provData.activeProvider === 'moonshot' ? t('health.moonshot') : '—';
+      if (notify) {
+        const summary = `${ok ? t('health.ping.ok') : t('health.ping.fail')} • ${t('health.provider.active')}: ${providerName}`;
+        showToast(summary, ok ? 'success' : 'error');
+      }
+    } catch {
+      setPingOk(false);
+      if (notify) showToast(t('health.ping.fail'), 'error');
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    runHealthCheck(false);
+  }, []);
 
   const handleCreateCourse = async (details: {
     title: string;
@@ -248,7 +281,8 @@ const DashboardPage: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">{t('dashboard.title')}</h1>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => setIsChoiceOpen(true)
+          }
           disabled={!canCreateCourse}
           className="btn-premium disabled:opacity-50"
           title={!canCreateCourse ? t('dashboard.limitReached') : ''}
@@ -256,6 +290,23 @@ const DashboardPage: React.FC = () => {
           <PlusCircle size={20} />
           {t('dashboard.newCourse')}
         </button>
+      </div>
+
+      <div className="mb-6 p-3 rounded-lg border dark:border-gray-700 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className={`px-2 py-1 text-xs rounded-full ${pingOk ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : pingOk === false ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>{pingOk ? t('health.ping.ok') : pingOk === false ? t('health.ping.fail') : '...'}</span>
+          {providerInfo && (
+            <span className="text-sm">
+              {t('health.provider.active')}: {providerInfo.activeProvider === 'google' ? t('health.google') : providerInfo.activeProvider === 'moonshot' ? t('health.moonshot') : '—'}
+            </span>
+          )}
+          {providerInfo && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Google: {providerInfo.googleConfigured ? '✓' : '—'} • Moonshot: {providerInfo.moonshotConfigured ? '✓' : '—'}
+            </span>
+          )}
+        </div>
+        <button onClick={() => runHealthCheck(true)} className="btn-premium--secondary" disabled={healthLoading}>{healthLoading ? <Loader2 size={16} className="animate-spin" /> : t('health.check')}</button>
       </div>
 
       {courses.length === 0 ? (
@@ -306,11 +357,54 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {isChoiceOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="card-premium w-full max-w-lg transform transition-all">
+            <div className="flex justify-between items-center p-6 border-b dark:border-ink-700">
+              <h2 className="text-2xl font-bold font-display tracking-tight">{t('modal.courseEntry.title')}</h2>
+              <button onClick={() => setIsChoiceOpen(false)} className="p-1 rounded-full hover:bg-ink-100 dark:hover:bg-ink-800 interactive-soft">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-ink-600 dark:text-ink-300">{t('modal.courseEntry.subtitle')}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  className="p-4 rounded-xl border-2 transition-all text-left hover:border-primary-300"
+                  onClick={() => { setIsChoiceOpen(false); setIsModalOpen(true); }}
+                >
+                  {t('modal.courseEntry.createScratch')}
+                </button>
+                <button
+                  className="p-4 rounded-xl border-2 transition-all text-left hover:border-primary-300"
+                  onClick={() => { setIsChoiceOpen(false); setIsUploadOpen(true); }}
+                >
+                  {t('modal.courseEntry.import')}
+                </button>
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsChoiceOpen(false)} className="btn-premium--secondary">{t('modal.newCourse.cancel')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <NewCourseModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onCreate={handleCreateCourse}
       />
+
+      {isUploadOpen && (
+        <UploadCourseModal
+          onClose={() => setIsUploadOpen(false)}
+          onUploadComplete={(courseId: string) => {
+            setIsUploadOpen(false);
+            navigate(`/course/${courseId}`);
+          }}
+        />
+      )}
 
       <ConfirmModal
         isOpen={deleteModalOpen}

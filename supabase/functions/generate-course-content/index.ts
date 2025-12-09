@@ -18,6 +18,47 @@ const STEP_TITLES: { [key: string]: string } = {
   'course.steps.cheat_sheets': "Cheat Sheets / Summary Cards"
 };
 
+async function generateWithKimi(prompt: string, isJsonMode: boolean): Promise<string> {
+  const base = Deno.env.get('MOONSHOT_API_URL') ?? Deno.env.get('KIMI_API_URL') ?? 'https://api.moonshot.ai/v1';
+  const url = base.endsWith('/v1') ? `${base}/chat/completions` : (base.endsWith('/chat/completions') ? base : `${base}/chat/completions`);
+  const key = Deno.env.get('MOONSHOT_API_KEY') ?? Deno.env.get('KIMI_API_KEY');
+  if (!key) throw new Error('MOONSHOT_API_KEY (or KIMI_API_KEY) is not set.');
+  const isMoonshotKey = !!Deno.env.get('MOONSHOT_API_KEY');
+  const isKimiKey = !!Deno.env.get('KIMI_API_KEY');
+  const model = Deno.env.get('MOONSHOT_MODEL') ?? Deno.env.get('KIMI_MODEL') ?? (isMoonshotKey ? 'moonshot-v1-8k' : 'kimi-k2-turbo-preview');
+  const body: {
+    model: string;
+    messages: { role: string; content: string }[];
+    response_format?: { type: string };
+    temperature?: number;
+  } = {
+    model,
+    messages: [{ role: 'user', content: prompt }]
+  };
+  if (isJsonMode) {
+    body.response_format = { type: 'json_object' };
+  }
+  body.temperature = 0.6;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error(t || `Kimi error ${resp.status}`);
+  }
+  const data = await resp.json();
+  let text = '';
+  try {
+    text = (data?.choices?.[0]?.message?.content ?? '') as string;
+  } catch (_) { void 0; }
+  if (!text || typeof text !== 'string') {
+    text = JSON.stringify(data);
+  }
+  return text;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -43,9 +84,6 @@ serve(async (req) => {
     } = await req.json();
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiApiKey) {
-      throw new Error("GEMINI_API_KEY is not set in Supabase secrets.");
-    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -58,7 +96,7 @@ serve(async (req) => {
       global: { headers: globalHeaders },
     });
 
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 
     const stepTitle = step ? (STEP_TITLES[step.title_key] || "Unknown Step") : "General";
     let prompt;
@@ -85,6 +123,16 @@ serve(async (req) => {
 
     if (action === 'ping') {
       return new Response(JSON.stringify({ message: 'pong' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      });
+    }
+
+    if (action === 'provider_status') {
+      const googleConfigured = !!Deno.env.get('GEMINI_API_KEY');
+      const moonshotConfigured = !!(Deno.env.get('MOONSHOT_API_KEY') || Deno.env.get('KIMI_API_KEY'));
+      const activeProvider = googleConfigured ? 'google' : (moonshotConfigured ? 'moonshot' : 'none');
+      return new Response(JSON.stringify({ googleConfigured, moonshotConfigured, activeProvider }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
       });
@@ -666,30 +714,43 @@ For a React course:
 
     const models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
     let lastErr: unknown = undefined;
-    for (const m of models) {
+    if (genAI) {
+      for (const m of models) {
+        try {
+          const model = genAI.getGenerativeModel({ model: m });
+          const generationConfig = isJsonMode ? { responseMimeType: "application/json" } : undefined;
+          const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig
+          });
+          const response = await result.response;
+          const text = response.text();
+          return new Response(JSON.stringify({ content: text }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          });
+        } catch (e) {
+          lastErr = e;
+          const msg = e instanceof Error ? e.message : String(e);
+          const retryable = msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("PERMISSION_DENIED");
+          if (!retryable) {
+            break;
+          }
+        }
+      }
+    }
+    let finalMsg = lastErr instanceof Error ? lastErr.message : String(lastErr || (genAI ? "Unknown error" : "Gemini not configured"));
+    if ((Deno.env.get('MOONSHOT_API_KEY') || Deno.env.get('KIMI_API_KEY'))) {
       try {
-        const model = genAI.getGenerativeModel({ model: m });
-        const generationConfig = isJsonMode ? { responseMimeType: "application/json" } : undefined;
-        const result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig
-        });
-        const response = await result.response;
-        const text = response.text();
+        const text = await generateWithKimi(prompt, isJsonMode);
         return new Response(JSON.stringify({ content: text }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200
         });
-      } catch (e) {
-        lastErr = e;
-        const msg = e instanceof Error ? e.message : String(e);
-        const retryable = msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("PERMISSION_DENIED");
-        if (!retryable) {
-          throw e;
-        }
+      } catch (e){
+        finalMsg = e instanceof Error ? e.message : String(e);
       }
     }
-    const finalMsg = lastErr instanceof Error ? lastErr.message : String(lastErr || "Unknown error");
     const isRateLimit = finalMsg.includes("429") || finalMsg.toLowerCase().includes("quota");
     return new Response(JSON.stringify({ error: finalMsg }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
