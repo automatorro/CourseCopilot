@@ -195,6 +195,10 @@
   "modal.newCourse.language": "Limba Conținutului",
   "modal.newCourse.create": "Creează Curs",
   "modal.newCourse.cancel": "Anulează",
+  "modal.courseEntry.title": "Cum vrei să începi?",
+  "modal.courseEntry.subtitle": "Alege o opțiune",
+  "modal.courseEntry.createScratch": "Creează curs de la zero",
+  "modal.courseEntry.import": "Importă din materiale existente",
   "course.workspace.title": "Spațiu de Lucru Curs",
   "course.steps.structure": "1. Structură și Agendă",
   "course.steps.slides": "2. Slide-uri",
@@ -288,5 +292,11 @@
   ,
   "export.pptx.subtitle": "Descarcă doar setul de slide-uri (PPTX)",
   "export.pdf.subtitle": "Descarcă manualul cursului în PDF (în curând)",
-  "export.zip.subtitle": "Descarcă toate materialele în format DOCX, ca arhivă ZIP"
+  "export.zip.subtitle": "Descarcă toate materialele în format DOCX, ca arhivă ZIP",
+  "health.ping.ok": "Edge conectat",
+  "health.ping.fail": "Ping eșuat",
+  "health.provider.active": "Provider activ",
+  "health.google": "Google",
+  "health.moonshot": "Moonshot",
+  "health.check": "Verifică"
 }

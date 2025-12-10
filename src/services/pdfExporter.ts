@@ -41,13 +41,6 @@ const PDF_CONFIG = {
 // TYPES
 // ============================================================================
 
-interface TextOptions {
-    fontSize?: number;
-    fontStyle?: 'normal' | 'bold' | 'italic' | 'bolditalic';
-    color?: string;
-    align?: 'left' | 'center' | 'right';
-    maxWidth?: number;
-}
 
 interface ParsedElement {
     type: 'heading' | 'paragraph' | 'list' | 'image' | 'code';
@@ -84,7 +77,7 @@ function createPdfDocument(): jsPDF {
  * Adds page numbers to all pages
  */
 function addPageNumbers(doc: jsPDF, courseTitle: string): void {
-    const pageCount = doc.getNumberOfPages();
+    const pageCount = (doc as unknown as { getNumberOfPages: () => number }).getNumberOfPages();
 
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
@@ -139,40 +132,7 @@ function checkPageBreak(
 /**
  * Adds formatted text to the PDF
  */
-function addFormattedText(
-    doc: jsPDF,
-    text: string,
-    x: number,
-    y: number,
-    options: TextOptions = {}
-): number {
-    const {
-        fontSize = PDF_CONFIG.fontSize.body,
-        fontStyle = 'normal',
-        color = PDF_CONFIG.colors.text,
-        align = 'left',
-        maxWidth = PDF_CONFIG.contentWidth,
-    } = options;
 
-    doc.setFontSize(fontSize);
-    doc.setFont('helvetica', fontStyle);
-    doc.setTextColor(color);
-
-    // Split text into lines that fit within maxWidth
-    const lines = doc.splitTextToSize(text, maxWidth);
-
-    // Calculate line height
-    const lineHeight = fontSize * PDF_CONFIG.lineHeight.body * 0.352778; // Convert to mm
-
-    // Add each line
-    lines.forEach((line: string, index: number) => {
-        const currentY = y + index * lineHeight;
-        doc.text(line, x, currentY, { align });
-    });
-
-    // Return the Y position after the text
-    return y + lines.length * lineHeight;
-}
 
 // ============================================================================
 // HELPER FUNCTIONS - MARKDOWN PARSING

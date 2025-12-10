@@ -9,7 +9,7 @@ import { Course, CourseStep, CourseBlueprint } from '../types';
 
 import { refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
-import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo } from 'lucide-react';
+import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo, Upload } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
 import { exportCourseAsZip, exportCourseAsPptx, exportCourseAsPdf, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
@@ -24,9 +24,11 @@ import ImageStudioModal from '../components/ImageStudioModal';
 import MarkdownPreview from '../components/MarkdownPreview';
 import TinyEditor from '../components/editor/TinyEditor';
 import OnboardingChat from '../components/OnboardingChat';
+import UploadBlueprintModal from '../components/UploadBlueprintModal';
 import LearningObjectivesGenerator from '../components/LearningObjectivesGenerator';
 import BlueprintReview from '../components/BlueprintReview';
 import FileManager from '../components/FileManager';
+import ImportStagingModal from '../components/ImportStagingModal';
 import { GenerationProgressModal } from '../components/GenerationProgressModal';
 import { isEnabled } from '../config/featureFlags';
 import '../styles/sticky-editor.css';
@@ -110,6 +112,7 @@ const CourseWorkspacePage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isDownloading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSlidesPreview, setShowSlidesPreview] = useState(false);
   const [editedContent, setEditedContent] = useState('');
@@ -142,6 +145,7 @@ const CourseWorkspacePage: React.FC = () => {
   const [showBlueprintReview, setShowBlueprintReview] = useState(false);
   const [showBlueprintEdit, setShowBlueprintEdit] = useState(false);
   const [showBlueprintRefine, setShowBlueprintRefine] = useState(false);
+  const [showUploadBlueprint, setShowUploadBlueprint] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
   const [localImageFile, setLocalImageFile] = useState<File | null>(null);
@@ -1222,10 +1226,26 @@ const CourseWorkspacePage: React.FC = () => {
           <h1 className="text-xl font-bold text-gray-800 dark:text-white">{course.title} <span className="text-gray-400 font-normal">| Onboarding</span></h1>
         </div>
         <div className="flex-grow overflow-hidden">
-          <OnboardingChat
-            course={course}
-            onBlueprintReady={handleBlueprintReady}
-          />
+          <div className="p-4 flex items-center gap-2">
+            <button
+              onClick={() => setShowUploadBlueprint(false)}
+              className={`px-3 py-2 rounded-md text-sm font-medium border ${!showUploadBlueprint ? 'bg-primary-50 border-primary-300 text-primary-700 dark:bg-primary-900/20 dark:border-primary-700' : 'border-gray-200 dark:border-gray-700'}`}
+            >Chat Onboarding</button>
+            <button
+              onClick={() => setShowUploadBlueprint(true)}
+              className={`px-3 py-2 rounded-md text-sm font-medium border ${showUploadBlueprint ? 'bg-primary-50 border-primary-300 text-primary-700 dark:bg-primary-900/20 dark:border-primary-700' : 'border-gray-200 dark:border-gray-700'}`}
+            >Analizează material</button>
+          </div>
+          {!showUploadBlueprint ? (
+            <OnboardingChat course={course} onBlueprintReady={handleBlueprintReady} />
+          ) : (
+            <UploadBlueprintModal
+              isOpen={true}
+              onClose={() => setShowUploadBlueprint(false)}
+              course={course}
+              onBlueprintReady={handleBlueprintReady}
+            />
+          )}
         </div>
       </div>
     );
@@ -1503,6 +1523,13 @@ const CourseWorkspacePage: React.FC = () => {
                 </button>
               )}
               <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                title="Importă document în acest pas"
+              >
+                <Upload size={16} /> Importă
+              </button>
+              <button
                 onClick={() => setShowSlidesPreview(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
                 title="Previzualizează slide-urile"
@@ -1542,6 +1569,24 @@ const CourseWorkspacePage: React.FC = () => {
         isExporting={isExporting}
         course={course}
       />
+      {showImportModal && (
+        <ImportStagingModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          step={currentStep}
+          onApplied={async () => {
+            const updatedCourseData = await fetchCourseData();
+            if (updatedCourseData) {
+              setCourse(updatedCourseData);
+              const updatedStep = (updatedCourseData.steps || []).find((s: CourseStep) => s.id === currentStep.id);
+              if (updatedStep) {
+                const html = marked.parse(updatedStep.content || '', { breaks: true }) as string;
+                setEditedContent(html);
+              }
+            }
+          }}
+        />
+      )}
       {showSlidesPreview && course && (
         <SlidesPreviewModal
           isOpen={showSlidesPreview}

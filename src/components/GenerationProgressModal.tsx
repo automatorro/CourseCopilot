@@ -7,6 +7,30 @@ import { useTranslation } from '../contexts/I18nContext';
 import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations, validateDurationsArray, alignWorkbookDurationsByStructure } from '../lib/outputValidators';
 import { isEnabled } from '../config/featureFlags';
 
+const extractModuleTitlesFromMarkdown = (md: string): string[] => {
+    const titles: string[] = [];
+    const lines = String(md || '').split('\n');
+    for (const line of lines) {
+        const m = line.match(/^#{1,6}\s+(.*)$/);
+        if (!m) continue;
+        const s = m[1].trim();
+        const low = s.toLowerCase();
+        if (/^(module|modul)\b/.test(low) || low.includes('modul ') || low.includes('module ')) {
+            titles.push(s);
+        }
+    }
+    return titles;
+};
+
+const buildContextSummary = (acc: any[], language: string): { modules: string[]; durations: number[]; exercisesCount: number } => {
+    const structure = (acc || []).find((s: any) => s.step_type === TrainerStepType.Structure)?.content || '';
+    const exercises = (acc || []).find((s: any) => s.step_type === TrainerStepType.Exercises)?.content || '';
+    const modules = extractModuleTitlesFromMarkdown(String(structure || ''));
+    const durations = extractModuleDurations(String(structure || '')) || [];
+    const exCount = (String(exercises || '').match(/\b(Exerci\w+|Exercise)\b/gi) || []).length;
+    return { modules, durations, exercisesCount: exCount };
+};
+
 interface GenerationProgressModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -234,15 +258,44 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 throw new Error('User ID is missing. Please refresh the page and try again.');
             }
 
-            // 1. Call Edge Function
-                const { data, error: fnError } = await supabase.functions.invoke('generate-course-content', {
+            const contextMap: Record<TrainerStepType, TrainerStepType[]> = {
+                [TrainerStepType.PerformanceObjectives]: [],
+                [TrainerStepType.CourseObjectives]: [TrainerStepType.PerformanceObjectives],
+                [TrainerStepType.Structure]: [TrainerStepType.PerformanceObjectives, TrainerStepType.CourseObjectives],
+                [TrainerStepType.LearningMethods]: [TrainerStepType.Structure],
+                [TrainerStepType.TimingAndFlow]: [TrainerStepType.Structure, TrainerStepType.LearningMethods],
+                [TrainerStepType.Exercises]: [TrainerStepType.Structure],
+                [TrainerStepType.ExamplesAndStories]: [TrainerStepType.Structure],
+                [TrainerStepType.FacilitatorNotes]: [TrainerStepType.Structure, TrainerStepType.Exercises],
+                [TrainerStepType.Slides]: [TrainerStepType.Structure, TrainerStepType.ExamplesAndStories],
+                [TrainerStepType.FacilitatorManual]: [TrainerStepType.Structure, TrainerStepType.TimingAndFlow, TrainerStepType.FacilitatorNotes, TrainerStepType.Exercises],
+                [TrainerStepType.ParticipantWorkbook]: [TrainerStepType.Structure, TrainerStepType.Exercises],
+                [TrainerStepType.VideoScripts]: [TrainerStepType.Structure]
+            };
+            const allowed = new Set(contextMap[step.type] || []);
+            const prevForContext = (accumulatedContentRef.current || [])
+                .filter((s: any) => allowed.size === 0 || allowed.has(s.step_type))
+                .map((s: any) => ({ step_type: s.step_type, content: String(s.content || '').slice(0, 2000) }));
+            const summary = buildContextSummary(accumulatedContentRef.current || [], course.language || 'ro');
+            let attempt = 0;
+            let data: any = null;
+            let fnError: any = null;
+            while (attempt < 2) {
+                const resp = await supabase.functions.invoke('generate-course-content', {
                     body: {
                         action: 'generate_step_content',
                         course: course,
                         step_type: step.type,
-                        previous_steps: accumulatedContentRef.current
+                        previous_steps: prevForContext,
+                        context_summary: summary
                     }
                 });
+                data = resp.data;
+                fnError = resp.error;
+                if (!fnError && !data?.error) break;
+                attempt++;
+                await new Promise(r => setTimeout(r, 800));
+            }
 
             if (fnError) {
                 const ctx = (fnError as any)?.context;
@@ -421,7 +474,9 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 const v = validateDurationsArray(sd, wd);
                 if (!v.ok) {
                     overallOk = false;
-                    items.push({ ok: false, message: t('validation.durationMismatch'), type: 'durationMismatch', key: 'course.livrables.participant_workbook' });
+                    const expected = (v.expected || []).join(', ');
+                    const actual = (v.actual || []).join(', ');
+                    items.push({ ok: false, message: `${t('validation.durationMismatch')} (Structură: ${expected} • Workbook: ${actual})`, type: 'durationMismatch', key: 'course.livrables.participant_workbook' });
                 } else {
                     items.push({ ok: true, message: t('validation.durationMatch') });
                 }
@@ -430,10 +485,21 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             setValidationReport({ ok: overallOk, items });
 
             if (!overallOk) {
-                setIsGenerating(false);
-                console.warn('[GenerationProgressModal] Validation failed. Not inserting steps.');
-                pendingStepsRef.current = stepsToInsert; // Allow user to save as draft
-                return; // Stop here, show report in UI
+                const onlyDurationIssue = items.every(it => it.type === 'durationMismatch' || it.ok === true);
+                pendingStepsRef.current = stepsToInsert;
+                if (onlyDurationIssue) {
+                    await handleAutoFixWorkbook();
+                    if (validationReport && validationReport.ok) {
+                        // After auto-fix, continue to insert
+                    } else {
+                        setIsGenerating(false);
+                        console.warn('[GenerationProgressModal] Duration auto-fix did not resolve all issues.');
+                    }
+                } else {
+                    setIsGenerating(false);
+                    console.warn('[GenerationProgressModal] Validation failed. Not inserting steps.');
+                }
+                return;
             }
 
             // 5. Delete existing and insert if validation ok

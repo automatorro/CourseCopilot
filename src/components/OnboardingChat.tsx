@@ -116,9 +116,25 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
             saveChatHistory(updatedMessages);
 
             if (aiResponse.blueprint) {
-                // Blueprint generated!
-                console.log('Blueprint received:', aiResponse.blueprint);
-                onBlueprintReady(aiResponse.blueprint);
+                const bp = aiResponse.blueprint as CourseBlueprint;
+                const modulesOk = Array.isArray(bp?.modules) && bp.modules.length >= 2;
+                const audienceOk = typeof bp?.target_audience === 'string' && (bp.target_audience || '').trim().length >= 30;
+                const durationOk = typeof bp?.estimated_duration === 'string' && (bp.estimated_duration || '').trim().length > 0;
+                const messageIsQuestion = typeof aiResponse.message === 'string' && /\?\s*$/.test(aiResponse.message.trim());
+                if (modulesOk && audienceOk && durationOk && !messageIsQuestion) {
+                    console.log('Blueprint accepted:', bp);
+                    onBlueprintReady(bp);
+                } else {
+                    const nextMsg: AIMessage = {
+                        role: 'assistant',
+                        content: aiResponse.message || 'Pentru calitate, am nevoie de încă un detaliu despre audiență/obiective.',
+                        timestamp: Date.now(),
+                        action: 'chat_followup',
+                    };
+                    const follow = [...updatedMessages, nextMsg];
+                    setMessages(follow);
+                    saveChatHistory(follow);
+                }
             }
 
         } catch (error) {

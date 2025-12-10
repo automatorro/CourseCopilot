@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { CourseBlueprint } from '../types';
+import { uploadCourseFile } from './fileStorageService';
 
 /**
  * Parse DOCX file to markdown
@@ -79,13 +80,67 @@ export async function createCourseFromUpload(
         );
 
         if (analysisError) {
-            console.error('Analysis error:', analysisError);
-            return { success: false, error: 'Failed to analyze file content' };
+            const errObj = analysisError as unknown as { context?: Response; status?: number; message: string };
+            let status: number | undefined = errObj.status;
+            let serverMsg: string | undefined = undefined;
+            try {
+                const ctx = errObj.context;
+                if (ctx && typeof (ctx as any).status === 'number') status = (ctx as any).status;
+                if (ctx && typeof (ctx as any).clone === 'function') {
+                    const cloned = (ctx as any).clone();
+                    const ct = cloned.headers?.get?.('content-type') || '';
+                    if (ct.includes('application/json')) {
+                        const json = await cloned.json();
+                        serverMsg = (json?.error as string) || (json?.message as string) || JSON.stringify(json);
+                    } else {
+                        serverMsg = await cloned.text();
+                    }
+                }
+            } catch (_) { /* swallow */ }
+
+            // Fallback path on 429 (quota exceeded): create minimal course and attach uploaded file
+            if (status === 429) {
+                const courseTitle = file.name.replace(/\.[^/.]+$/, '');
+                const { data: course, error: courseError } = await supabase
+                    .from('courses')
+                    .insert({
+                        user_id: userId,
+                        title: courseTitle,
+                        subject: 'Imported Course',
+                        environment,
+                        target_audience: 'General',
+                        language: 'en',
+                        learning_objectives: null,
+                        blueprint: null,
+                        progress: 0
+                    })
+                    .select()
+                    .single();
+
+                if (courseError || !course) {
+                    console.error('Fallback course creation error:', courseError);
+                    return { success: false, error: `Edge 429 and failed fallback course creation: ${courseError?.message || 'unknown error'}` };
+                }
+
+                try {
+                    await uploadCourseFile(course.id, file, userId);
+                } catch (e: unknown) {
+                    console.warn('Fallback: failed to attach file to knowledge base:', e);
+                }
+
+                return { success: true, courseId: course.id };
+            }
+
+            console.error('Analysis error:', { message: analysisError.message, status, serverMsg });
+            return { success: false, error: `Edge Function error (${status || 'unknown'}): ${serverMsg || analysisError.message}` };
         }
 
         let blueprint: CourseBlueprint;
         try {
-            blueprint = JSON.parse(analysisData.content);
+            if (!analysisData || typeof (analysisData as any).content !== 'string') {
+                return { success: false, error: 'Invalid response from Edge Function (no content)' };
+            }
+            blueprint = JSON.parse((analysisData as any).content);
         } catch (e) {
             console.error('Blueprint parse error:', e);
             return { success: false, error: 'Failed to generate course blueprint' };

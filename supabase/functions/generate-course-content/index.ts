@@ -80,7 +80,8 @@ serve(async (req) => {
       blueprint,
       existingContent,
       step_type,
-      previous_steps
+      previous_steps,
+      context_summary
     } = await req.json();
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
@@ -279,67 +280,52 @@ For a React course:
           ${history}
 
           **INSTRUCTIONS:**
-          1.  **Analyze** the conversation so far.
-          2.  **Determine** if you have enough information to create a comprehensive Course Blueprint. Key info needed:
-              - Specific Learning Objectives (what will they be able to do?)
-              - Target Audience details (beginner, advanced, corporate, etc.)
-              - Depth/Tone preference (beginner-friendly, advanced, practical, theoretical)
-          3.  **Auto-Calculate Duration** based on topic complexity:
-              - Simple topic (1-2 key concepts): "2-3 hours"
-              - Moderate topic (3-5 key concepts): "4-5 hours"
-              - Complex topic (6+ key concepts): "6-8 hours"
-              - NEVER exceed "8 hours" (hard limit for quality and cost control)
-          4.  **Interact**:
-              - If info is missing: Ask ONE clear, relevant follow-up question to gather it. Do not ask multiple questions at once.
-              - If info is sufficient: Generate the Course Blueprint.
+          1. **Analyze** the conversation so far.
+          2. **Determine** if you have enough information to create a comprehensive Course Blueprint. Key info needed:
+             - Specific Learning Objectives
+             - Target Audience details
+             - Depth/Tone preference
+          3. **Auto-Calculate Duration** based on topic complexity:
+             - Simple: "2-3 hours"
+             - Moderate: "4-5 hours"
+             - Complex: "6-8 hours" (do not exceed 8 hours)
+          4. **Interact**:
+             - If information is missing: Ask a single, clear follow-up question. Continue asking one question at a time until ALL key info above is captured.
+             - Only when all key info is available: Generate the Course Blueprint.
 
           **OUTPUT FORMAT**:
-          You must output a VALID JSON object. Do not use Markdown code blocks.
-          
-          Structure:
+          You must output a VALID JSON object.
           {
-            "message": "Text response to the user (question or confirmation)",
+            "message": "Question or confirmation",
             "blueprint": null | {
                "version": "1.0",
                "title": "Refined Course Title",
                "target_audience": "Detailed audience description",
-               "estimated_duration": "Estimated duration (e.g., '2 hours', '3 days')",
+               "estimated_duration": "e.g., '2 hours'",
                "generated_at": "[ISO timestamp]",
                "modules": [
                  {
                    "id": "module-1",
                    "title": "Module 1: Name",
-                   "learning_objective": "What participants will achieve in this module",
+                   "learning_objective": "Outcome",
                    "sections": [
-                      { 
-                        "id": "section-1-1",
-                        "title": "Section 1.1: Name", 
-                        "content_type": "slides",
-                        "order": 1,
-                        "content_outline": "Brief description of what will be covered"
-                      },
-                      { 
-                        "id": "section-1-2",
-                        "title": "Section 1.2: Quiz", 
-                        "content_type": "quiz",
-                        "order": 2,
-                        "content_outline": "Assessment of module concepts"
-                      }
+                      { "id": "section-1-1", "title": "Section 1.1: Name", "content_type": "slides", "order": 1, "content_outline": "Brief" }
                    ]
                  }
                ]
             }
           }
-          
+
           **BLUEPRINT RULES**:
-          - "content_type" must be one of: 'slides', 'video_script', 'exercise', 'reading', 'quiz'.
-          - Create a logical flow that builds complexity gradually.
-          - **For LiveWorkshop environment**: Emphasize 'slides' (presentation content) and 'exercise' (group activities).
-          - **For OnlineCourse environment**: Emphasize 'video_script' (video narration) and 'reading' (self-paced materials).
-          - Include at least one 'quiz' or 'exercise' per module for knowledge check.
-          - Each module should have a clear learning_objective.
-          - Generate unique IDs for modules and sections (e.g., "module-1", "section-1-1").
+          - "content_type" ∈ {'slides','video_script','exercise','reading','quiz'}.
+          - Logical flow that builds complexity.
+          - LiveWorkshop: emphasize slides and exercises.
+          - OnlineCourse: emphasize video_script and reading.
+          - Include at least one quiz or exercise per module.
+          - Each module must have a learning_objective.
+          - Use unique IDs like "module-1", "section-1-1".
         `;
+      // After model response, enforce minimal blueprint completeness
     } else if (action === 'improve') {
       // --- IMPROVEMENT PROMPT ---
       prompt = `
@@ -400,6 +386,9 @@ For a React course:
         ? (previous_steps as Array<{ step_type: string; content: string }>)
             .map((s) => `\n--- PREVIOUS STEP: ${s.step_type} ---\n${(s.content || '').substring(0, 2000)}`)
             .join('\n')
+        : "";
+      const structuredContext = context_summary
+        ? `\n**STRUCTURED CONTEXT**\nModules: ${(context_summary?.modules || []).join('; ')}\nDurations: ${(context_summary?.durations || []).join(', ')}\nExercisesCount: ${context_summary?.exercisesCount ?? 0}\n`
         : "";
 
       // Extract blueprint duration for enforcement
@@ -525,6 +514,7 @@ For a React course:
             - Combine Structure, Timing, Notes, and Exercises into a cohesive document.
             - Use a clear, readable format (e.g., tables for agenda).
             - Keep headings and labels strictly in the specified **LANGUAGE**.
+            - Use Modules and Durations from the **STRUCTURED CONTEXT** as the authoritative outline.
           `;
           break;
         case 'participant_workbook':
@@ -537,6 +527,8 @@ For a React course:
             - Keep language consistent (titles and content in the specified **LANGUAGE**).
             - Do not introduce new modules not present in the Structure. If adding a "Plan de acțiune personalizat" template, place it as a closing section (not numbered as a new module).
             - Tone: Encouraging and learner-centric.
+            - STRICT: Mirror module order and module titles from **STRUCTURED CONTEXT**.
+            - STRICT: Use EXACT same per‑module durations from **STRUCTURED CONTEXT** (e.g., "(2 ore)").
           `;
           break;
         case 'video_scripts':
@@ -563,6 +555,8 @@ For a React course:
         ${durationEnforcement}
 
         ${fileContext ? `**REFERENCE MATERIALS**:\n${fileContext}\n` : ''}
+
+        ${structuredContext}
 
         ${previousContext}
 
@@ -725,6 +719,20 @@ For a React course:
           });
           const response = await result.response;
           const text = response.text();
+          // Gate chat_onboarding minimal requirements if applicable
+          if (action === 'chat_onboarding') {
+            try {
+              const obj = JSON.parse(text || '{}');
+              const bp = obj?.blueprint;
+              const msg = (obj?.message || '').trim();
+              const question = /\?\s*$/.test(msg);
+              const bpOk = bp && Array.isArray(bp.modules) && bp.modules.length >= 2 && typeof bp.target_audience === 'string' && (bp.target_audience || '').trim().length >= 30 && typeof bp.estimated_duration === 'string' && (bp.estimated_duration || '').trim().length > 0;
+              if (!bpOk || question) {
+                const follow = { message: obj?.message || 'Pentru calitate, am nevoie de detalii suplimentare despre audiență/obiective.', blueprint: null };
+                return new Response(JSON.stringify({ content: JSON.stringify(follow) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+              }
+            } catch { /* ignore parse errors; return original */ }
+          }
           return new Response(JSON.stringify({ content: text }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200
@@ -743,6 +751,19 @@ For a React course:
     if ((Deno.env.get('MOONSHOT_API_KEY') || Deno.env.get('KIMI_API_KEY'))) {
       try {
         const text = await generateWithKimi(prompt, isJsonMode);
+        if (action === 'chat_onboarding') {
+          try {
+            const obj = JSON.parse(text || '{}');
+            const bp = obj?.blueprint;
+            const msg = (obj?.message || '').trim();
+            const question = /\?\s*$/.test(msg);
+            const bpOk = bp && Array.isArray(bp.modules) && bp.modules.length >= 2 && typeof bp.target_audience === 'string' && (bp.target_audience || '').trim().length >= 30 && typeof bp.estimated_duration === 'string' && (bp.estimated_duration || '').trim().length > 0;
+            if (!bpOk || question) {
+              const follow = { message: obj?.message || 'Pentru calitate, am nevoie de detalii suplimentare despre audiență/obiective.', blueprint: null };
+              return new Response(JSON.stringify({ content: JSON.stringify(follow) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+            }
+          } catch { /* ignore */ }
+        }
         return new Response(JSON.stringify({ content: text }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200

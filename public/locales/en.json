@@ -195,6 +195,10 @@
   "modal.newCourse.language": "Content Language",
   "modal.newCourse.create": "Create Course",
   "modal.newCourse.cancel": "Cancel",
+  "modal.courseEntry.title": "How do you want to start?",
+  "modal.courseEntry.subtitle": "Choose an option",
+  "modal.courseEntry.createScratch": "Create from scratch",
+  "modal.courseEntry.import": "Import from existing materials",
   "course.workspace.title": "Course Workspace",
   "course.steps.structure": "1. Structure & Agenda",
   "course.steps.slides": "2. Slides",
@@ -290,5 +294,11 @@
   ,
   "export.pptx.subtitle": "Download only the Slides set (PPTX)",
   "export.pdf.subtitle": "Download course manual as PDF (coming soon)",
-  "export.zip.subtitle": "Download all materials as DOCX inside a ZIP"
+  "export.zip.subtitle": "Download all materials as DOCX inside a ZIP",
+  "health.ping.ok": "Edge connected",
+  "health.ping.fail": "Ping failed",
+  "health.provider.active": "Active provider",
+  "health.google": "Google",
+  "health.moonshot": "Moonshot",
+  "health.check": "Check"
 }
