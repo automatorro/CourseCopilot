@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/I18nContext';
@@ -11,6 +13,7 @@ const AuthPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const location = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +63,16 @@ const AuthPage: React.FC = () => {
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+      <Helmet>
+        <title>Autentificare — CourseCopilot</title>
+        <meta name="description" content="Autentifică-te pentru a accesa dashboardul și workspace-ul de cursuri." />
+        <link rel="canonical" href={`https://coursecopilot.app${location.pathname}`} />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="Autentificare — CourseCopilot" />
+        <meta property="og:description" content="Intră în cont pentru a crea și gestiona cursuri cu AI." />
+        <meta property="og:url" content={`https://coursecopilot.app${location.pathname}`} />
+        <meta name="twitter:card" content="summary" />
+      </Helmet>
       <div className="w-full max-w-md p-8 space-y-6 bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
         <div>
           <h2 className="text-3xl font-bold text-center">

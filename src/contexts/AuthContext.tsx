@@ -13,49 +13,61 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    const handleAuthStateChange = async (_event: AuthChangeEvent, session: Session | null) => {
-      setLoading(true);
-      if (session?.user) {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error fetching profile:', error);
-          setUser(null);
-        } else {
-           const userPlan = (profile?.plan as Plan) || Plan.Trial;
-           const userRole = (profile?.role as 'admin' | 'user') || 'user';
-
-           const fullUser: User = {
-            ...session.user,
-            plan: userPlan,
-            role: userRole,
-            first_name: profile?.first_name,
-            last_name: profile?.last_name,
-          };
-          setUser(fullUser);
-        }
-      } else {
-        setUser(null);
+    const handleAuthStateChange = async (event: AuthChangeEvent, session: Session | null) => {
+      // Only block UI during initial session resolution
+      if (!initialized && event === 'INITIAL_SESSION') {
+        setLoading(true);
       }
-      setLoading(false);
+      try {
+        if (session?.user) {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching profile:', error);
+            setUser(null);
+          } else {
+            const userPlan = (profile?.plan as Plan) || Plan.Trial;
+            const userRole = (profile?.role as 'admin' | 'user') || 'user';
+            const fullUser: User = {
+              ...session.user,
+              plan: userPlan,
+              role: userRole,
+              first_name: profile?.first_name,
+              last_name: profile?.last_name,
+            };
+            setUser(fullUser);
+          }
+        } else {
+          setUser(null);
+        }
+      } finally {
+        if (!initialized && event === 'INITIAL_SESSION') {
+          setLoading(false);
+          setInitialized(true);
+        }
+      }
     };
-    
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       handleAuthStateChange('INITIAL_SESSION', session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthStateChange);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Do not block UI on subsequent auth events (e.g., token refresh, tab focus)
+      handleAuthStateChange(event, session);
+    });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [initialized]);
 
   const value = {
     user,
@@ -64,7 +76,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

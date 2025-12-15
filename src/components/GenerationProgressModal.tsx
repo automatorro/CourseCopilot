@@ -22,7 +22,7 @@ const extractModuleTitlesFromMarkdown = (md: string): string[] => {
     return titles;
 };
 
-const buildContextSummary = (acc: any[], language: string): { modules: string[]; durations: number[]; exercisesCount: number } => {
+const buildContextSummary = (acc: any[]): { modules: string[]; durations: number[]; exercisesCount: number } => {
     const structure = (acc || []).find((s: any) => s.step_type === TrainerStepType.Structure)?.content || '';
     const exercises = (acc || []).find((s: any) => s.step_type === TrainerStepType.Exercises)?.content || '';
     const modules = extractModuleTitlesFromMarkdown(String(structure || ''));
@@ -270,13 +270,16 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 [TrainerStepType.Slides]: [TrainerStepType.Structure, TrainerStepType.ExamplesAndStories],
                 [TrainerStepType.FacilitatorManual]: [TrainerStepType.Structure, TrainerStepType.TimingAndFlow, TrainerStepType.FacilitatorNotes, TrainerStepType.Exercises],
                 [TrainerStepType.ParticipantWorkbook]: [TrainerStepType.Structure, TrainerStepType.Exercises],
-                [TrainerStepType.VideoScripts]: [TrainerStepType.Structure]
+                [TrainerStepType.VideoScripts]: [TrainerStepType.Structure],
+                [TrainerStepType.CheatSheets]: [TrainerStepType.Structure, TrainerStepType.ParticipantWorkbook],
+                [TrainerStepType.Projects]: [TrainerStepType.Structure, TrainerStepType.Exercises],
+                [TrainerStepType.Tests]: [TrainerStepType.Structure, TrainerStepType.CourseObjectives]
             };
             const allowed = new Set(contextMap[step.type] || []);
             const prevForContext = (accumulatedContentRef.current || [])
                 .filter((s: any) => allowed.size === 0 || allowed.has(s.step_type))
                 .map((s: any) => ({ step_type: s.step_type, content: String(s.content || '').slice(0, 2000) }));
-            const summary = buildContextSummary(accumulatedContentRef.current || [], course.language || 'ro');
+            const summary = buildContextSummary(accumulatedContentRef.current || []);
             let attempt = 0;
             let data: any = null;
             let fnError: any = null;

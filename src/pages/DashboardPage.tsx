@@ -281,7 +281,7 @@ const DashboardPage: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">{t('dashboard.title')}</h1>
         <button
-          onClick={() => setIsChoiceOpen(true)
+          onClick={() => { console.log('[Dashboard] New Course button clicked'); setIsChoiceOpen(true); }
           }
           disabled={!canCreateCourse}
           className="btn-premium disabled:opacity-50"
@@ -358,6 +358,7 @@ const DashboardPage: React.FC = () => {
       )}
 
       {isChoiceOpen && (
+        console.log('[Dashboard] Choice modal open'),
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="card-premium w-full max-w-lg transform transition-all">
             <div className="flex justify-between items-center p-6 border-b dark:border-ink-700">

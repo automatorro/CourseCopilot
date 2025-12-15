@@ -1,5 +1,6 @@
 import React from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { I18nProvider } from './contexts/I18nContext';
@@ -46,9 +47,11 @@ function App() {
     <I18nProvider>
       <ThemeProvider>
         <AuthProvider>
-          <HashRouter>
-            <AppShell />
-          </HashRouter>
+          <HelmetProvider>
+            <BrowserRouter>
+              <AppShell />
+            </BrowserRouter>
+          </HelmetProvider>
         </AuthProvider>
       </ThemeProvider>
     </I18nProvider>

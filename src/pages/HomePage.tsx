@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { useLocation } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import PricingTable from '../components/PricingTable';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,6 +12,7 @@ const HomePage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [pricingError, setPricingError] = useState<string | null>(null);
+  const location = useLocation();
 
   const handleCTA = () => {
     navigate(user ? '/dashboard' : '/login');
@@ -17,6 +20,24 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="overflow-x-hidden">
+      <Helmet>
+        <title>CourseCopilot — AI Course Co-Pilot</title>
+        <meta name="description" content="Creează și publică cursuri cu ajutorul AI, rapid și profesional." />
+        <link rel="canonical" href={`https://coursecopilot.app${location.pathname}`} />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="CourseCopilot — AI Course Co-Pilot" />
+        <meta property="og:description" content="Platformă AI pentru generarea de cursuri și materiale educaționale." />
+        <meta property="og:url" content={`https://coursecopilot.app${location.pathname}`} />
+        <meta name="twitter:card" content="summary" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'CourseCopilot',
+            url: 'https://coursecopilot.app'
+          })}
+        </script>
+      </Helmet>
       {/* Hero Section */}
       <section className="relative text-center py-20 sm:py-32 animate-fade-in-up bg-hero-vibrant">
         {/* Decorative blobs */}

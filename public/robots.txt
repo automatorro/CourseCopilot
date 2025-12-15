@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /billing
+Disallow: /profile
+Disallow: /course/
+Sitemap: https://coursecopilot.app/sitemap.xml
