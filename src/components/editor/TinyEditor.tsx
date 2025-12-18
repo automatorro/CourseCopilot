@@ -111,12 +111,14 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
     } catch { }
     isLocalChangeRef.current = false;
   }, [refreshSignal]);
-  const scriptSrc = `https://cdn.tiny.cloud/1/${TINY_API_KEY || 'no-api-key'}/tinymce/6/tinymce.min.js`;
+
+  // Use local self-hosted script to avoid API key requirements and warnings
+  const scriptSrc = '/tinymce/tinymce.min.js';
+
   return (
     <div ref={containerRef} style={{ minHeight: editorHeight }}>
       <Editor
         tinymceScriptSrc={scriptSrc}
-        apiKey={TINY_API_KEY || 'no-api-key'}
         value={value}
         onInit={(_evt, editor) => { editorRef.current = editor; editor.setContent(value || ''); try { editor.selection?.setCursorLocation(); editor.selection?.collapse(false); } catch { } }}
         onEditorChange={(content) => {
