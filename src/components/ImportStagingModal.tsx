@@ -204,14 +204,14 @@ const ImportStagingModal: React.FC<Props> = ({ isOpen, onClose, step, onApplied,
              <div className="border-b dark:border-gray-700 p-2 flex items-center justify-between bg-gray-50 dark:bg-gray-800">
                <div className="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
                  <button
-                   onClick={() => setViewMode('diff')}
-                   className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-all ${viewMode === 'diff' ? 'bg-white dark:bg-gray-600 shadow-sm text-primary-600 dark:text-primary-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                   onClick={() => setViewMode('preview')}
+                   className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-all ${viewMode === 'preview' ? 'bg-white dark:bg-gray-600 shadow-sm text-primary-600 dark:text-primary-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                  >
                    <GitCompare size={14} /> Diff View
                  </button>
                  <button
-                   onClick={() => setViewMode('preview')}
-                   className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-all ${viewMode === 'preview' ? 'bg-white dark:bg-gray-600 shadow-sm text-primary-600 dark:text-primary-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                   onClick={() => setViewMode('diff')}
+                   className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-all ${viewMode === 'diff' ? 'bg-white dark:bg-gray-600 shadow-sm text-primary-600 dark:text-primary-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                  >
                    <FileText size={14} /> Full Preview
                  </button>
