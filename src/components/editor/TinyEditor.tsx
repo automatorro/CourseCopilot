@@ -10,8 +10,8 @@ export type TinyEditorProps = {
   onSelectionChange?: (text: string) => void;
 };
 
-const TINY_API_KEY: string = 'm77i9ej70f6eqmu2dr6dkyr93pd0ygz3l88ch2goovg45ks8';
-console.log('TinyMCE API Key loaded (hardcoded):', TINY_API_KEY);
+// Use environment variable or fallback to 'no-api-key' to avoid account errors if key is invalid
+const TINY_API_KEY: string = import.meta.env.VITE_TINY_API_KEY || 'no-api-key';
 
 const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal, onSelectionChange }) => {
   const { user } = useAuth();
