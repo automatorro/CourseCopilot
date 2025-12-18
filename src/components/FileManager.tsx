@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, File, Trash2, Loader2 } from 'lucide-react';
+import { Upload, FileText, File, Trash2, Loader2, ArrowRight } from 'lucide-react';
 import { CourseFile } from '../types';
 import { uploadCourseFile, getCourseFiles, deleteCourseFile } from '../services/fileStorageService';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,9 +7,10 @@ import { useToast } from '../contexts/ToastContext';
 
 interface FileManagerProps {
     courseId: string;
+    onUseFile?: (file: CourseFile) => void;
 }
 
-const FileManager: React.FC<FileManagerProps> = ({ courseId }) => {
+const FileManager: React.FC<FileManagerProps> = ({ courseId, onUseFile }) => {
     const { user } = useAuth();
     const { showToast } = useToast();
     const [files, setFiles] = useState<CourseFile[]>([]);
@@ -172,18 +173,29 @@ const FileManager: React.FC<FileManagerProps> = ({ courseId }) => {
                                     </p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => handleDelete(file.id)}
-                                disabled={deletingId === file.id}
-                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
-                                title="Delete file"
-                            >
-                                {deletingId === file.id ? (
-                                    <Loader2 className="animate-spin" size={16} />
-                                ) : (
-                                    <Trash2 size={16} />
+                            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                                {onUseFile && (
+                                    <button
+                                        onClick={() => onUseFile(file)}
+                                        className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                                        title="Use in editor"
+                                    >
+                                        <ArrowRight size={16} />
+                                    </button>
                                 )}
-                            </button>
+                                <button
+                                    onClick={() => handleDelete(file.id)}
+                                    disabled={deletingId === file.id}
+                                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Delete file"
+                                >
+                                    {deletingId === file.id ? (
+                                        <Loader2 className="animate-spin" size={16} />
+                                    ) : (
+                                        <Trash2 size={16} />
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>

@@ -9,7 +9,7 @@ import { Course, CourseStep, CourseBlueprint } from '../types';
 
 import { refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
-import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo, Upload } from 'lucide-react';
+import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo, Upload, Replace } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
 import { exportCourseAsZip, exportCourseAsPptx, exportCourseAsPdf, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
@@ -106,7 +106,17 @@ const CourseWorkspacePage: React.FC = () => {
   const { showToast } = useToast();
   const [course, setCourse] = useState<Course | null>(null);
   const [userCourses, setUserCourses] = useState<Array<{ id: string; title: string }>>([]);
-  const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [activeStepIndex, setActiveStepIndex] = useState(() => {
+    if (!id) return 0;
+    const saved = sessionStorage.getItem(`course_tab_${id}`);
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  useEffect(() => {
+    if (id) {
+      sessionStorage.setItem(`course_tab_${id}`, activeStepIndex.toString());
+    }
+  }, [activeStepIndex, id]);
   const [isGenerating] = useState(false);
   const [isProposingChanges, setIsProposingChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -152,6 +162,10 @@ const CourseWorkspacePage: React.FC = () => {
   const [localImageError, setLocalImageError] = useState<string | null>(null);
   const [showGenerationModal, setShowGenerationModal] = useState(false);
   const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
+  const [lastUndoSnapshot, setLastUndoSnapshot] = useState<{ stepId: string; content: string } | null>(null);
+  
+  // New state for staging remote files
+  const [stagingFile, setStagingFile] = useState<{ url: string; type: string; name: string } | null>(null);
 
   const resolveTokensForPreview = useCallback((md: string) => {
     return md.replace(/!\[([^\]]*)\]\(@img\{([^}]+)\}\)/g, (_m, alt, id) => {
@@ -1338,7 +1352,17 @@ const CourseWorkspacePage: React.FC = () => {
 
         {/* Knowledge Base / Reference Materials */}
         <div className="mb-6">
-          <FileManager courseId={course.id} />
+          <FileManager 
+            courseId={course.id}
+            onUseFile={(file) => {
+              setStagingFile({
+                  url: file.file_url,
+                  type: file.file_type,
+                  name: file.filename
+              });
+              setShowImportModal(true);
+            }}
+          />
         </div>
 
         <nav>
@@ -1548,6 +1572,36 @@ const CourseWorkspacePage: React.FC = () => {
                   {t('course.saveChanges')}
                 </button>
               )}
+              {lastUndoSnapshot && lastUndoSnapshot.stepId === currentStep.id && (
+                <button
+                  onClick={async () => {
+                    if (!course) return;
+                    setIsSaving(true);
+                    const { error } = await supabase.from('course_steps').update({ content: lastUndoSnapshot.content }).eq('id', currentStep.id);
+                    if (error) {
+                      showToast('Nu s-a putut anula importul.', 'error');
+                      setIsSaving(false);
+                      return;
+                    }
+                    // Refresh
+                    const updatedCourseData = await fetchCourseData();
+                    if (updatedCourseData) {
+                      setCourse(updatedCourseData);
+                      const updatedStep = (updatedCourseData.steps || []).find((s: CourseStep) => s.id === currentStep.id);
+                      if (updatedStep) {
+                         const html = marked.parse(updatedStep.content || '', { breaks: true }) as string;
+                         setEditedContent(html);
+                      }
+                    }
+                    setLastUndoSnapshot(null);
+                    setIsSaving(false);
+                    showToast('Import anulat. Conținut restaurat.', 'success');
+                  }}
+                  className="px-4 py-2 rounded-md text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 flex items-center gap-2"
+                >
+                  <Replace size={14} className="rotate-180" /> Anulează Import
+                </button>
+              )}
               {!currentStep.is_completed && (
                 <button
                   onClick={() => handleSaveChanges(true)}
@@ -1572,9 +1626,15 @@ const CourseWorkspacePage: React.FC = () => {
       {showImportModal && (
         <ImportStagingModal
           isOpen={showImportModal}
-          onClose={() => setShowImportModal(false)}
+          onClose={() => {
+              setShowImportModal(false);
+              setStagingFile(null);
+          }}
           step={currentStep}
-          onApplied={async () => {
+          initialFileUrl={stagingFile?.url}
+          initialFileType={stagingFile?.type}
+          initialFileName={stagingFile?.name}
+          onApplied={async (oldContent: string) => {
             const updatedCourseData = await fetchCourseData();
             if (updatedCourseData) {
               setCourse(updatedCourseData);
@@ -1584,6 +1644,8 @@ const CourseWorkspacePage: React.FC = () => {
                 setEditedContent(html);
               }
             }
+            setLastUndoSnapshot({ stepId: currentStep.id, content: oldContent });
+            showToast('Import aplicat. Poți anula modificarea folosind butonul roșu de sus.', 'success');
           }}
         />
       )}
@@ -1848,7 +1910,18 @@ const CourseWorkspacePage: React.FC = () => {
                     {t('course.helpModal.open')}
                   </button>
                 </div>
-                <FileManager courseId={course.id} />
+                <FileManager 
+                    courseId={course.id} 
+                    onUseFile={(file) => {
+                        setStagingFile({
+                            url: file.file_url,
+                            type: file.file_type,
+                            name: file.filename
+                        });
+                        setShowImportModal(true);
+                        setIsSidebarOpen(false); // Close sidebar on mobile if open
+                    }}
+                />
               </div>
 
               <nav>

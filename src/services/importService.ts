@@ -2,13 +2,48 @@ import TurndownService from 'turndown';
 import { supabase } from './supabaseClient';
 
 async function parseDocx(arrayBuffer: ArrayBuffer): Promise<string> {
-  type MammothModule = { convertToHtml: (args: { arrayBuffer: ArrayBuffer }) => Promise<{ value?: string }> };
-  const mammothLib = (await import('mammoth')) as unknown as MammothModule;
-  const result = await mammothLib.convertToHtml({ arrayBuffer });
-  const html: string = result.value || '';
-  const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-  td.keep(['img']);
-  return td.turndown(html);
+  try {
+    const mammothModule = await import('mammoth');
+    // Handle both default export and named export for Vite/Browser compatibility
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mammoth = (mammothModule as any).default || mammothModule;
+
+    if (!mammoth || typeof mammoth.convertToHtml !== 'function') {
+      console.error('Mammoth library not loaded correctly:', mammothModule);
+      throw new Error('Internal error: DOCX parser not loaded.');
+    }
+
+    // Polyfill Buffer for Mammoth if missing (Browser environment)
+    if (typeof window !== 'undefined' && !('Buffer' in window)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).Buffer = (await import('buffer')).Buffer;
+    }
+
+    const result = await mammoth.convertToHtml({ arrayBuffer });
+    
+    if (result.messages && result.messages.length > 0) {
+      console.log('Mammoth messages:', result.messages);
+    }
+
+    const html: string = result.value || '';
+    
+    if (!html) {
+      console.warn('Mammoth extracted empty content from DOCX.');
+      return '';
+    }
+
+    const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+    td.keep(['img']);
+    // Add GitHub Flavored Markdown support for tables
+    const turndownPluginGfm = await import('turndown-plugin-gfm');
+    const gfm = turndownPluginGfm.gfm || turndownPluginGfm;
+    td.use(gfm);
+
+    return td.turndown(html);
+  } catch (err) {
+    console.error('Error parsing DOCX:', err);
+    throw new Error('Failed to parse DOCX file.');
+  }
 }
 
 async function parsePdf(arrayBuffer: ArrayBuffer): Promise<string> {
@@ -70,6 +105,19 @@ export async function normalizeFileToMarkdown(file: File): Promise<{ ok: boolean
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg || 'Failed to process file' };
+  }
+}
+
+export async function normalizeUrlToMarkdown(url: string, fileType: string): Promise<{ ok: boolean; markdown?: string; error?: string }> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch file');
+    const blob = await response.blob();
+    const file = new File([blob], `temp.${fileType}`, { type: blob.type });
+    return normalizeFileToMarkdown(file);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg || 'Failed to process file from URL' };
   }
 }
 

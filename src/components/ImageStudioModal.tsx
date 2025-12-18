@@ -41,7 +41,7 @@ const ImageStudioModal: React.FC<ImageStudioModalProps> = ({ onClose, onInsert }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
       <div className="w-[95%] max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-xl ring-1 ring-black/5 p-4 sm:p-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Image Studio</h2>

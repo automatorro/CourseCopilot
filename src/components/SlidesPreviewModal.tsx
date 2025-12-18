@@ -195,7 +195,7 @@ const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplyS
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
       <div className="w-[95vw] max-w-6xl bg-white dark:bg-gray-800 rounded-2xl shadow-xl ring-1 ring-black/5 flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
           <div>
