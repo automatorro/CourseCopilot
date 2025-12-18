@@ -57,7 +57,7 @@ async function parsePdf(arrayBuffer: ArrayBuffer): Promise<string> {
     getDocument: (args: { data: ArrayBuffer }) => { promise: Promise<PdfDocument> };
   };
   const pdfjsLib = (await import('pdfjs-dist')) as unknown as PdfJsModule;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js';
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   let fullText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
