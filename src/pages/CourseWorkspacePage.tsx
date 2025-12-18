@@ -1634,14 +1634,32 @@ const CourseWorkspacePage: React.FC = () => {
           initialFileUrl={stagingFile?.url}
           initialFileType={stagingFile?.type}
           initialFileName={stagingFile?.name}
-          onApplied={async (oldContent: string) => {
+          onApplied={async (oldContent: string, newContent: string) => {
+            // Optimistic update for immediate feedback
+            const html = marked.parse(newContent, { breaks: true }) as string;
+            setEditedContent(html);
+
+            // Update local course state to prevent revert on re-render
+            if (course) {
+               setCourse(prev => {
+                   if (!prev) return null;
+                   const updatedSteps = (prev.steps || []).map(s => 
+                       s.id === currentStep.id ? { ...s, content: newContent } : s
+                   );
+                   return { ...prev, steps: updatedSteps };
+               });
+            }
+
             const updatedCourseData = await fetchCourseData();
             if (updatedCourseData) {
               setCourse(updatedCourseData);
               const updatedStep = (updatedCourseData.steps || []).find((s: CourseStep) => s.id === currentStep.id);
               if (updatedStep) {
-                const html = marked.parse(updatedStep.content || '', { breaks: true }) as string;
-                setEditedContent(html);
+                const serverHtml = marked.parse(updatedStep.content || '', { breaks: true }) as string;
+                // Only update if significantly different to avoid cursor jumps if user started typing
+                if (serverHtml !== html) {
+                    setEditedContent(serverHtml);
+                }
               }
             }
             setLastUndoSnapshot({ stepId: currentStep.id, content: oldContent });
