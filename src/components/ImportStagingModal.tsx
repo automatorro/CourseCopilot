@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, X, Loader2, AlertTriangle, FileText, Replace, GitCompare, LayoutList, ArrowRight } from 'lucide-react';
+import { Upload, X, Loader2, AlertTriangle, FileText, Replace, GitCompare, LayoutList, ChevronRight } from 'lucide-react';
 import { CourseStep } from '../types';
 import MarkdownPreview from './MarkdownPreview';
 import { normalizeFileToMarkdown, normalizeUrlToMarkdown, applyImportToStep } from '../services/importService';
