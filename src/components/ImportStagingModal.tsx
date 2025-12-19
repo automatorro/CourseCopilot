@@ -9,7 +9,7 @@ type Props = {
   isOpen: boolean; 
   onClose: () => void; 
   step: CourseStep; 
-  onApplied: (oldContent: string) => void;
+  onApplied: (oldContent: string, newContent: string) => void;
   initialFileUrl?: string;
   initialFileType?: string;
   initialFileName?: string;
@@ -96,10 +96,11 @@ const ImportStagingModal: React.FC<Props> = ({ isOpen, onClose, step, onApplied,
     if (!markdown.trim()) { setError('Conținutul importat este gol'); return; }
     setImporting(true);
     const oldContent = step.content || '';
+    const nextContent = mode === 'replace' ? markdown : `${oldContent}\n\n${markdown}`;
     const res = await applyImportToStep(step.id, mode, markdown, oldContent);
     setImporting(false);
     if (!res.ok) { setError(res.error || 'Aplicarea importului a eșuat'); return; }
-    onApplied(oldContent);
+    onApplied(oldContent, nextContent);
     onClose();
   };
 
@@ -110,7 +111,7 @@ const ImportStagingModal: React.FC<Props> = ({ isOpen, onClose, step, onApplied,
           <div className="flex items-center gap-2">
             <FileText size={20} className="text-primary-600" />
             <h2 className="text-lg font-bold">Import Staging</h2>
-            <div className="h-4 w-[1px] bg-gray-300 dark:bg-gray-600 mx-2" />
+            <ChevronRight className="text-gray-400 mx-2" size={20} />
             <span className="text-sm text-gray-500 font-medium">Scope: {step.title_key}</span>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Închide">

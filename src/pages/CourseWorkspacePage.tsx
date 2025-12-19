@@ -1354,9 +1354,18 @@ const CourseWorkspacePage: React.FC = () => {
         <div className="mb-6">
           <FileManager 
             courseId={course.id}
-            onUseFile={(file) => {
+            onUseFile={async (file) => {
+              let url = '';
+              try {
+                  // Generate signed URL for the file
+                  const { data } = await supabase.storage.from('course-files').createSignedUrl(file.storage_path, 3600);
+                  url = data?.signedUrl || '';
+              } catch (e) {
+                  console.error('Error generating signed url', e);
+              }
+
               setStagingFile({
-                  url: file.file_url,
+                  url: url,
                   type: file.file_type,
                   name: file.filename
               });
@@ -1930,9 +1939,17 @@ const CourseWorkspacePage: React.FC = () => {
                 </div>
                 <FileManager 
                     courseId={course.id} 
-                    onUseFile={(file) => {
+                    onUseFile={async (file) => {
+                        let url = '';
+                        try {
+                            const { data } = await supabase.storage.from('course-files').createSignedUrl(file.storage_path, 3600);
+                            url = data?.signedUrl || '';
+                        } catch (e) {
+                            console.error('Error generating signed url', e);
+                        }
+
                         setStagingFile({
-                            url: file.file_url,
+                            url: url,
                             type: file.file_type,
                             name: file.filename
                         });
