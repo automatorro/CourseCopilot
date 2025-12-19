@@ -1659,15 +1659,25 @@ const CourseWorkspacePage: React.FC = () => {
                });
             }
 
+            // Small delay to allow DB propagation
+            await new Promise(r => setTimeout(r, 500));
+
             const updatedCourseData = await fetchCourseData();
             if (updatedCourseData) {
               setCourse(updatedCourseData);
               const updatedStep = (updatedCourseData.steps || []).find((s: CourseStep) => s.id === currentStep.id);
               if (updatedStep) {
-                const serverHtml = marked.parse(updatedStep.content || '', { breaks: true }) as string;
-                // Only update if significantly different to avoid cursor jumps if user started typing
-                if (serverHtml !== html) {
-                    setEditedContent(serverHtml);
+                const serverContent = updatedStep.content || '';
+                
+                // Protection against stale reads: if server returns old content, ignore it
+                if (serverContent === oldContent && newContent !== oldContent) {
+                   console.warn('[Import] Server returned stale content. Keeping optimistic update.');
+                } else {
+                   const serverHtml = marked.parse(serverContent, { breaks: true }) as string;
+                   // Only update if significantly different to avoid cursor jumps if user started typing
+                   if (serverHtml !== html) {
+                       setEditedContent(serverHtml);
+                   }
                 }
               }
             }
