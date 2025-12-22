@@ -422,22 +422,38 @@ const CourseWorkspacePage: React.FC = () => {
     localStorage.setItem('hasSeenWorkspaceHelp', 'true');
   };
 
+  // Ref to track if initial load happened to prevent step jumping
+  const initialLoadDone = useRef(false);
+  // Ref to track if user has manually changed steps (to prevent auto-reset)
+  const userHasInteractedRef = useRef(false);
+
   useEffect(() => {
     let isMounted = true;
     const loadCourse = async () => {
-      setIsLoading(true);
+      // Avoid showing global loading spinner on re-fetches to prevent UI flickering
+      if (!initialLoadDone.current) setIsLoading(true);
+      
       const courseData = await fetchCourseData();
       if (isMounted && courseData) {
         setCourse(courseData);
-        const stepsArr = courseData.steps ?? [];
-        const firstIncompleteStep = stepsArr.findIndex((s: CourseStep) => !s.is_completed);
-        setActiveStepIndex(firstIncompleteStep >= 0 ? firstIncompleteStep : 0);
+        
+        // Only set activeStepIndex on FIRST load and if user hasn't interacted
+        if (!initialLoadDone.current && !userHasInteractedRef.current) {
+           const stepsArr = courseData.steps ?? [];
+           const firstIncompleteStep = stepsArr.findIndex((s: CourseStep) => !s.is_completed);
+           
+           // Respect session storage if available, otherwise default to first incomplete
+           if (!id || !sessionStorage.getItem(`course_tab_${id}`)) {
+               setActiveStepIndex(firstIncompleteStep >= 0 ? firstIncompleteStep : 0);
+           }
+           initialLoadDone.current = true;
+        }
       }
       if (isMounted) setIsLoading(false);
     };
     loadCourse();
     return () => { isMounted = false; };
-  }, [fetchCourseData]);
+  }, [fetchCourseData, id]);
 
   // Phase 1.4: Routing logic for intelligent onboarding
   useEffect(() => {
@@ -690,13 +706,17 @@ const CourseWorkspacePage: React.FC = () => {
     } catch (e) { console.warn('Validation check failed', e); }
 
     // Create a version snapshot of the NEW content we are about to save
-    await createStepVersion(
+    const versionRes = await createStepVersion(
         course.id,
         currentStep.id,
         processedContent,
         'manual_edit',
         `Manual Save`
-    ).catch(e => console.warn('Version creation failed', e));
+    );
+    if (!versionRes.ok) {
+        console.warn('Version creation failed:', versionRes.error);
+        // Optional: showToast('Warning: Version history snapshot failed.', 'info');
+    }
 
     const stepUpdatePayload: { content: string, is_completed?: boolean } = {
       content: processedContent
@@ -743,6 +763,7 @@ const CourseWorkspacePage: React.FC = () => {
 
     if (isCompletingStep && activeStepIndex < course.steps.length - 1) {
       setActiveStepIndex((prev: number) => prev + 1);
+      userHasInteractedRef.current = true;
     }
     setIsSaving(false);
   };
@@ -1391,7 +1412,7 @@ const CourseWorkspacePage: React.FC = () => {
             {(course.steps ?? []).map((step: CourseStep, index: number) => (
               <li key={step.id || `${index}-${step.title_key}`}>
                 <button
-                  onClick={() => setActiveStepIndex(index)}
+                  onClick={() => { setActiveStepIndex(index); userHasInteractedRef.current = true; }}
                   disabled={index > 0 && !((course.steps ?? [])[index - 1]?.is_completed)}
                   className={`w-full text-left p-3 my-1 rounded-lg flex items-center gap-3 transition-colors ${activeStepIndex === index
                     ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
@@ -1691,6 +1712,12 @@ const CourseWorkspacePage: React.FC = () => {
             const html = marked.parse(newContent, { breaks: true }) as string;
             setEditedContent(html);
 
+            // FIX: Update autosave immediately to prevent revert by useEffect when course updates
+            if (course && currentStep) {
+                const key = `autosave:${course.id}:${currentStep.id}`;
+                localStorage.setItem(key, html);
+            }
+
             // Update local course state to prevent revert on re-render
             if (course) {
                setCourse(prev => {
@@ -1703,31 +1730,27 @@ const CourseWorkspacePage: React.FC = () => {
             }
 
             // Small delay to allow DB propagation
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 800));
 
             const updatedCourseData = await fetchCourseData();
             if (updatedCourseData) {
+              // Fix: Patch stale content if server hasn't updated yet
+              const freshStep = (updatedCourseData.steps || []).find(s => s.id === currentStep.id);
+              if (freshStep) {
+                  const serverContent = freshStep.content || '';
+                  if (serverContent === oldContent && newContent !== oldContent) {
+                      console.warn('[Import] Server returned stale content. Patching with local content.');
+                      freshStep.content = newContent; // Patch local object
+                  }
+              }
+
               setCourse(updatedCourseData);
+              
               // Ensure we stay on the same step index
-              const currentStepIndex = (course?.steps || []).findIndex(s => s.id === currentStep.id);
+              const currentStepIndex = (updatedCourseData.steps || []).findIndex(s => s.id === currentStep.id);
               if (currentStepIndex !== -1) {
                   setActiveStepIndex(currentStepIndex);
-              }
-              
-              const updatedStep = (updatedCourseData.steps || []).find((s: CourseStep) => s.id === currentStep.id);
-              if (updatedStep) {
-                const serverContent = updatedStep.content || '';
-                
-                // Protection against stale reads: if server returns old content, ignore it
-                if (serverContent === oldContent && newContent !== oldContent) {
-                   console.warn('[Import] Server returned stale content. Keeping optimistic update.');
-                } else {
-                   const serverHtml = marked.parse(serverContent, { breaks: true }) as string;
-                   // Only update if significantly different to avoid cursor jumps if user started typing
-                   if (serverHtml !== html) {
-                       setEditedContent(serverHtml);
-                   }
-                }
+                  userHasInteractedRef.current = true; // Mark as interacted to prevent loadCourse reset
               }
             }
             setLastUndoSnapshot({ stepId: currentStep.id, content: oldContent });

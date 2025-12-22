@@ -22,6 +22,8 @@ export async function createStepVersion(
     if (maxVer) {
       nextVersion = maxVer.version_number + 1;
     }
+    
+    console.log('[Versioning] Creating version', nextVersion, 'for step', stepId);
 
     // 2. Insert new version
     const { data: user } = await supabase.auth.getUser();
@@ -51,6 +53,7 @@ export async function createStepVersion(
 }
 
 export async function getStepVersions(stepId: string): Promise<CourseVersion[]> {
+  console.log('[Versioning] Fetching versions for step:', stepId);
   const { data, error } = await supabase
     .from('course_versions')
     .select('*')
@@ -61,5 +64,6 @@ export async function getStepVersions(stepId: string): Promise<CourseVersion[]> 
     console.error('Error fetching versions:', error);
     return [];
   }
+  console.log('[Versioning] Found versions:', data?.length);
   return data as CourseVersion[];
 }
