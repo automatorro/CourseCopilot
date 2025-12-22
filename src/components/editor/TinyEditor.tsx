@@ -17,25 +17,6 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<any>(null);
   const isLocalChangeRef = useRef<boolean>(false);
-  const [editorHeight, setEditorHeight] = useState<number>(520);
-
-  useEffect(() => {
-    const calc = () => {
-      const top = containerRef.current?.getBoundingClientRect().top ?? 0;
-      const actions = document.getElementById('workspace-actions') || document.getElementById('mobile-actions-bar');
-      const actionsH = actions ? actions.getBoundingClientRect().height : 0;
-      const available = Math.max(320, Math.floor(window.innerHeight - top - actionsH - 24));
-      setEditorHeight(available);
-    };
-    calc();
-    // Use a small delay to ensure layout is settled
-    const timer = setTimeout(calc, 100);
-    window.addEventListener('resize', calc);
-    return () => {
-      window.removeEventListener('resize', calc);
-      clearTimeout(timer);
-    };
-  }, []);
 
   const initConfig = useMemo(() => ({
     menubar: false,
@@ -46,18 +27,17 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
       'lists',
       'link',
       'image',
-      'autoresize',
     ],
     toolbar:
       'undo redo | bold italic underline | blocks | bullist numlist | link image',
     block_formats: 'Paragraph=p; Heading 1=h1; Heading 2=h2',
     branding: false,
-    statusbar: true,
+    statusbar: false,
     resize: false,
-    // Disable JS sticky to rely on CSS sticky for reliable scrolling inside custom container
+    height: '100%',
     toolbar_sticky: false,
-    content_style: 'html{scroll-padding-top:calc(var(--editor-header-h,60px) + var(--editor-tabs-h,48px) + 8px);} body{padding-bottom:240px;}',
-    autoresize_bottom_margin: 240,
+    toolbar_mode: 'sliding',
+    content_style: 'body { font-family:Inter,sans-serif; font-size:16px; line-height:1.6; color:#1f2937; padding:20px; } html{scroll-padding-top:100px;}',
     paste_data_images: true,
     images_upload_handler: async (blobInfo: any) => {
       try {
@@ -118,7 +98,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
   const scriptSrc = '/tinymce/tinymce.min.js';
 
   return (
-    <div ref={containerRef} style={{ minHeight: editorHeight }}>
+    <div ref={containerRef} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Editor
         tinymceScriptSrc={scriptSrc}
         value={value}

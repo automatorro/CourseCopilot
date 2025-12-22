@@ -9,7 +9,7 @@ import { Course, CourseStep, CourseBlueprint } from '../types';
 
 import { refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
-import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo, Upload, Replace, History } from 'lucide-react';
+import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ArrowRight, ListTodo, Upload, Replace, History, PanelLeft } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
 import { exportCourseAsZip, exportCourseAsPptx, exportCourseAsPdf, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
@@ -1431,53 +1431,55 @@ const CourseWorkspacePage: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 flex flex-col p-6 lg:p-10 pb-24 sm:pb-10">
         <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
-          <div id="main-scroll-container" className="flex-1 overflow-y-auto relative scroll-container">
-            <div className="editor-header-sticky p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center">
+          <div id="main-scroll-container" className="flex-1 overflow-y-auto relative scroll-container flex flex-col">
+            <div className="editor-header-sticky p-4 sm:p-3 border-b dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800 z-10 sticky top-0">
               <button
                 onClick={() => window.location.href = '/#/dashboard'}
-                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mr-2"
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mr-4 text-gray-500 hover:text-gray-900 dark:text-gray-400"
                 title="Înapoi la cursurile mele"
                 aria-label="Înapoi la dashboard"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={20} />
               </button>
-              <button className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setIsSidebarOpen(true)} aria-label="Deschide pașii">
-                <ListTodo size={18} />
+              <button className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 mr-2" onClick={() => setIsSidebarOpen(true)} aria-label="Deschide pașii">
+                <PanelLeft size={20} className="text-primary-600 dark:text-primary-400" />
               </button>
-              <div className="flex-1 flex items-center justify-between gap-3">
-                <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2">
-                  {t(currentStep.title_key)}
-                  {(localRefinements[(currentStep.id || `idx-${activeStepIndex}`)]) && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">Editare locală</span>
-                  )}
-                </h1>
-                <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center justify-between gap-4">
+                <div className="flex-1 flex justify-center px-4 overflow-hidden">
+                  <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2 truncate text-center">
+                    {t(currentStep.title_key)}
+                    {(localRefinements[(currentStep.id || `idx-${activeStepIndex}`)]) && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">Editare locală</span>
+                    )}
+                  </h1>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={() => setActiveStepIndex(i => Math.max(0, i - 1))}
                     disabled={activeStepIndex === 0}
-                    className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-                    title="Înapoi"
+                    className="p-2 rounded-md bg-gray-50 border hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700 disabled:opacity-30 transition-all text-gray-700 dark:text-gray-300"
+                    title="Pasul anterior"
                     aria-label="Pas anterior"
                   >
-                    ←
+                    <ArrowLeft size={16} />
                   </button>
                   <button
                     onClick={() => setActiveStepIndex(i => Math.min((course?.steps?.length || 1) - 1, i + 1))}
                     disabled={activeStepIndex >= ((course?.steps?.length || 1) - 1)}
-                    className="px-3 py-2 rounded-md text-sm font-medium border hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-                    title="Înainte"
+                    className="p-2 rounded-md bg-gray-50 border hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700 disabled:opacity-30 transition-all text-gray-700 dark:text-gray-300"
+                    title="Pasul următor"
                     aria-label="Pas următor"
                   >
-                    →
+                    <ArrowRight size={16} />
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="editor-tabs-sticky px-4 bg-white dark:bg-gray-800 h-[48px] flex items-center border-b border-gray-200 dark:border-gray-700 mb-0 !mb-0 pb-0 !pb-0">
-              <nav className="flex space-x-4 h-full" aria-label="Tabs">
-                <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
-                <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
+            <div className="editor-tabs-sticky px-4 bg-white dark:bg-gray-800 h-[48px] flex items-center border-b border-gray-200 dark:border-gray-700 mb-0 !mb-0 pb-0 !pb-0 sticky z-20">
+              <nav className="flex space-x-6 h-full" aria-label="Tabs">
+                <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center transition-colors ${activeTab === 'editor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.editor')}</button>
+                <button onClick={() => setActiveTab('preview')} className={`whitespace-nowrap px-1 border-b-2 font-medium text-sm h-full flex items-center transition-colors ${activeTab === 'preview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600'}`}>{t('course.editor.tab.preview')}</button>
               </nav>
             </div>
 
@@ -1492,8 +1494,8 @@ const CourseWorkspacePage: React.FC = () => {
                 </div>
               )}
               {activeTab === 'editor' ? (
-                <div className="flex-1 flex flex-col">
-                  <div className="flex-1 relative min-h-0 pb-40 sm:pb-28">
+                <div className="flex-1 flex flex-col h-full">
+                  <div className="flex-1 relative min-h-0 overflow-hidden">
                     <TinyEditor
                       key={`${currentStep.id}-${activeTab}`}
                       value={editedContent}
@@ -1518,7 +1520,7 @@ const CourseWorkspacePage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="flex-1 min-h-0 pb-40 sm:pb-28">
+                <div className="flex-1 min-h-0 pb-40 sm:pb-28 overflow-y-auto">
                   {currentStep.title_key === 'course.steps.manual' || currentStep.title_key === 'course.steps.cheat_sheets' ? (
                     (() => {
                       const isHtml = looksLikeHtml(editedContent);
@@ -1537,13 +1539,13 @@ const CourseWorkspacePage: React.FC = () => {
             </div>
 
           </div>
-          <div id="workspace-actions" className="editor-actions-sticky hidden sm:flex p-6 border-t dark:border-gray-700 justify-between items-center">
-            <div className="flex gap-2 flex-wrap">
+          <div id="workspace-actions" className="editor-actions-sticky p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
               {isEnabled('editorGenerateButtonEnabled') && (
                 <button
                   onClick={handleGenerate}
                   disabled={!canGenerate}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
+                  className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:opacity-50"
                 >
                   <Sparkles size={16} />
                   {t('course.generate')}
@@ -1552,7 +1554,7 @@ const CourseWorkspacePage: React.FC = () => {
 
               {isEnabled('editorRefineButtonEnabled') && (
                 // INTENȚIONAT: Ascundem „Rafinează cu AI” în editor (desktop)
-                <div ref={aiActionsDesktopRef} className="relative">
+                <div ref={aiActionsDesktopRef} className="relative flex-shrink-0">
                   <button
                     onClick={() => setIsAiActionsOpen((prev: boolean) => !prev)}
                     disabled={!canRefine}
@@ -1582,40 +1584,40 @@ const CourseWorkspacePage: React.FC = () => {
                 <button
                   onClick={handleDownload}
                   disabled={isExporting}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                  className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
                 >
                   {isExporting ? <Loader2 className="animate-spin" size={16} /> : <DownloadCloud size={16} />}
-                  {t('export.title') || 'Exportă materialele'}
+                  {t('export.title') || 'Exportă'}
                 </button>
               )}
               <button
                   onClick={() => setShowImportModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                  className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
                   title="Importă document în acest pas"
                 >
                   <Upload size={16} /> Importă
                 </button>
                 <button
                   onClick={() => setShowHistoryModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                  className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
                   title="Istoric Versiuni"
                 >
                   <History size={16} />
                 </button>
               <button
                 onClick={() => setShowSlidesPreview(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
                 title="Previzualizează slide-urile"
               >
-                <Pilcrow size={16} /> Preview Slides
+                <Pilcrow size={16} /> Preview
               </button>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto justify-end">
               {currentStep.is_completed && hasUnsavedChanges && (
                 <button
                   onClick={() => handleSaveChanges(false)}
                   disabled={isBusy || isSaving}
-                  className="px-6 py-2 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                  className="flex-1 sm:flex-none justify-center px-6 py-2 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                   {t('course.saveChanges')}
@@ -1646,16 +1648,16 @@ const CourseWorkspacePage: React.FC = () => {
                     setIsSaving(false);
                     showToast('Import anulat. Conținut restaurat.', 'success');
                   }}
-                  className="px-4 py-2 rounded-md text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 flex items-center gap-2"
+                  className="flex-1 sm:flex-none justify-center px-4 py-2 rounded-md text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 flex items-center gap-2"
                 >
-                  <Replace size={14} className="rotate-180" /> Anulează Import
+                  <Replace size={14} className="rotate-180" /> Anulează
                 </button>
               )}
               {!currentStep.is_completed && (
                 <button
                   onClick={() => handleSaveChanges(true)}
                   disabled={isBusy || isSaving || !editedContent}
-                  className="px-6 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400"
+                  className="flex-1 sm:flex-none justify-center px-6 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400"
                 >
                   {isSaving && <Loader2 className="animate-spin inline-block mr-2" size={16} />}
                   {isLastStep ? t('course.saveAndContinue').replace(' & Continue', '') : t('course.saveAndContinue')}

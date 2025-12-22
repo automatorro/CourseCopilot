@@ -30,13 +30,11 @@
   overflow: hidden !important; /* Changed from visible */
 }
 
-/* New Scroll Container */
+/* New Scroll Container - FIXED MODE: No Scroll Here */
 #main-scroll-container {
   flex: 1 !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  overflow: hidden !important; /* CHANGED: Hidden to prevent page scroll */
   position: relative !important;
-  scroll-behavior: smooth !important;
   display: flex !important;
   flex-direction: column !important;
 }
@@ -51,8 +49,8 @@
 
 /* 1. Header - Sticky at Top */
 .editor-header-sticky {
-  position: sticky !important;
-  top: 0 !important;
+  /* No longer sticky, just block because container doesn't scroll */
+  position: relative !important;
   height: 64px !important; /* Enforced height for stacking calculation */
   z-index: 30 !important;
   background: white !important;
@@ -69,8 +67,8 @@
 
 /* 2. Tabs - Sticky below Header */
 .editor-tabs-sticky {
-  position: sticky !important;
-  top: 64px !important; /* Matches header height */
+  /* No longer sticky, just block */
+  position: relative !important;
   height: 48px !important; /* Enforced height */
   z-index: 20 !important;
   background: white !important;
@@ -82,19 +80,15 @@
   background: rgb(31 41 55) !important;
 }
 
-/* 3. Toolbar - Sticky below Tabs */
+/* 3. Toolbar - NOW STATIC inside TinyMCE */
 .tox .tox-editor-header {
-  position: -webkit-sticky !important;
-  position: sticky !important;
-  top: 112px !important; /* 64px (Header) + 48px (Tabs) */
-  z-index: 10 !important;
-  background: white !important;
+  /* Reset sticky hacks */
+  position: static !important; 
+  top: auto !important;
+  z-index: auto !important;
+  width: auto !important;
+  box-shadow: none !important;
   border-bottom: 1px solid #e5e7eb !important;
-  transform: none !important;
-  margin-top: 0 !important;
-  border-top: none !important;
-  padding-top: 0 !important;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05) !important;
 }
 
 /* Fix: Ensure no gap between tabs and editor content */
@@ -102,6 +96,24 @@
   border-top: none !important;
   margin-top: 0 !important;
   padding-top: 0 !important;
+  overflow: hidden !important; /* Ensure internal scroll works */
+  height: 100% !important; /* Force full height */
+}
+
+/* TinyMCE Sidebar/Edit Area - Allow internal scroll */
+.tox .tox-sidebar-wrap {
+    height: 100% !important;
+    overflow: hidden !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.tox .tox-edit-area {
+    flex: 1 !important;
+    overflow: hidden !important; /* Iframe handles scroll */
+}
+.tox .tox-edit-area__iframe {
+    height: 100% !important;
 }
 
 /* Sticky desktop action buttons - Now Static in Flex Layout */
@@ -143,16 +155,11 @@
 
 /* Ensure content area allows editor to grow */
 .editor-content-scrollable {
-  overflow-y: visible !important;
+  overflow-y: hidden !important; /* No scroll here, internal only */
   flex: 1 !important;
-  height: auto !important;
-}
-
-/* When TinyMCE activates sticky mode, it uses 'position: fixed'. 
-   We ensure it aligns perfectly with our tabs. */
-.tox .tox-tinymce--toolbar-sticky-on .tox-editor-header {
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05) !important;
-  margin-top: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 .dark .tox .tox-editor-header { 
@@ -160,19 +167,8 @@
   border-bottom-color: #374151 !important;
 }
 
-/* Ensure TinyMCE root allows sticky header to render correctly */
-.tox .tox-tinymce,
-.tox .tox-editor-container,
-.tox .tox-sidebar-wrap,
-.tox .tox-edit-area,
-.tox .tox-editor-header + div {
-  overflow: visible !important;
-  margin-top: 0 !important;
-  height: auto !important;
-  transform: none !important;
-}
-
 /* Specific fix for TinyMCE 6+ structure to ensure no overflow clipping */
 .tox-tinymce-aux {
     z-index: 9999 !important;
 }
+
