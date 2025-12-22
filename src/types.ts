@@ -156,3 +156,15 @@ export interface SlideModel {
   objective_links?: string[];
   section_id?: string;
 }
+
+export interface CourseVersion {
+  id: string;
+  course_id: string;
+  step_id?: string;
+  version_number: number;
+  content: string;
+  change_type: 'import' | 'manual_edit' | 'ai_generation' | 'restore';
+  change_description?: string;
+  created_at: string;
+  created_by: string;
+}

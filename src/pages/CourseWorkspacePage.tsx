@@ -9,7 +9,7 @@ import { Course, CourseStep, CourseBlueprint } from '../types';
 
 import { refineCourseContent } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
-import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo, Upload, Replace } from 'lucide-react';
+import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ListTodo, Upload, Replace, History } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
 import { exportCourseAsZip, exportCourseAsPptx, exportCourseAsPdf, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
@@ -29,6 +29,7 @@ import LearningObjectivesGenerator from '../components/LearningObjectivesGenerat
 import BlueprintReview from '../components/BlueprintReview';
 import FileManager from '../components/FileManager';
 import ImportStagingModal from '../components/ImportStagingModal';
+import VersionHistoryModal from '../components/VersionHistoryModal';
 import { GenerationProgressModal } from '../components/GenerationProgressModal';
 import { isEnabled } from '../config/featureFlags';
 import '../styles/sticky-editor.css';
@@ -123,6 +124,7 @@ const CourseWorkspacePage: React.FC = () => {
   const [isDownloading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSlidesPreview, setShowSlidesPreview] = useState(false);
   const [editedContent, setEditedContent] = useState('');
@@ -685,6 +687,15 @@ const CourseWorkspacePage: React.FC = () => {
         }
       }
     } catch (e) { console.warn('Validation check failed', e); }
+
+    // Create a version snapshot of the NEW content we are about to save
+    await createStepVersion(
+        course.id,
+        currentStep.id,
+        processedContent,
+        'manual_edit',
+        `Manual Save`
+    ).catch(e => console.warn('Version creation failed', e));
 
     const stepUpdatePayload: { content: string, is_completed?: boolean } = {
       content: processedContent
@@ -1556,12 +1567,19 @@ const CourseWorkspacePage: React.FC = () => {
                 </button>
               )}
               <button
-                onClick={() => setShowImportModal(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
-                title="Importă document în acest pas"
-              >
-                <Upload size={16} /> Importă
-              </button>
+                  onClick={() => setShowImportModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                  title="Importă document în acest pas"
+                >
+                  <Upload size={16} /> Importă
+                </button>
+                <button
+                  onClick={() => setShowHistoryModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+                  title="Istoric Versiuni"
+                >
+                  <History size={16} />
+                </button>
               <button
                 onClick={() => setShowSlidesPreview(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-ink-700 dark:text-white bg-white dark:bg-gray-700 border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -1632,6 +1650,30 @@ const CourseWorkspacePage: React.FC = () => {
         isExporting={isExporting}
         course={course}
       />
+      {showHistoryModal && (
+        <VersionHistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          stepId={currentStep.id}
+          courseId={course.id}
+          currentContent={editedContent}
+          onRestore={(content) => {
+            // Optimistic update
+            const html = marked.parse(content, { breaks: true }) as string;
+            setEditedContent(html);
+            
+            if (course) {
+              setCourse(prev => {
+                if (!prev) return null;
+                const updatedSteps = (prev.steps || []).map(s => 
+                  s.id === currentStep.id ? { ...s, content: content } : s
+                );
+                return { ...prev, steps: updatedSteps };
+              });
+            }
+          }}
+        />
+      )}
       {showImportModal && (
         <ImportStagingModal
           isOpen={showImportModal}
@@ -1665,6 +1707,12 @@ const CourseWorkspacePage: React.FC = () => {
             const updatedCourseData = await fetchCourseData();
             if (updatedCourseData) {
               setCourse(updatedCourseData);
+              // Ensure we stay on the same step index
+              const currentStepIndex = (course?.steps || []).findIndex(s => s.id === currentStep.id);
+              if (currentStepIndex !== -1) {
+                  setActiveStepIndex(currentStepIndex);
+              }
+              
               const updatedStep = (updatedCourseData.steps || []).find((s: CourseStep) => s.id === currentStep.id);
               if (updatedStep) {
                 const serverContent = updatedStep.content || '';

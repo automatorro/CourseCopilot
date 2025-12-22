@@ -3,6 +3,7 @@ import { Upload, X, Loader2, AlertTriangle, FileText, Replace, GitCompare, Layou
 import { CourseStep } from '../types';
 import MarkdownPreview from './MarkdownPreview';
 import { normalizeFileToMarkdown, normalizeUrlToMarkdown, applyImportToStep } from '../services/importService';
+import { createStepVersion } from '../services/versioningService';
 import { computeLineDiff, analyzeStructure, DiffChange } from '../lib/diffUtils';
 
 type Props = { 
@@ -97,6 +98,17 @@ const ImportStagingModal: React.FC<Props> = ({ isOpen, onClose, step, onApplied,
     setImporting(true);
     const oldContent = step.content || '';
     const nextContent = mode === 'replace' ? markdown : `${oldContent}\n\n${markdown}`;
+    
+    // 1. Create version snapshot of BEFORE state
+    await createStepVersion(
+        step.course_id, 
+        step.id, 
+        oldContent, 
+        'import', 
+        `Pre-import backup (${file?.name || 'clipboard'})`
+    );
+
+    // 2. Apply import
     const res = await applyImportToStep(step.id, mode, markdown, oldContent);
     setImporting(false);
     if (!res.ok) { setError(res.error || 'Aplicarea importului a eșuat'); return; }
