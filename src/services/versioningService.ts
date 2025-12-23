@@ -10,7 +10,7 @@ export async function createStepVersion(
 ): Promise<{ ok: boolean; error?: string; version?: CourseVersion }> {
   try {
     // 1. Get current max version number for this step
-    const { data: maxVer, error: maxError } = await supabase
+    const { data: maxVer } = await supabase
       .from('course_versions')
       .select('version_number')
       .eq('step_id', stepId)

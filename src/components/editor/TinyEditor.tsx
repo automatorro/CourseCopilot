@@ -107,7 +107,7 @@ const TinyEditor: React.FC<TinyEditorProps> = ({ value, onChange, refreshSignal,
           isLocalChangeRef.current = true;
           onChange(content || '');
         }}
-        init={initConfig}
+        init={initConfig as any}
       />
     </div>
   );
