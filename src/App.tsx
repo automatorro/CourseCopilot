@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { I18nProvider } from './contexts/I18nContext';
@@ -39,6 +40,7 @@ function App() {
           </Routes>
         </main>
         {!isWorkspaceRoute && <Footer />}
+        <SpeedInsights />
       </div>
     );
   };
