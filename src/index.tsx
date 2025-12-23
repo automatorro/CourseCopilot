@@ -51,6 +51,7 @@ const AppWrapper = () => {
         <ToastContext.Provider value={contextValue}>
             <InternalToastContext.Provider value={internalContextValue}>
                 <App />
+                <SpeedInsights />
                 <ToastContainer />
             </InternalToastContext.Provider>
         </ToastContext.Provider>
