@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Editor } from '@tinymce/tinymce-react';
 import { uploadEditorImageToSupabase } from '../../lib/editorImageUpload';
 import { useAuth } from '../../contexts/AuthContext';
