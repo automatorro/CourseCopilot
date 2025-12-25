@@ -375,7 +375,12 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                  
                  // Fallback to structure titles if blueprint missing
                  if ((!modulesToProcess || modulesToProcess.length === 0) && summary.modules.length > 0) {
-                      modulesToProcess = summary.modules.map((t: string) => ({ title: t, learning_objective: "See content." }));
+                      modulesToProcess = summary.modules.map((t: string, idx: number) => ({ 
+                          id: `generated-mod-${idx}`, 
+                          title: t, 
+                          learning_objective: "See content.",
+                          sections: [] 
+                      }));
                  }
 
                  if (modulesToProcess && modulesToProcess.length > 0) {
