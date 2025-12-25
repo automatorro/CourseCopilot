@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, AlertTriangle, CheckCircle, Wand2 } from 'lucide-react';
-import { Course, SlideArchetype, SlideModel } from '../types';
-import { getSlideModelsForPreview, getTemplateRules, validateSlide, normalizeSlide, getPedagogicWarnings } from '../services/exportService';
+import { Course, SlideModel } from '../types';
+import { getSlideModelsForPreview, getTemplateRules, validateSlide, getPedagogicWarnings } from '../services/exportService';
 
 type Props = { isOpen: boolean; onClose: () => void; course: Course; onApplySuggestion?: (s: string, targetTitle?: string) => void };
 
 const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplySuggestion }) => {
   const [models, setModels] = useState<SlideModel[]>([]);
-  const [fixed, setFixed] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -18,8 +17,6 @@ const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplyS
       .finally(() => setLoading(false));
   }, [isOpen, course]);
 
-  const issues = models.map(m => ({ m, ok: validateSlide(m, getTemplateRules(m.slide_type)) }));
-  const hasIssues = issues.some(i => !i.ok);
   const summary = useMemo(() => {
     let critical = 0, warn = 0, info = 0;
     models.forEach(m => {
@@ -32,13 +29,6 @@ const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplyS
     });
     return { critical, warn, info };
   }, [models]);
-
-  const currentSlideModel = models[currentSlideIndex];
-
-  const handleApplySuggestion = (slideIndex: number, suggestion: string) => {
-    onApplySuggestion(slideIndex, suggestion);
-    toast.success('Sugestie aplicată cu succes!');
-  };
 
   if (!isOpen) return null;
 
@@ -204,11 +194,6 @@ const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplyS
             models.map(m => (<Tile key={m.id} m={m}/>))
           )}
         </div>
-        {fixed && (
-          <div className="p-3 border-t dark:border-gray-700 text-xs text-green-700 dark:text-green-300 flex items-center gap-2">
-            <CheckCircle size={14}/> Normalizările au fost aplicate în previzualizare.
-          </div>
-        )}
       </div>
     </div>
   );
