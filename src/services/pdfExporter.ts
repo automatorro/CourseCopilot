@@ -28,6 +28,7 @@ const PDF_CONFIG = {
         text: '#1f2937',
         secondary: '#6b7280',
         light: '#9ca3af',
+        dark: '#111827',
     },
     spacing: {
         afterTitle: 10,
@@ -35,6 +36,11 @@ const PDF_CONFIG = {
         afterParagraph: 5,
         beforeSection: 12,
     },
+    fonts: {
+        regular: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf',
+        bold: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf',
+        main: 'Roboto'
+    }
 };
 
 // ============================================================================
@@ -56,6 +62,42 @@ interface ParsedElement {
 // ============================================================================
 
 /**
+ * Loads custom fonts for the PDF document
+ */
+async function loadFonts(doc: jsPDF): Promise<void> {
+    const loadFont = async (url: string, name: string, style: string) => {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Failed to fetch font: ${res.statusText}`);
+            const blob = await res.blob();
+            return new Promise<void>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const result = reader.result as string;
+                    const base64 = result.split(',')[1];
+                    if (base64) {
+                        doc.addFileToVFS(`${name}-${style}.ttf`, base64);
+                        doc.addFont(`${name}-${style}.ttf`, name, style);
+                        resolve();
+                    } else {
+                        reject(new Error('Failed to parse font data'));
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        } catch (e) {
+            console.warn(`Failed to load font ${name} ${style}:`, e);
+        }
+    };
+
+    await Promise.all([
+        loadFont(PDF_CONFIG.fonts.regular, PDF_CONFIG.fonts.main, 'normal'),
+        loadFont(PDF_CONFIG.fonts.bold, PDF_CONFIG.fonts.main, 'bold')
+    ]);
+}
+
+/**
  * Creates a new PDF document with default settings
  */
 function createPdfDocument(): jsPDF {
@@ -65,7 +107,7 @@ function createPdfDocument(): jsPDF {
         format: 'a4',
     });
 
-    // Set default font
+    // Set default font (will be overridden after loading custom fonts)
     doc.setFont('helvetica');
     doc.setFontSize(PDF_CONFIG.fontSize.body);
     doc.setTextColor(PDF_CONFIG.colors.text);
@@ -258,13 +300,25 @@ function parseMarkdown(markdown: string): ParsedElement[] {
  * Strips markdown formatting from text (bold, italic, code)
  */
 function stripMarkdownFormatting(text: string): string {
-    return text
+    let stripped = text
         .replace(/\*\*(.+?)\*\*/g, '$1') // Bold
         .replace(/\*(.+?)\*/g, '$1') // Italic
         .replace(/__(.+?)__/g, '$1') // Bold (alternative)
         .replace(/_(.+?)_/g, '$1') // Italic (alternative)
         .replace(/`(.+?)`/g, '$1') // Inline code
-        .replace(/\[(.+?)\]\(.+?\)/g, '$1'); // Links
+        .replace(/\[(.+?)\]\(.+?\)/g, '$1') // Links
+        .replace(/\\([*_`\[\]\\])/g, '$1'); // Unescape escaped characters
+
+    // Fix placeholders: convert [\\\\\\], [______], or [\_\_\_\_\_] to clean [______]
+    stripped = stripped.replace(/\[([\\_]+)\]/g, (match, content) => {
+        // If the content is just backslashes or mixed chars, replace with underscores
+        // We use a heuristic for length: if it looks escaped (has backslashes), 
+        // we might want to reduce length, but preserving length is safer for layout.
+        // Simple approach: replace all characters with underscores.
+        return '[' + '_'.repeat(content.length) + ']';
+    });
+
+    return stripped;
 }
 
 // ============================================================================
@@ -349,7 +403,7 @@ function addTitlePage(doc: jsPDF, course: Course): void {
 
     // Course title
     doc.setFontSize(PDF_CONFIG.fontSize.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(PDF_CONFIG.fonts.main, 'bold');
     doc.setTextColor(PDF_CONFIG.colors.primary);
 
     const titleLines = doc.splitTextToSize(course.title, PDF_CONFIG.contentWidth);
@@ -363,7 +417,7 @@ function addTitlePage(doc: jsPDF, course: Course): void {
     // Subject
     if (course.subject) {
         doc.setFontSize(PDF_CONFIG.fontSize.h2);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont(PDF_CONFIG.fonts.main, 'normal');
         doc.setTextColor(PDF_CONFIG.colors.secondary);
         doc.text(course.subject, centerX, y, { align: 'center' });
         y += 10;
@@ -406,7 +460,7 @@ function addTableOfContents(doc: jsPDF, course: Course): void {
 
     // TOC Title
     doc.setFontSize(PDF_CONFIG.fontSize.h1);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(PDF_CONFIG.fonts.main, 'bold');
     doc.setTextColor(PDF_CONFIG.colors.primary);
     doc.text('Table of Contents', PDF_CONFIG.margin, y);
 
@@ -414,7 +468,7 @@ function addTableOfContents(doc: jsPDF, course: Course): void {
 
     // List course steps
     doc.setFontSize(PDF_CONFIG.fontSize.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(PDF_CONFIG.fonts.main, 'normal');
     doc.setTextColor(PDF_CONFIG.colors.text);
 
     if (course.steps && course.steps.length > 0) {
@@ -459,7 +513,7 @@ async function renderMarkdownElements(
                 y = checkPageBreak(doc, y, fontSize * 2);
 
                 doc.setFontSize(fontSize);
-                doc.setFont('helvetica', 'bold');
+                doc.setFont(PDF_CONFIG.fonts.main, 'bold');
                 doc.setTextColor(PDF_CONFIG.colors.primary);
 
                 const headingText = stripMarkdownFormatting(element.content);
@@ -475,7 +529,7 @@ async function renderMarkdownElements(
 
             case 'paragraph': {
                 doc.setFontSize(PDF_CONFIG.fontSize.body);
-                doc.setFont('helvetica', 'normal');
+                doc.setFont(PDF_CONFIG.fonts.main, 'normal');
                 doc.setTextColor(PDF_CONFIG.colors.text);
 
                 const paragraphText = stripMarkdownFormatting(element.content);
@@ -493,7 +547,7 @@ async function renderMarkdownElements(
 
             case 'list': {
                 doc.setFontSize(PDF_CONFIG.fontSize.body);
-                doc.setFont('helvetica', 'normal');
+                doc.setFont(PDF_CONFIG.fonts.main, 'normal');
                 doc.setTextColor(PDF_CONFIG.colors.text);
 
                 element.items?.forEach((item, index) => {
@@ -527,7 +581,7 @@ async function renderMarkdownElements(
                 y = checkPageBreak(doc, y, 30);
 
                 doc.setFontSize(PDF_CONFIG.fontSize.body - 1);
-                doc.setFont('courier', 'normal');
+                doc.setFont(PDF_CONFIG.fonts.main, 'normal');
                 doc.setFillColor(245, 245, 245);
 
                 const codeLines = element.content.split('\n');
@@ -551,7 +605,7 @@ async function renderMarkdownElements(
                 });
 
                 y += PDF_CONFIG.spacing.afterParagraph + 3;
-                doc.setFont('helvetica', 'normal');
+                doc.setFont(PDF_CONFIG.fonts.main, 'normal');
                 break;
             }
 
@@ -594,7 +648,7 @@ async function addCourseContent(
 
         // Step title
         doc.setFontSize(PDF_CONFIG.fontSize.h1);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(PDF_CONFIG.fonts.main, 'bold');
         doc.setTextColor(PDF_CONFIG.colors.primary);
 
         const titleText = stripMarkdownFormatting(step.title_key);
@@ -626,6 +680,10 @@ export async function exportCourseAsPdf(course: Course): Promise<void> {
 
         // Create PDF document
         const doc = createPdfDocument();
+
+        // Load custom fonts
+        await loadFonts(doc);
+        doc.setFont(PDF_CONFIG.fonts.main);
 
         // Add title page
         addTitlePage(doc, course);

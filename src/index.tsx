@@ -4,6 +4,7 @@ import App from './App';
 import './index.css';
 import { ToastContext } from './contexts/ToastContext';
 import ToastContainer, { InternalToastContext } from './components/ToastContainer';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

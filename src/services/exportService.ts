@@ -1,5 +1,5 @@
 import PptxGenJS from 'pptxgenjs';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Header, ImageRun } from 'docx';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Header, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx';
 import JSZip from 'jszip';
 
 import { Course, CourseStep, SlideModel, SlideArchetype, SlideRules } from '../types';
@@ -776,49 +776,135 @@ const fetchImageBytes = async (url: string): Promise<Uint8Array | null> => {
     }
 };
 
-const buildDocxParagraphs = async (content: string): Promise<Paragraph[]> => {
-    const paragraphs: Paragraph[] = [];
+const parseTextToRuns = (text: string): TextRun[] => {
+    const runs: TextRun[] = [];
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    parts.forEach(part => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            runs.push(new TextRun({ text: part.slice(2, -2), bold: true }));
+        } else if (part) {
+            runs.push(new TextRun(part));
+        }
+    });
+    return runs;
+};
+
+const createDocxTable = (lines: string[]): Table | null => {
+    try {
+        const rows = lines.map(line => {
+            const content = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+            return content.split('|').map(c => c.trim());
+        });
+
+        if (rows.length < 2) return null;
+
+        const headers = rows[0];
+        const dataRows = rows.slice(2); // Skip separator row
+
+        const tableRows: TableRow[] = [];
+
+        // Header
+        tableRows.push(new TableRow({
+            tableHeader: true,
+            children: headers.map(h => new TableCell({
+                children: [new Paragraph({
+                    children: [new TextRun({ text: h, bold: true })],
+                    alignment: AlignmentType.CENTER
+                })],
+                shading: { fill: "F3F4F6" },
+                verticalAlign: "center",
+                borders: {
+                    top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+                }
+            }))
+        }));
+
+        // Body
+        dataRows.forEach(row => {
+            const cells = row.map(cellText => new TableCell({
+                children: [new Paragraph({ children: parseTextToRuns(cellText) })],
+                borders: {
+                    top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+                }
+            }));
+            tableRows.push(new TableRow({ children: cells }));
+        });
+
+        return new Table({
+            rows: tableRows,
+            width: { size: 100, type: WidthType.PERCENTAGE },
+        });
+    } catch (e) {
+        console.warn('Failed to parse table:', e);
+        return null;
+    }
+};
+
+const buildDocxParagraphs = async (content: string): Promise<(Paragraph | Table)[]> => {
+    const children: (Paragraph | Table)[] = [];
     const lines = normalizeMarkdownImages(content).split('\n');
     const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/;
 
-    for (const line of lines) {
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // Detect Table
+        if (trimmed.startsWith('|') && i + 1 < lines.length) {
+            const nextLine = lines[i + 1].trim();
+            if (nextLine.startsWith('|') && nextLine.includes('---')) {
+                const tableLines: string[] = [];
+                while (i < lines.length && lines[i].trim().startsWith('|')) {
+                    tableLines.push(lines[i]);
+                    i++;
+                }
+                const table = createDocxTable(tableLines);
+                if (table) {
+                    children.push(table);
+                } else {
+                    tableLines.forEach(l => children.push(new Paragraph({ text: l })));
+                }
+                continue;
+            }
+        }
+
         const match = line.match(imageRegex);
         if (match) {
             const alt = match[1] || '';
             const url = match[2];
             const bytes = await fetchImageBytes(url);
             if (bytes) {
-                paragraphs.push(new Paragraph({ children: [new ImageRun({ data: bytes, transformation: { width: 480, height: 360 } })] }));
+                children.push(new Paragraph({ children: [new ImageRun({ data: bytes, transformation: { width: 480, height: 360 } })] }));
             } else {
-                paragraphs.push(new Paragraph({ children: [new TextRun(`Image: ${alt}`)] }));
+                children.push(new Paragraph({ children: [new TextRun(`Image: ${alt}`)] }));
             }
+            i++;
             continue;
         }
 
         if (line.startsWith('# ')) {
-            paragraphs.push(new Paragraph({ text: line.substring(2), heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }));
+            children.push(new Paragraph({ text: line.substring(2), heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }));
         } else if (line.startsWith('## ')) {
-            paragraphs.push(new Paragraph({ text: line.substring(3), heading: HeadingLevel.HEADING_2 }));
+            children.push(new Paragraph({ text: line.substring(3), heading: HeadingLevel.HEADING_2 }));
         } else if (line.startsWith('### ')) {
-            paragraphs.push(new Paragraph({ text: line.substring(4), heading: HeadingLevel.HEADING_3 }));
+            children.push(new Paragraph({ text: line.substring(4), heading: HeadingLevel.HEADING_3 }));
         } else if (line.startsWith('* ') || line.startsWith('- ')) {
-            paragraphs.push(new Paragraph({ text: line.substring(2), bullet: { level: 0 } }));
-        } else if (line.trim() === '') {
-            paragraphs.push(new Paragraph({ text: '' }));
+            children.push(new Paragraph({ text: line.substring(2), bullet: { level: 0 } }));
+        } else if (trimmed === '') {
+            children.push(new Paragraph({ text: '' }));
         } else {
-            const runs: TextRun[] = [];
-            const parts = line.split(/(\*\*.*?\*\*)/g);
-            parts.forEach(part => {
-                if (part.startsWith('**') && part.endsWith('**')) {
-                    runs.push(new TextRun({ text: part.slice(2, -2), bold: true }));
-                } else if (part) {
-                    runs.push(new TextRun(part));
-                }
-            });
-            paragraphs.push(new Paragraph({ children: runs }));
+            children.push(new Paragraph({ children: parseTextToRuns(line) }));
         }
+        i++;
     }
-    return paragraphs;
+    return children;
 };
 
 const createDocx = async (step: CourseStep, courseTitle: string, stepTitle: string): Promise<Blob> => {

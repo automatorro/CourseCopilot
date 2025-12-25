@@ -770,15 +770,7 @@ const CourseWorkspacePage: React.FC = () => {
 
   const handleDownload = async () => {
     if (!course) return;
-    try {
-      const models = await getSlideModelsForPreview(course);
-      const hasCritical = models.some(m => (getPedagogicWarnings(m) || []).some(w => w.startsWith('[CRITICAL]')));
-      if (hasCritical) {
-        showToast('Există probleme critice în slide-uri. Rezolvă-le în Previzualizare înainte de export.', 'error');
-        setShowSlidesPreview(true);
-        return;
-      }
-    } catch (e) { void e; }
+    // Removed blocking check for critical issues to allow user to proceed
     setShowExportModal(true);
   };
 
@@ -786,14 +778,7 @@ const CourseWorkspacePage: React.FC = () => {
     if (!course) return;
     setIsExporting(true);
     try {
-      const models = await getSlideModelsForPreview(course);
-      const hasCritical = models.some(m => (getPedagogicWarnings(m) || []).some(w => w.startsWith('[CRITICAL]')));
-      if (hasCritical) {
-        showToast('Există probleme critice în slide-uri. Rezolvă-le în Previzualizare înainte de export.', 'error');
-        setShowSlidesPreview(true);
-        setIsExporting(false);
-        return;
-      }
+      // Removed blocking check for critical issues to allow user to proceed
       if (format === 'pptx') {
         await exportCourseAsPptx(course);
       } else if (format === 'pdf') {
@@ -1766,81 +1751,112 @@ const CourseWorkspacePage: React.FC = () => {
           onClose={() => setShowSlidesPreview(false)}
           course={course}
           onApplySuggestion={(s: string, targetTitle?: string) => {
+            const applyUpdate = (next: string, msg: string) => {
+                setEditedContent(next);
+                // Update local course state immediately to reflect changes in Preview
+                if (course && currentStep) {
+                    setCourse(prev => {
+                        if (!prev) return null;
+                        const updatedSteps = (prev.steps || []).map(step => 
+                            step.id === currentStep.id ? { ...step, content: next } : step
+                        );
+                        return { ...prev, steps: updatedSteps };
+                    });
+                }
+                // Do NOT close modal, allowing it to refresh
+                showToast(msg, 'success');
+            };
+
             const appendAtEnd = (text: string) => {
               const next = `${editedContent}${editedContent.endsWith('\n') ? '' : '\n\n'}${text}`;
-              setEditedContent(next);
-              setShowSlidesPreview(false);
-              setActiveTab('editor');
-              setTimeout(() => textareaRef.current?.focus(), 0);
-              showToast('Sugestie aplicată în editor.', 'success');
+              applyUpdate(next, 'Sugestie aplicată.');
             };
+
             const insertAtCursor = (text: string) => {
               const textarea = textareaRef.current;
               if (!textarea) { appendAtEnd(text); return; }
               const start = textarea.selectionStart;
               const end = textarea.selectionEnd;
               const next = `${editedContent.substring(0, start)}${text}${editedContent.substring(end)}`;
-              setEditedContent(next);
-              setShowSlidesPreview(false);
-              setActiveTab('editor');
-              setTimeout(() => textarea.focus(), 0);
-              showToast('Sugestie aplicată în editor.', 'success');
+              applyUpdate(next, 'Sugestie aplicată.');
             };
+            
+            // Shared logic to find section bounds
+            const findSectionBounds = (title?: string) => {
+               if (!title) return null;
+               const content = editedContent || '';
+               const lines = content.split('\n');
+               let offset = 0;
+               let startOffset: number | null = null;
+               let endOffset: number | null = null;
+               
+               // Helper to normalize strings for comparison
+               const norm = (s: string) => s.toLowerCase().trim().replace(/[*#]/g, '').replace(/^slide\s*\d+[:.]?\s*/i, '');
+               const target = norm(title);
+
+               for (let i = 0; i < lines.length; i++) {
+                 const line = lines[i];
+                 const trimmed = line.trim();
+                 // Check for headers or bold lines that look like titles
+                 const isHeading = /^#{1,6}\s+/.test(trimmed);
+                 const isBoldTitle = trimmed.startsWith('**') && trimmed.endsWith('**') && trimmed.length > 4;
+                 
+                 if (isHeading || isBoldTitle) {
+                     const lineContent = trimmed.replace(/^#{1,6}\s+/, '').replace(/^\*\*/, '').replace(/\*\*$/, '');
+                     const lineNorm = norm(lineContent);
+                     
+                     // Strict check: title must be contained in the line or vice versa
+                     if (lineNorm.includes(target) || target.includes(lineNorm)) {
+                         startOffset = offset;
+                         // Find end of section (next heading)
+                         for (let j = i + 1, off = offset + line.length + 1; j < lines.length; j++) {
+                             const ln = lines[j];
+                             const t2 = ln.trim();
+                             const isNextH = /^#{1,6}\s+/.test(t2) || (t2.startsWith('**') && t2.endsWith('**') && t2.length > 4);
+                             if (isNextH) { endOffset = off; break; }
+                             off += ln.length + 1;
+                         }
+                         if (endOffset === null) endOffset = content.length;
+                         break;
+                     }
+                 }
+                 offset += line.length + 1;
+               }
+               return { startOffset, endOffset };
+            };
+
             const insertIntoSectionByTitle = (text: string, title?: string) => {
-              if (!title) { insertAtCursor(text); return; }
-              const content = editedContent || '';
-              const lines = content.split('\n');
-              let offset = 0;
-              let startOffset: number | null = null;
-              let endOffset: number | null = null;
-              const norm = (s: string) => s.toLowerCase().replace(/^slide\s*\d+\s*:\s*/i, '').trim();
-              const target = norm(title);
-              for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const trimmed = line.trim();
-                const isHeading = /^#{1,6}\s+/.test(trimmed);
-                const isBoldTitle = trimmed.startsWith('**') && trimmed.endsWith('**') && trimmed.length > 4;
-                const lineTitle = isHeading ? trimmed.replace(/^#{1,6}\s+/, '') : (isBoldTitle ? trimmed.slice(2, -2) : '');
-                if ((isHeading || isBoldTitle) && norm(lineTitle).includes(target)) {
-                  startOffset = offset;
-                  for (let j = i + 1, off = offset + line.length + 1; j < lines.length; j++) {
-                    const ln = lines[j];
-                    const t2 = ln.trim();
-                    const isH = /^#{1,6}\s+/.test(t2) || (t2.startsWith('**') && t2.endsWith('**') && t2.length > 4);
-                    if (isH) { endOffset = off; break; }
-                    off += ln.length + 1;
-                  }
-                  if (endOffset === null) endOffset = content.length;
-                  break;
-                }
-                offset += line.length + 1;
+              const bounds = findSectionBounds(title);
+              if (!bounds || bounds.startOffset === null || bounds.endOffset === null) {
+                 // Fallback: Append to end if section not found
+                 appendAtEnd(`\n\n> **Sugestie pentru slide-ul "${title || 'necunoscut'}":**\n${text}`);
+                 return;
               }
-              if (startOffset === null || endOffset === null) { insertAtCursor(text); return; }
-              const next = `${content.substring(0, endOffset)}${content.endsWith('\n') ? '' : '\n'}${text}\n${content.substring(endOffset)}`;
-              setEditedContent(next);
-              setShowSlidesPreview(false);
-              setActiveTab('editor');
-              setTimeout(() => textareaRef.current?.focus(), 0);
-              showToast('Sugestie aplicată în secțiunea slide-ului.', 'success');
+              const { endOffset } = bounds;
+              const content = editedContent || '';
+              // Insert before the next section starts, ensuring newlines
+              const before = content.substring(0, endOffset).trimEnd();
+              const after = content.substring(endOffset);
+              const next = `${before}\n${text}\n${after}`;
+              applyUpdate(next, 'Sugestie aplicată în slide.');
             };
-            const modifySelectionLines = (transform: (lines: string[]) => string[]) => {
-              const textarea = textareaRef.current;
-              if (!textarea) { appendAtEnd(transform([]).join('\n')); return; }
-              const start = textarea.selectionStart;
-              const end = textarea.selectionEnd;
-              const lineStartIdx = editedContent.lastIndexOf('\n', start - 1) + 1;
-              const lineEndIdx = editedContent.indexOf('\n', end);
-              const effectiveEnd = lineEndIdx === -1 ? editedContent.length : lineEndIdx;
-              const linesText = editedContent.substring(lineStartIdx, effectiveEnd);
-              const lines = linesText.split('\n');
+
+            const modifySectionByTitle = (transform: (lines: string[]) => string[], title?: string) => {
+              const bounds = findSectionBounds(title);
+              if (!bounds || bounds.startOffset === null || bounds.endOffset === null) {
+                  showToast('Nu am putut localiza secțiunea pentru modificare.', 'error');
+                  return;
+              }
+              const { startOffset, endOffset } = bounds;
+              const content = editedContent || '';
+              const sectionText = content.substring(startOffset, endOffset);
+              const lines = sectionText.split('\n');
               const nextLines = transform(lines);
-              const next = `${editedContent.substring(0, lineStartIdx)}${nextLines.join('\n')}${editedContent.substring(effectiveEnd)}`;
-              setEditedContent(next);
-              setShowSlidesPreview(false);
-              setActiveTab('editor');
-              setTimeout(() => textarea.focus(), 0);
-              showToast('Sugestie aplicată în editor.', 'success');
+              const next = `${content.substring(0, startOffset)}${nextLines.join('\n')}${content.substring(endOffset)}`;
+              
+              applyUpdate(next, 'Secțiune actualizată.');
             };
+
             const sLower = s.toLowerCase();
             if (sLower.includes('pași')) {
               insertIntoSectionByTitle('- Pas 1: ...\n- Pas 2: ...\n- Pas 3: ...\n', targetTitle);
@@ -1865,26 +1881,34 @@ const CourseWorkspacePage: React.FC = () => {
               return;
             }
             if (sLower.includes('conținut prea dens') || sLower.includes('reduce numărul de bullets') || sLower.includes('reduce bullets')) {
-              modifySelectionLines((lines) => {
-                const bullets = lines.filter(l => l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l));
+              modifySectionByTitle((lines) => {
+                const header = lines[0]; // Preserve header
+                const rest = lines.slice(1);
+                const bullets = rest.filter(l => l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l));
                 if (bullets.length === 0) return lines;
                 const kept = bullets.slice(0, 4);
-                const others = lines.filter(l => !(l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l)));
-                return [...kept, ...others];
-              });
+                const others = rest.filter(l => !(l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l)));
+                return [header, ...kept, ...others];
+              }, targetTitle);
               return;
             }
             if (sLower.includes('titlu prea lung') || sLower.includes('scurtează titlul')) {
-              modifySelectionLines((lines) => lines.map(l => l.startsWith('#') ? (l.length > 60 ? (l.slice(0, 57) + '…') : l) : l));
+              modifySectionByTitle((lines) => lines.map(l => {
+                 const t = l.trim();
+                 if (t.startsWith('#') || (t.startsWith('**') && t.length > 4)) {
+                     return l.length > 60 ? (l.slice(0, 57) + '…') : l;
+                 }
+                 return l;
+              }), targetTitle);
               return;
             }
             if (sLower.includes('bullets prea lungi') || sLower.includes('scurtează formulările')) {
-              modifySelectionLines((lines) => lines.map(l => {
+              modifySectionByTitle((lines) => lines.map(l => {
                 if (l.trim().startsWith('-') || l.trim().startsWith('*') || /^\d+\.\s/.test(l)) {
                   return l.length > 110 ? (l.slice(0, 107) + '…') : l;
                 }
                 return l;
-              }));
+              }), targetTitle);
               return;
             }
             // Fallback: append suggestion text if no rule matched

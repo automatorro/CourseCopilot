@@ -202,16 +202,9 @@ const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplyS
             <h2 className="text-lg font-bold">Slides Preview</h2>
             <p className="text-xs text-gray-500">Deterministic render pe arhetipuri</p>
           </div>
-        <div className="flex items-center gap-2">
-            {hasIssues && (
-              <button onClick={handleFix} className="px-3 py-2 rounded bg-primary-600 text-white text-sm flex items-center gap-2">
-                <Wand2 size={16}/> Fix issues
-              </button>
-            )}
-            <button onClick={onClose} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
-              <X size={18} />
-            </button>
-          </div>
+          <button onClick={onClose} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
+            <X size={18} />
+          </button>
         </div>
         <div className="px-4 py-2 border-b dark:border-gray-700 flex items-center gap-2 text-[12px]">
           <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300">
@@ -224,23 +217,7 @@ const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplyS
             <CheckCircle size={12}/> {summary.info} info
           </span>
         </div>
-        {suggestions.length > 0 && (
-          <div className="px-4 py-3 border-b dark:border-gray-700 text-[12px]">
-            <div className="font-semibold mb-1">Sugestii rapide</div>
-            <div className="flex flex-wrap">
-              {suggestions.map((s, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => onApplySuggestion && onApplySuggestion(s)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300 mr-2 mb-2 hover:bg-primary-100 dark:hover:bg-primary-900/30"
-                >
-                  <Wand2 size={12}/> {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        
         <div className="p-4 overflow-y-auto space-y-4">
           {loading ? (
             <div className="flex items-center justify-center py-10 text-sm">Loading...</div>
