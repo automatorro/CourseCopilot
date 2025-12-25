@@ -32,35 +32,12 @@ const SlidesPreviewModal: React.FC<Props> = ({ isOpen, onClose, course, onApplyS
     });
     return { critical, warn, info };
   }, [models]);
-  const suggestions = useMemo(() => {
-    const set = new Set<string>();
-    models.forEach(m => {
-      const ws = getPedagogicWarnings(m);
-      ws.forEach(w => {
-        if (w.includes('Exercițiu fără pași')) set.add('Adaugă cel puțin 3 pași clari la Exercițiu');
-        if (w.includes('aplicare') || w.includes('Nivel Bloom prea scăzut')) set.add('Adaugă verbe de aplicare: aplică, utilizează, implementează');
-        if (w.includes('Lipsește imaginea')) set.add('Inserează o imagine relevantă în Image+Text');
-        if (w.includes('Studiu de caz fără structură')) set.add('Adaugă context, problemă, soluție, rezultat');
-        if (w.includes('evaluare')) set.add('Adaugă concluzii sau criterii de evaluare');
-        if (w.includes('Conținut prea dens')) set.add('Reduce numărul de bullets sau scurtează enunțurile');
-        if (w.includes('Titlu prea lung')) set.add('Scurtează titlul pentru lizibilitate');
-        if (w.includes('Prea multe bullets')) set.add('Reduce bullets la limita arhetipului');
-        if (w.includes('Bullets prea lungi')) set.add('Scurtează formulările din bullets');
-      });
-    });
-    return Array.from(set);
-  }, [models]);
 
-  const handleFix = () => {
-    const next = models.map(m => {
-      const rules = getTemplateRules(m.slide_type);
-      if (validateSlide(m, rules)) return m;
-      const fallbackRules = getTemplateRules(SlideArchetype.Explainer);
-      const patched = { ...m, slide_type: SlideArchetype.Explainer };
-      return normalizeSlide(patched, fallbackRules);
-    });
-    setModels(next);
-    setFixed(true);
+  const currentSlideModel = models[currentSlideIndex];
+
+  const handleApplySuggestion = (slideIndex: number, suggestion: string) => {
+    onApplySuggestion(slideIndex, suggestion);
+    toast.success('Sugestie aplicată cu succes!');
   };
 
   if (!isOpen) return null;

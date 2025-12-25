@@ -310,7 +310,7 @@ function stripMarkdownFormatting(text: string): string {
         .replace(/\\([*_`\[\]\\])/g, '$1'); // Unescape escaped characters
 
     // Fix placeholders: convert [\\\\\\], [______], or [\_\_\_\_\_] to clean [______]
-    stripped = stripped.replace(/\[([\\_]+)\]/g, (match, content) => {
+    stripped = stripped.replace(/\[([\\_]+)\]/g, (_, content) => {
         // If the content is just backslashes or mixed chars, replace with underscores
         // We use a heuristic for length: if it looks escaped (has backslashes), 
         // we might want to reduce length, but preserving length is safer for layout.

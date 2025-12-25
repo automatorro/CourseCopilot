@@ -16,7 +16,6 @@ interface ExportModalProps {
 const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, isExporting, course }) => {
     const { t } = useTranslation();
     const [hasCritical, setHasCritical] = useState(false);
-    const [checking, setChecking] = useState(false);
 
     useEffect(() => {
         const check = async () => {
@@ -31,7 +30,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
             }
         };
         check();
-    }, [isOpen, course?.id, course?.updated_at]);
+    }, [isOpen, course?.id]);
 
     if (!isOpen) return null;
 

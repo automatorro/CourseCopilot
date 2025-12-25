@@ -12,7 +12,7 @@ import { supabase } from '../services/supabaseClient';
 import { CheckCircle, Circle, Loader2, Sparkles, Wand, DownloadCloud, Save, Lightbulb, Pilcrow, Combine, BookOpen, ChevronRight, X, ArrowLeft, ArrowRight, Upload, Replace, History, PanelLeft } from 'lucide-react';
 import BlueprintEditModal from '../components/BlueprintEditModal';
 import BlueprintRefineModal from '../components/BlueprintRefineModal';
-import { exportCourseAsZip, exportCourseAsPptx, exportCourseAsPdf, getSlideModelsForPreview, getPedagogicWarnings } from '../services/exportService';
+import { exportCourseAsZip, exportCourseAsPptx, exportCourseAsPdf } from '../services/exportService';
 import ExportModal from '../components/ExportModal';
 import SlidesPreviewModal from '../components/SlidesPreviewModal';
 import { detectNonLocalizedFragments, compareModuleTitlesText, extractModuleDurations } from '../lib/outputValidators';
@@ -1769,15 +1769,6 @@ const CourseWorkspacePage: React.FC = () => {
 
             const appendAtEnd = (text: string) => {
               const next = `${editedContent}${editedContent.endsWith('\n') ? '' : '\n\n'}${text}`;
-              applyUpdate(next, 'Sugestie aplicată.');
-            };
-
-            const insertAtCursor = (text: string) => {
-              const textarea = textareaRef.current;
-              if (!textarea) { appendAtEnd(text); return; }
-              const start = textarea.selectionStart;
-              const end = textarea.selectionEnd;
-              const next = `${editedContent.substring(0, start)}${text}${editedContent.substring(end)}`;
               applyUpdate(next, 'Sugestie aplicată.');
             };
             
