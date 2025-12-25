@@ -690,7 +690,8 @@ const getMainPrompt = (
   fileContext: string,
   structuredContext: string,
   previousContext: string,
-  fullStructureContext: string = ""
+  fullStructureContext: string = "",
+  explicitModuleList: string = ""
 ) => {
   const specificPrompt = getStepPrompt(step_type, course, blueprintDuration);
   const durationEnforcement = getDurationEnforcement(blueprintDuration);
@@ -703,9 +704,33 @@ const getMainPrompt = (
 
     ${durationEnforcement}
 
+    **ENVIRONMENT ADAPTATION (${course.environment}):**
+    ${course.environment === 'LiveWorkshop' ? 
+      `- Focus on GROUP ACTIVITIES, physical handouts, and face-to-face interaction prompts.
+       - Include 'Breaks' and 'Icebreakers'.
+       - Use phrases like 'Turn to your neighbor', 'In your groups', 'Raise your hand'.` 
+      : ''}
+    ${course.environment === 'OnlineCourse' ? 
+      `- Focus on SELF-PACED learning, digital quizzes, and screen-friendly formatting.
+       - Include 'Reflection moments' instead of group work.
+       - Use phrases like 'Pause the video', 'Download the worksheet', 'Think about this'.` 
+      : ''}
+    ${course.environment === 'Corporate' ? 
+      `- Focus on BUSINESS IMPACT, ROI, and workplace application.
+       - Use professional scenarios relevant to the industry.
+       - Keep exercises time-efficient and results-oriented.` 
+      : ''}
+    ${course.environment === 'Academic' ? 
+      `- Focus on THEORETICAL DEPTH, citations, and critical thinking.
+       - Include extensive reading lists and research prompts.
+       - Use formal definitions and structured arguments.` 
+      : ''}
+
     ${fileContext ? `**REFERENCE MATERIALS**:\n${fileContext}\n` : ''}
 
     ${fullStructureContext ? `\n**MASTER COURSE STRUCTURE (SOURCE OF TRUTH)**:\n${fullStructureContext}\n\n**CRITICAL INSTRUCTION**: You MUST refer to the Master Structure above for ALL content generation. Do NOT rely solely on the "Previous Step" snippets if they are truncated.\n` : ''}
+
+    ${explicitModuleList ? `\n**MANDATORY CONTENT CHECKLIST**:\nYou MUST generate content for the following modules:\n${explicitModuleList}\n` : ''}
 
     ${structuredContext}
 
@@ -720,6 +745,150 @@ const getMainPrompt = (
     4. Be thorough and professional.
   `;
 };
+
+// --- ITERATIVE GENERATION HELPERS ---
+
+function getWorkbookModulePrompt(
+  course: Course,
+  module: any,
+  moduleIndex: number,
+  fileContext: string
+): string {
+  
+  return `
+    **ROLE**: You are an expert Instructional Designer.
+    **TASK**: Generate workbook content for **ONE MODULE ONLY**.
+    **LANGUAGE**: ${course.language}
+
+    **MODULE DETAILS**:
+    - Module Number: ${moduleIndex + 1}
+    - Title: ${module.title}
+    - Learning Objective: ${module.learning_objective || 'N/A'}
+    
+    **EXACT STRUCTURE TO FOLLOW (Markdown)**:
+
+    ## ${module.title}
+
+    ### De ce contează acest modul? (200-300 words)
+    [Intro paragraph explaining importance. Hook the reader with a relatable problem.]
+
+    ### [Concept Title 1]
+    #### Conceptul de bază (300-500 words)
+    [Full explanation. Define terms, provide context. NO academic tone - use "buddy-to-buddy" tone.]
+
+    **Exemplu concret:** (200-300 words)
+    [Story: Context -> Challenge -> Action -> Result]
+
+    ---
+    🎯 **EXERCIȚIU PRACTIC ${moduleIndex + 1}.1**
+    **Obiectiv:** [What to practice]
+    **Durată:** 15 min
+    **Instrucțiuni:**
+    1. [Step 1]
+    2. [Step 2]
+    
+    **Spațiul tău de lucru:**
+    [Insert Answer Space / Table / Lines]
+    ---
+
+    ### Recapitulare ${module.title}
+    > **Reține:** [Key takeaway 1]
+    > **Reține:** [Key takeaway 2]
+
+    ${TONE_INSTRUCTIONS}
+
+    ${fileContext ? `**REFERENCE MATERIALS:**\n${fileContext}\n` : ''}
+
+    **CRITICAL REQUIREMENTS:**
+    1. Generate COMPLETE content for this ONE module only.
+    2. Target length: ~1,500 words.
+    3. Do NOT start the next module.
+    4. Do NOT truncate sentences.
+  `;
+}
+
+async function generateWorkbookIteratively(
+  course: Course,
+  blueprint: any,
+  fileContext: string,
+  genAI: any
+): Promise<string> {
+  const sections: string[] = [];
+  
+  // 1. Introduction
+  const introPrompt = `
+    **TASK**: Generate the Introduction section for the Participant Workbook.
+    **COURSE**: ${course.title}
+    **TARGET AUDIENCE**: ${course.target_audience}
+    **LANGUAGE**: ${course.language}
+    
+    **CONTENT**:
+    - Welcome message
+    - How to use this workbook
+    - Course Objectives Overview
+    
+    ${TONE_INSTRUCTIONS}
+  `;
+  
+  console.log("[Iterative] Generating Workbook Intro...");
+  const intro = await generateContent(introPrompt, false, genAI);
+  sections.push(intro);
+
+  // 2. Modules (Parallel Batches)
+  if (blueprint && Array.isArray(blueprint.modules)) {
+      const modules = blueprint.modules;
+      const BATCH_SIZE = 3; // Process 3 modules at a time
+      
+      for (let i = 0; i < modules.length; i += BATCH_SIZE) {
+          const batch = modules.slice(i, i + BATCH_SIZE);
+          console.log(`[Iterative] Generating Workbook Batch ${Math.floor(i/BATCH_SIZE)+1} (${batch.length} modules)...`);
+          
+          const batchResults = await Promise.all(batch.map(async (module, index) => {
+              const globalIndex = i + index;
+              const modulePrompt = getWorkbookModulePrompt(course, module, globalIndex, fileContext);
+              try {
+                  let content = await generateContent(modulePrompt, false, genAI);
+                  // Simple validation for length
+                  if (content.length < 1000) {
+                      console.warn(`[Iterative] Module ${globalIndex+1} too short. Retrying...`);
+                      const retryPrompt = `${modulePrompt}\n\n**SYSTEM NOTICE**: Your previous output was too short. Please expand the content to be at least 1500 words. Add more examples and details.`;
+                      content = await generateContent(retryPrompt, false, genAI);
+                  }
+                  return content;
+              } catch (err) {
+                  console.error(`Error generating module ${module.title}:`, err);
+                  return `## Module ${globalIndex+1}: ${module.title}\n\n(Content generation failed. Please consult the slides for this section.)`;
+              }
+          }));
+          
+          sections.push(...batchResults);
+          
+          // Small delay between batches to be safe
+          if (i + BATCH_SIZE < modules.length) {
+             await new Promise(r => setTimeout(r, 1000));
+          }
+      }
+  }
+
+  // 3. Conclusion
+  const conclusionPrompt = `
+    **TASK**: Generate the Conclusion section for the Participant Workbook.
+    **COURSE**: ${course.title}
+    **LANGUAGE**: ${course.language}
+    
+    **CONTENT**:
+    - Final encouraging words
+    - "What's Next" action plan
+    - Additional Resources placeholders
+    
+    ${TONE_INSTRUCTIONS}
+  `;
+  console.log("[Iterative] Generating Workbook Conclusion...");
+  const conclusion = await generateContent(conclusionPrompt, false, genAI);
+  sections.push(conclusion);
+
+  return sections.join('\n\n---\n\n');
+}
 
 // --- AI CLIENT ---
 
@@ -834,30 +1003,51 @@ function validateGeneratedContent(text: string, step_type: string, blueprint: an
      }
   }
 
-  // --- NEW: MODULE COUNT VALIDATION (GLOBAL) ---
+  // --- MODULE COUNT VALIDATION (GLOBAL) ---
   // If we have a blueprint with modules, ensure the output mentions roughly the same number of modules
-  // This is critical for Video Scripts, Workbook, Slides etc.
   if (step_type !== 'structure' && step_type !== 'course_objectives' && step_type !== 'performance_objectives' && blueprint?.modules && Array.isArray(blueprint.modules)) {
       const expectedCount = blueprint.modules.length;
       if (expectedCount > 0) {
-          // Count "Modulul X" or "Module X" or similar patterns
-          // We look for patterns like "Modulul 1", "Module 1", "## Module", "### Modulul"
+          // 1. Strict Count Check
           const matches = (text.match(/(modulul|module|section|week)\s+\d+/gi) || []).length;
-          // Also count if they use just titles, but that's hard. 
-          // Let's assume they MUST use headers like "Modulul 1: ..."
           
-          // If we find significantly fewer modules than expected (allow -1 for introduction/conclusion variations)
-          if (matches < Math.max(1, expectedCount - 2)) {
-               // Special check for Video Scripts where we might have "Lesson 1.1" etc.
-               if (step_type === 'video_scripts') {
-                   const visualMatches = (text.match(/\[VISUAL\]/gi) || []).length;
-                   // Assuming at least 2 videos per module
-                   if (visualMatches < expectedCount * 2) {
-                       return { isValid: false, reason: `Expected ~${expectedCount * 2} video scripts (based on ${expectedCount} modules), found only ${visualMatches} [VISUAL] tags. Did you skip modules?` };
-                   }
-               } else {
-                   return { isValid: false, reason: `Output seems to miss modules. Expected ~${expectedCount} modules (based on Blueprint), found mention of ${matches}. Please ensure you cover ALL modules.` };
+          if (step_type === 'video_scripts') {
+               const visualMatches = (text.match(/\[VISUAL\]/gi) || []).length;
+               // We expect at least 1 script per module (usually more, but 1 is absolute minimum)
+               if (visualMatches < expectedCount) {
+                   return { isValid: false, reason: `Expected at least ${expectedCount} video scripts (one per module), found only ${visualMatches} [VISUAL] tags. Did you skip modules?` };
                }
+          } else {
+               // Stricter check: Allow max 1 missing module (e.g. sometimes Intro is skipped or combined)
+               if (matches < expectedCount - 1) {
+                   return { isValid: false, reason: `Output seems to miss modules. Expected ${expectedCount} modules (based on Blueprint), found mention of ${matches}. Please ensure you cover ALL modules.` };
+               }
+          }
+
+          // 2. Specific Module Presence Check (Core Title Check)
+          // Check if specific module titles are present in the text
+          let missingModules: string[] = [];
+          for (const m of blueprint.modules) {
+              const title = m.title || "";
+              // Extract core part (e.g., "Modulul 1") or just use the first few words if it doesn't have "Modulul"
+              const parts = title.split(':');
+              const core = parts[0].trim(); // "Modulul 1"
+              
+              if (core.length > 2) {
+                  // Escape special characters for regex
+                  const pattern = new RegExp(core.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                  if (!pattern.test(text)) {
+                      missingModules.push(core);
+                  }
+              }
+          }
+          
+          // If we are missing specific headers for more than 1 module, fail validation
+          if (missingModules.length > 1) {
+               return { 
+                   isValid: false, 
+                   reason: `Missing content for modules: ${missingModules.join(', ')}. Please generate content for ALL modules.` 
+               };
           }
       }
   }
@@ -928,7 +1118,10 @@ serve(async (req) => {
       existingContent,
       step_type,
       previous_steps,
-      context_summary
+      context_summary,
+      part_type,
+      module_data,
+      module_index
     } = await req.json();
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
@@ -1019,6 +1212,59 @@ serve(async (req) => {
 
       prompt = getRefinePrompt(course, selectedText, actionType, fileContext);
 
+    } else if (action === 'generate_workbook_part') {
+      // --- NEW: Granular Workbook Generation to avoid Timeouts ---
+      
+      let text = '';
+      if (part_type === 'intro') {
+        const introPrompt = `
+          **TASK**: Generate the Introduction section for the Participant Workbook.
+          **COURSE**: ${course.title}
+          **TARGET AUDIENCE**: ${course.target_audience}
+          **LANGUAGE**: ${course.language}
+          
+          **CONTENT**:
+          - Welcome message
+          - How to use this workbook
+          - Course Objectives Overview
+          
+          ${TONE_INSTRUCTIONS}
+        `;
+        text = await generateContent(introPrompt, false, genAI);
+
+      } else if (part_type === 'outro') {
+        const conclusionPrompt = `
+          **TASK**: Generate the Conclusion section for the Participant Workbook.
+          **COURSE**: ${course.title}
+          **LANGUAGE**: ${course.language}
+          
+          **CONTENT**:
+          - Final encouraging words
+          - "What's Next" action plan
+          - Additional Resources placeholders
+          
+          ${TONE_INSTRUCTIONS}
+        `;
+        text = await generateContent(conclusionPrompt, false, genAI);
+
+      } else if (part_type === 'module') {
+        if (!module_data) throw new Error("Missing module_data for part_type='module'");
+        const prompt = getWorkbookModulePrompt(course, module_data, module_index || 0, fileContext);
+        text = await generateContent(prompt, false, genAI);
+        
+        // Simple length check retry
+        if (text.length < 1000) {
+            console.warn(`[WorkbookPart] Module content too short. Retrying...`);
+            const retryPrompt = `${prompt}\n\n**SYSTEM NOTICE**: Your previous output was too short. Please expand the content to be at least 1500 words. Add more examples and details.`;
+            text = await generateContent(retryPrompt, false, genAI);
+        }
+      }
+
+      return new Response(JSON.stringify({ content: text }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+      });
+
     } else if (action === 'generate_step_content') {
       // --- NEW: 12-STEP TRAINER FLOW GENERATION ---
       
@@ -1048,6 +1294,34 @@ serve(async (req) => {
       
       // Use the modular helper to generate the prompt
       const normalizedStepType = normalizeStepType(step_type);
+      
+      // Build Explicit Module List for better AI compliance
+      let explicitModuleList = "";
+      if (course.blueprint?.modules && Array.isArray(course.blueprint.modules)) {
+          explicitModuleList = course.blueprint.modules
+              .map((m: any, i: number) => `${i+1}. ${m.title}`)
+              .join('\n');
+      }
+
+      // --- ITERATIVE GENERATION CHECK ---
+      // Check if we should use iterative generation for this step
+      if (normalizedStepType === 'participant_workbook' && course.blueprint?.modules && course.blueprint.modules.length > 0) {
+          console.log(`Using ITERATIVE generation for ${normalizedStepType} (Modules: ${course.blueprint.modules.length})`);
+          // We generate iteratively and skip the standard "generateContent" call below
+          // Note: we assign it to 'prompt' variable temporarily if we wanted to standard flow, 
+          // but here we want to assign to 'text' directly.
+          // However, 'text' is defined inside the try block below.
+          // So we need to restructure slightly or use a flag.
+          
+          // Actually, we can just set a special flag or handle it right here?
+          // The cleanest way is to handle it in the "AI EXECUTION" block, or execute it here and set 'text'.
+          // But 'text' is scoped inside the try block.
+          // Let's modify the Prompt generation to return a special object? No.
+          
+          // Let's execute it here and pass it down via a variable, or move this logic inside the try block.
+          // Moving inside the try block is safer.
+      }
+      
       prompt = getMainPrompt(
         course,
         normalizedStepType,
@@ -1055,7 +1329,8 @@ serve(async (req) => {
         fileContext,
         structuredContext,
         previousContext,
-        fullStructureContext
+        fullStructureContext,
+        explicitModuleList
       );
 
     } else {
@@ -1075,38 +1350,49 @@ serve(async (req) => {
     // --- AI EXECUTION VIA HELPER ---
     try {
         let text = '';
-        
+        const normalizedStepType = step_type ? normalizeStepType(step_type) : '';
+        const isIterative = !isJsonMode && 
+                            action === 'generate_step_content' && 
+                            normalizedStepType === 'participant_workbook' && 
+                            course.blueprint?.modules?.length > 0;
+
         // --- CACHE LAYER ---
         const cacheKey = await sha256(prompt + (isJsonMode ? '_json' : ''));
-        try {
-            // Only check cache for idempotent operations (not interactive chat usually, but here chat history is part of prompt so it's fine)
-            // However, maybe we skip cache for 'chat_onboarding' if we want fresh variety? 
-            // Actually, for same history, same response is fine.
-            const { data: cached } = await supabase
-                .from('ai_cache')
-                .select('response')
-                .eq('prompt_hash', cacheKey)
-                .single();
-            
-            if (cached && cached.response) {
-                console.log(`[Cache] Hit for ${cacheKey.substring(0, 8)}`);
-                text = cached.response;
+        
+        // Skip cache for Iterative mode as it's composite content
+        if (!isIterative) {
+            try {
+                const { data: cached } = await supabase
+                    .from('ai_cache')
+                    .select('response')
+                    .eq('prompt_hash', cacheKey)
+                    .single();
+                
+                if (cached && cached.response) {
+                    console.log(`[Cache] Hit for ${cacheKey.substring(0, 8)}`);
+                    text = cached.response;
+                }
+            } catch (err) {
+                console.warn("[Cache] Read failed (ignoring):", err);
             }
-        } catch (err) {
-            console.warn("[Cache] Read failed (ignoring):", err);
         }
 
         if (!text) {
-             text = await generateContent(prompt, isJsonMode, genAI);
+             if (isIterative) {
+                 console.log(`[Main] Executing Iterative Generation for ${normalizedStepType}`);
+                 text = await generateWorkbookIteratively(course, course.blueprint, fileContext, genAI);
+             } else {
+                 text = await generateContent(prompt, isJsonMode, genAI);
+             }
              
-             // Save to cache (fire and forget pattern is risky in Edge Functions, so we await)
-             if (text && text.length > 20) {
+             // Save to cache (standard only)
+             if (text && text.length > 20 && !isIterative) {
                  try {
                      await supabase.from('ai_cache').insert({
                          prompt_hash: cacheKey,
-                         prompt: prompt.substring(0, 10000), // Store first 10k chars
+                         prompt: prompt.substring(0, 10000), 
                          response: text,
-                         model: 'unknown' // could track model if returned
+                         model: 'unknown'
                      });
                  } catch (err) {
                      console.warn("[Cache] Write failed:", err);
@@ -1116,16 +1402,35 @@ serve(async (req) => {
         
         // --- VALIDATION LAYER ---
         // Only validate if we have a step_type (meaning it's the new flow) and it's not a JSON mode call
-        if (step_type && !isJsonMode && action === 'generate_step_content') {
+        // Skip validation for Iterative mode because it validates internally per module
+        if (step_type && !isJsonMode && action === 'generate_step_content' && !isIterative) {
             const normalized = normalizeStepType(step_type);
             console.log(`Validating content for ${normalized}...`);
-            const validation = validateGeneratedContent(text, normalized, blueprint);
             
+            let validation = validateGeneratedContent(text, normalized, blueprint);
+            let attempts = 0;
+            const maxRetries = 2;
+
+            while (!validation.isValid && attempts < maxRetries) {
+                attempts++;
+                console.warn(`Validation failed for ${normalized} (Retry ${attempts}/${maxRetries}): ${validation.reason}`);
+                
+                const retryPrompt = `${prompt}\n\n**SYSTEM NOTICE**: Your previous output was rejected because: ${validation.reason}. \n\n**CRITICAL**: You MUST fix this. Check the Master Structure and ensure you cover ALL required modules/sections as listed in the MANDATORY CONTENT CHECKLIST.`;
+                
+                try {
+                    text = await generateContent(retryPrompt, isJsonMode, genAI);
+                    // Re-validate the new content
+                    validation = validateGeneratedContent(text, normalized, blueprint);
+                } catch (err) {
+                    console.error(`Retry ${attempts} failed with error:`, err);
+                    break; // Stop retrying if generation errors out
+                }
+            }
+
             if (!validation.isValid) {
-                console.warn(`Validation failed for ${normalized}: ${validation.reason}. Retrying once...`);
-                // Retry logic: Add a strong reminder to the prompt and try again
-                const retryPrompt = `${prompt}\n\n**SYSTEM NOTICE**: Your previous output was rejected because: ${validation.reason}. \nPlease try again and strictly follow all instructions, especially regarding length and structure.`;
-                text = await generateContent(retryPrompt, isJsonMode, genAI);
+                console.warn(`Validation gave up for ${normalized} after ${attempts} retries. Reason: ${validation.reason}`);
+            } else if (attempts > 0) {
+                console.log(`Validation succeeded for ${normalized} after ${attempts} retries.`);
             }
         }
         

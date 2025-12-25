@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, Circle, Loader2, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle, Circle, Loader2, AlertTriangle, Play, Pause } from 'lucide-react';
 import { TrainerStepType, Course } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -73,6 +73,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
     const abortControllerRef = useRef<AbortController | null>(null);
     const accumulatedContentRef = useRef<any[]>([]); // Store content to pass as context
     const pendingStepsRef = useRef<any[]>([]); // Steps ready to insert if user chooses to save despite warnings
+    const isStoppedRef = useRef(false);
 
     // Filter steps based on environment
     const relevantSteps = STEPS_ORDER.filter(step => {
@@ -95,10 +96,113 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         };
     }, [isOpen]);
 
+    // --- Local Storage Cache Helpers ---
+    const getCacheKey = () => `generation_progress_${course.id}`;
+
+    const saveProgressToCache = (completed: TrainerStepType[], content: any[]) => {
+        try {
+            localStorage.setItem(getCacheKey(), JSON.stringify({
+                completedSteps: completed,
+                accumulatedContent: content,
+                timestamp: Date.now()
+            }));
+        } catch (e) {
+            console.error('[GenerationProgressModal] Failed to save progress:', e);
+        }
+    };
+
+    const loadProgressFromCache = () => {
+        try {
+            const raw = localStorage.getItem(getCacheKey());
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            
+            // Check timestamp validity (24h)
+            const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+            if (Date.now() - data.timestamp > TWENTY_FOUR_HOURS) {
+                console.log('[GenerationProgressModal] Cache expired.');
+                clearProgress();
+                return null;
+            }
+
+            return data;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const clearProgress = () => {
+        try {
+            localStorage.removeItem(getCacheKey());
+        } catch (e) { console.error(e); }
+    };
+
+    const stopGeneration = () => {
+        console.log('[GenerationProgressModal] User requested stop.');
+        isStoppedRef.current = true;
+        setIsGenerating(false);
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+    };
+
     const startGeneration = async () => {
         setIsGenerating(true);
+        isStoppedRef.current = false;
+        abortControllerRef.current = new AbortController();
+
         console.log('[GenerationProgressModal] Starting generation...');
         setError(null);
+
+        // Try to resume
+        const cached = loadProgressFromCache();
+        if (cached && cached.completedSteps && cached.completedSteps.length > 0) {
+            console.log('[GenerationProgressModal] Resuming from cache:', cached.completedSteps.length, 'steps done.');
+            
+            // Restore content first
+            accumulatedContentRef.current = cached.accumulatedContent;
+
+            // Find next step index
+            let nextIndex = 0;
+            for (let i = 0; i < relevantSteps.length; i++) {
+                if (!cached.completedSteps.includes(relevantSteps[i].type)) {
+                    nextIndex = i;
+                    break;
+                }
+                // If we are at the last step and it is completed, nextIndex should be length (to finalize)
+                if (i === relevantSteps.length - 1 && cached.completedSteps.includes(relevantSteps[i].type)) {
+                    nextIndex = relevantSteps.length;
+                }
+            }
+
+            // Clean up stale future steps from cache/state if we are resuming from an earlier point
+            // This prevents "1-5 and 11" states where intermediate steps are missing
+            let validCompletedSteps = cached.completedSteps;
+            if (nextIndex < relevantSteps.length) {
+                validCompletedSteps = cached.completedSteps.filter((stepType: any) => {
+                     const idx = relevantSteps.findIndex(r => r.type === stepType);
+                     // Keep steps that are BEFORE the nextIndex
+                     // If idx is -1 (not found in relevantSteps), keep it? Maybe it's irrelevant.
+                     return idx !== -1 && idx < nextIndex;
+                });
+                
+                if (validCompletedSteps.length !== cached.completedSteps.length) {
+                    console.log(`[GenerationProgressModal] Cleaning up ${cached.completedSteps.length - validCompletedSteps.length} stale future steps.`);
+                    // Update cache immediately to reflect reality
+                    saveProgressToCache(validCompletedSteps, cached.accumulatedContent);
+                }
+            }
+            
+            setCompletedSteps(validCompletedSteps);
+            setCurrentStepIndex(nextIndex);
+            
+            // Resume immediately
+            await processStep(nextIndex);
+            return;
+        }
+
+        // Fresh start
         setCurrentStepIndex(0);
         setCompletedSteps([]);
         accumulatedContentRef.current = [];
@@ -107,7 +211,8 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             // 0. Connection Check (Ping)
             console.log('[GenerationProgressModal] Pinging Edge Function...');
             const { data: pingData, error: pingError } = await supabase.functions.invoke('generate-course-content', {
-                body: { action: 'ping' }
+                body: { action: 'ping' },
+                // signal: abortControllerRef.current?.signal // Optional: support abort on ping
             });
 
             if (pingError) {
@@ -181,6 +286,9 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 const arr = accumulatedContentRef.current;
                 const idx = arr.findIndex((i: any) => i.step_type === s);
                 if (idx >= 0) arr[idx].content = generatedContent; else arr.push({ step_type: s, content: generatedContent });
+                
+                // Update cache with regenerated content
+                saveProgressToCache(completedSteps, accumulatedContentRef.current);
             }
 
             await finalizeGeneration();
@@ -242,6 +350,8 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
     };
 
     const processStep = async (index: number) => {
+        if (isStoppedRef.current) return;
+
         if (index >= relevantSteps.length) {
             await finalizeGeneration();
             return;
@@ -256,6 +366,161 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             const userId = course.user_id || user?.id;
             if (!userId) {
                 throw new Error('User ID is missing. Please refresh the page and try again.');
+            }
+
+            // --- NEW: Client-Side Iteration for Workbook ---
+            if (step.type === TrainerStepType.ParticipantWorkbook) {
+                 const summary = buildContextSummary(accumulatedContentRef.current || []);
+                 let modulesToProcess = course.blueprint?.modules;
+                 
+                 // Fallback to structure titles if blueprint missing
+                 if ((!modulesToProcess || modulesToProcess.length === 0) && summary.modules.length > 0) {
+                      modulesToProcess = summary.modules.map((t: string) => ({ title: t, learning_objective: "See content." }));
+                 }
+
+                 if (modulesToProcess && modulesToProcess.length > 0) {
+                     console.log('[GenerationProgressModal] Using Client-Side Iteration for Workbook');
+                     const wbCacheKey = `workbook_partial_${course.id}`;
+                     let parts: string[] = [];
+                     
+                     // Try to load partial workbook progress
+                     try {
+                        const wbCached = localStorage.getItem(wbCacheKey);
+                        if (wbCached) {
+                            parts = JSON.parse(wbCached);
+                            console.log(`[Workbook] Resuming from partial cache with ${parts.length} parts.`);
+                        }
+                     } catch(e) { console.error(e); }
+
+                     // 1. Intro (only if parts is empty)
+                     if (parts.length === 0) {
+                        console.log('[Workbook] Generating Intro...');
+                        let introContent = "";
+                        let introRetries = 0;
+                        while(introRetries < 3 && !introContent) {
+                            try {
+                                const { data: introData, error: introError } = await supabase.functions.invoke('generate-course-content', {
+                                    body: { action: 'generate_workbook_part', part_type: 'intro', course }
+                                });
+                                if (introError) throw introError;
+                                introContent = introData?.content;
+                            } catch (e) {
+                                console.warn(`Error generating Intro, retry ${introRetries}`, e);
+                                introRetries++;
+                                await new Promise(r => setTimeout(r, 1500));
+                            }
+                        }
+                        if (!introContent) introContent = "# Introducere\n\n(Generarea introducerii a eșuat. Vă rugăm să editați manual.)";
+                        parts.push(introContent);
+                        try {
+                            localStorage.setItem(wbCacheKey, JSON.stringify(parts));
+                        } catch (e) {
+                            console.warn('[Workbook] Failed to save partial progress to cache.');
+                        }
+                     }
+
+                     // 2. Modules
+                     // parts[0] is Intro. parts[1] is Module 0.
+                     // So start index for modules is parts.length - 1
+                     const startIndex = Math.max(0, parts.length - 1);
+                     
+                     for (let i = startIndex; i < modulesToProcess.length; i++) {
+                         if (isStoppedRef.current) break;
+                         const m = modulesToProcess[i];
+                         console.log(`[Workbook] Generating Module ${i+1}/${modulesToProcess.length}: ${m.title}`);
+                         
+                         // Retry logic
+                         let modContent = "";
+                         let retries = 0;
+                         while(retries < 3 && !modContent) {
+                             try {
+                                 const { data: modData, error: modErr } = await supabase.functions.invoke('generate-course-content', {
+                                     body: { 
+                                         action: 'generate_workbook_part', 
+                                         part_type: 'module', 
+                                         course, 
+                                         module_data: m, 
+                                         module_index: i,
+                                         context_files: [] 
+                                     }
+                                 });
+                                 if (modErr) throw modErr;
+                                 modContent = modData.content;
+                             } catch (e) {
+                                 console.warn(`Error generating module ${i}, retry ${retries}`, e);
+                                 retries++;
+                                 await new Promise(r => setTimeout(r, 1500));
+                             }
+                         }
+                         
+                         if (!modContent) {
+                             modContent = `## Module ${i+1}: ${m.title}\n\n(Content generation failed for this module after retries.)`;
+                         }
+                         parts.push(modContent);
+                         
+                         // Progressive Save
+                         try {
+                             localStorage.setItem(wbCacheKey, JSON.stringify(parts));
+                         } catch (e) {
+                             console.warn('[Workbook] Failed to save partial progress to cache (likely quota exceeded). Continuing in memory.');
+                         }
+                     }
+
+                     // 3. Outro
+                     // We expect parts to have 1 (Intro) + N (Modules). Total N+1.
+                     // If parts.length == modulesToProcess.length + 1, we need Outro.
+                     if (parts.length === modulesToProcess.length + 1) {
+                         console.log('[Workbook] Generating Outro...');
+                         let outroContent = "";
+                         let outroRetries = 0;
+                         while(outroRetries < 3 && !outroContent) {
+                             try {
+                                const { data: outroData, error: outroError } = await supabase.functions.invoke('generate-course-content', {
+                                    body: { action: 'generate_workbook_part', part_type: 'outro', course }
+                                });
+                                if (outroError) throw outroError;
+                                outroContent = outroData?.content;
+                             } catch (e) {
+                                 console.warn(`Error generating Outro, retry ${outroRetries}`, e);
+                                 outroRetries++;
+                                 await new Promise(r => setTimeout(r, 1500));
+                             }
+                         }
+                         if (!outroContent) outroContent = "# Concluzie\n\n(Generarea concluziei a eșuat. Vă rugăm să editați manual.)";
+                         parts.push(outroContent);
+                         try {
+                             localStorage.setItem(wbCacheKey, JSON.stringify(parts));
+                         } catch (e) {
+                             console.warn('[Workbook] Failed to save partial progress to cache.');
+                         }
+                     }
+                     
+                     // Cleanup partial cache after success
+                     if (!isStoppedRef.current) {
+                        localStorage.removeItem(wbCacheKey);
+                     } else {
+                        console.log('[Workbook] Generation stopped. Keeping partial cache.');
+                        setIsGenerating(false);
+                        return;
+                     }
+
+                     const finalContent = parts.join('\n\n---\n\n');
+                     
+                     accumulatedContentRef.current.push({
+                        step_type: step.type,
+                        content: finalContent
+                     });
+
+                     setCompletedSteps(prev => {
+                        const newSet = new Set([...prev, step.type]);
+                        const newArr = Array.from(newSet);
+                        saveProgressToCache(newArr, accumulatedContentRef.current);
+                        return newArr;
+                     });
+
+                     await processStep(index + 1);
+                     return;
+                 }
             }
 
             const contextMap: Record<TrainerStepType, TrainerStepType[]> = {
@@ -317,17 +582,35 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             const generatedContent = data.content;
 
             // 2. Store in Memory (Don't save to DB yet)
-            accumulatedContentRef.current.push({
-                step_type: step.type,
-                content: generatedContent
+            const existingIdx = accumulatedContentRef.current.findIndex((i: any) => i.step_type === step.type);
+            if (existingIdx >= 0) {
+                accumulatedContentRef.current[existingIdx] = { step_type: step.type, content: generatedContent };
+            } else {
+                accumulatedContentRef.current.push({
+                    step_type: step.type,
+                    content: generatedContent
+                });
+            }
+
+            setCompletedSteps(prev => {
+                const newSet = new Set([...prev, step.type]);
+                const newArr = Array.from(newSet);
+                // Save to cache on every step completion
+                saveProgressToCache(newArr, accumulatedContentRef.current);
+                return newArr;
             });
 
-            setCompletedSteps(prev => [...prev, step.type]);
-
             // 3. Next Step (Recursive)
-            await processStep(index + 1);
+            if (!isStoppedRef.current) {
+                await processStep(index + 1);
+            }
 
         } catch (err: any) {
+            if (isStoppedRef.current || err.name === 'AbortError') {
+                console.log('Generation paused by user.');
+                setIsGenerating(false);
+                return;
+            }
             console.error(`Error processing step ${step.key}:`, err);
             setError(err.message || "An error occurred during generation.");
             setIsGenerating(false);
@@ -339,6 +622,9 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             console.log('[GenerationProgressModal] Finalizing generation...');
             const userId = course.user_id || user?.id;
             if (!userId) throw new Error('User ID is missing.');
+
+            // Clear progress on success
+            clearProgress();
 
             // 1. Define Mapping (8 Livrables - Fixed to separate incompatible types)
             const LIVRABLE_MAPPING = [
@@ -699,34 +985,47 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-b-xl">
-                    <div className="flex justify-between items-center text-sm text-slate-500">
-                        <span>
-                            {t('generation.completed', { done: completedSteps.length, total: relevantSteps.length })}
-                        </span>
-                        {isGenerating && (
-                            <span className="flex items-center gap-2">
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                {t('generation.processing')}
-                            </span>
-                        )}
+                <div className="p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-b-xl space-y-4">
+                    <div className="flex justify-between items-center">
+                         <div className="text-sm text-slate-500 flex items-center gap-2">
+                             <span>{t('generation.completed', { done: completedSteps.length, total: relevantSteps.length })}</span>
+                             {isGenerating && (
+                                 <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs">
+                                     <Loader2 className="w-3 h-3 animate-spin" />
+                                     {t('generation.processing')}
+                                 </span>
+                             )}
+                         </div>
+                         <div className="flex gap-2">
+                            {isGenerating ? (
+                                <button 
+                                    onClick={stopGeneration} 
+                                    className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 font-medium transition-colors flex items-center gap-2"
+                                >
+                                    <Pause className="w-4 h-4" />
+                                    {safeT('generation.actions.stop', 'Stop')}
+                                </button>
+                            ) : (
+                                <>
+                                    {(completedSteps.length < relevantSteps.length) && (
+                                        <button 
+                                            onClick={startGeneration} 
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
+                                        >
+                                            <Play className="w-4 h-4" />
+                                            {completedSteps.length > 0 ? safeT('generation.actions.resume', 'Reluare') : safeT('generation.actions.start', 'Start')}
+                                        </button>
+                                    )}
+                                    <button onClick={onClose} className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors">
+                                        {safeT('common.close', 'Închide')}
+                                    </button>
+                                </>
+                            )}
+                         </div>
                     </div>
 
-                    {!isGenerating && !validationReport && (
-                        <div className="mt-3 flex flex-wrap gap-2 md:justify-end">
-                            {(pendingStepsRef.current?.length || 0) > 0 && (
-                                <button onClick={handleSaveDraft} className="btn-premium-sm w-full sm:w-auto">
-                                    {safeT('validation.actions.saveDraft', 'Salvează ca draft')}
-                                </button>
-                            )}
-                            <button onClick={onClose} className="btn-premium--secondary-sm w-full sm:w-auto">
-                                {safeT('common.close', 'Închide')}
-                            </button>
-                        </div>
-                    )}
-
                     {/* Progress Bar */}
-                    <div className="mt-3 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                         <div
                             className="h-full bg-blue-600 transition-all duration-500 ease-out"
                             style={{ width: `${(completedSteps.length / relevantSteps.length) * 100}%` }}
