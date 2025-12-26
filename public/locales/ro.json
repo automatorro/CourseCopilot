@@ -285,7 +285,7 @@
   "profile.subscription.usage": "Utilizare Cursuri",
   "profile.subscription.coursesUsed": "{count} din {limit} cursuri utilizate",
   "profile.subscription.upgrade": "Fă un Upgrade",
-  "footer.copyright": "© {year} AI Course Co-Pilot. Toate drepturile rezervate.",
+  "footer.copyright": "© {year} CourseCopilot. Toate drepturile rezervate.",
   "footer.poweredBy": "Susținut de Google Gemini.",
   "footer.home": "Acasă",
   "footer.pricing": "Prețuri"

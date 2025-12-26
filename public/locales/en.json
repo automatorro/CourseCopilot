@@ -287,7 +287,7 @@
   "profile.subscription.usage": "Course Usage",
   "profile.subscription.coursesUsed": "{count} of {limit} courses used",
   "profile.subscription.upgrade": "Upgrade Plan",
-  "footer.copyright": "© {year} AI Course Co-Pilot. All Rights Reserved.",
+  "footer.copyright": "© {year} CourseCopilot. All Rights Reserved.",
   "footer.poweredBy": "Powered by Google Gemini.",
   "footer.home": "Home",
   "footer.pricing": "Pricing"
