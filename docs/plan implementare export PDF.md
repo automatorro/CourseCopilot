@@ -1,6 +1,6 @@
 PDF Export Implementation Plan
 Overview
-This plan outlines the implementation of PDF export functionality for the AI Course Co-Pilot application. The feature will allow users to download their course content as a professionally formatted PDF document, complementing the existing PPTX and ZIP export options.
+This plan outlines the implementation of PDF export functionality for the CourseCopilot application. The feature will allow users to download their course content as a professionally formatted PDF document, complementing the existing PPTX and ZIP export options.
 
 Background Context
 The application currently supports:
