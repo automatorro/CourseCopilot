@@ -21,11 +21,11 @@ const HomePage: React.FC = () => {
   return (
     <div className="overflow-x-hidden">
       <Helmet>
-        <title>CourseCopilot — AI Course Co-Pilot</title>
+        <title>CourseCopilot</title>
         <meta name="description" content="Creează și publică cursuri cu ajutorul AI, rapid și profesional." />
         <link rel="canonical" href={`https://coursecopilot.app${location.pathname}`} />
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="CourseCopilot — AI Course Co-Pilot" />
+        <meta property="og:title" content="CourseCopilot" />
         <meta property="og:description" content="Platformă AI pentru generarea de cursuri și materiale educaționale." />
         <meta property="og:url" content={`https://coursecopilot.app${location.pathname}`} />
         <meta name="twitter:card" content="summary" />

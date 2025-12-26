@@ -1,5 +1,6 @@
 {
-  "name": "AI Course Co-Pilot",
+  "name": "CourseCopilot",
+  "short_name": "CourseCopilot",
   "description": "A SaaS application that allows trainers, teachers, and consultants to generate complete educational courses step-by-step with the help of Google Gemini. The application features a subscription model, a premium user experience, and intelligent prompt engineering for corporate and academic environments.",
   "requestFramePermissions": []
 }

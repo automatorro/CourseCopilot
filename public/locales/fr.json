@@ -1,6 +1,7 @@
 {
-  "chat.onboarding.greetNoObj": "Bonjour. Je suis votre AI Course Co‑Pilot. Je vois que vous souhaitez créer un cours **{env}** sur **\"{title}\"**.\n\nPour construire la meilleure structure, j’ai besoin de quelques informations.\n\n**Quel est l’objectif principal que vous souhaitez que les participants atteignent à la fin du cours ?**",
-  "chat.onboarding.greetWithObj": "Bonjour. Je suis votre AI Course Co‑Pilot. Je vois que vous souhaitez créer un cours **{env}** sur **\"{title}\"**.\n\nJ’ai noté vos objectifs d’apprentissage :\n\n{los}\n\nParfait. Parlez‑moi du public cible et du niveau/ton désiré afin que je puisse affiner la structure.",
+  "header.title": "CourseCopilot",
+  "chat.onboarding.greetNoObj": "Bonjour. Je suis votre CourseCopilot. Je vois que vous souhaitez créer un cours **{env}** sur **\"{title}\"**.\n\nPour construire la meilleure structure, j’ai besoin de quelques informations.\n\n**Quel est l’objectif principal que vous souhaitez que les participants atteignent à la fin du cours ?**",
+  "chat.onboarding.greetWithObj": "Bonjour. Je suis votre CourseCopilot. Je vois que vous souhaitez créer un cours **{env}** sur **\"{title}\"**.\n\nJ’ai noté vos objectifs d’apprentissage :\n\n{los}\n\nParfait. Parlez‑moi du public cible et du niveau/ton désiré afin que je puisse affiner la structure.",
   "chat.onboarding.placeholder": "Écrivez votre réponse..."
   ,"blueprint.title": "Revue du Blueprint du Cours",
   "blueprint.subtitle": "L’IA a généré un plan de cours structuré. Révisez et approuvez avant de générer le contenu.",

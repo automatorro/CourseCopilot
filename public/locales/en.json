@@ -1,6 +1,6 @@
 {
-  "chat.onboarding.greetNoObj": "Hello! I'm your AI Course Co‑Pilot. I see you want to create a **{env}** course on **\"{title}\"**.\n\nTo build the perfect structure for you, I need to know a bit more.\n\n**What is the main goal you want your participants to achieve by the end of this course?**",
-  "chat.onboarding.greetWithObj": "Hello! I'm your AI Course Co‑Pilot. I see you want to create a **{env}** course on **\"{title}\"**.\n\nI've noted your learning objectives:\n\n{los}\n\nGreat. Could you tell me more about your target audience and the depth/tone you prefer so I can refine the structure?",
+  "chat.onboarding.greetNoObj": "Hello! I'm your CourseCopilot. I see you want to create a **{env}** course on **\"{title}\"**.\n\nTo build the perfect structure for you, I need to know a bit more.\n\n**What is the main goal you want your participants to achieve by the end of this course?**",
+  "chat.onboarding.greetWithObj": "Hello! I'm your CourseCopilot. I see you want to create a **{env}** course on **\"{title}\"**.\n\nI've noted your learning objectives:\n\n{los}\n\nGreat. Could you tell me more about your target audience and the depth/tone you prefer so I can refine the structure?",
   "chat.onboarding.placeholder": "Type your answer...",
   "blueprint.title": "Course Blueprint Review",
   "blueprint.subtitle": "AI has generated a structured course outline. Review and approve before generating content.",
@@ -96,7 +96,7 @@
   "course.livrables.slides": "Slide Deck",
   "course.livrables.video_scripts": "Video Scripts",
   "course.livrables.assessment": "Assessment & Tests",
-  "header.title": "AI Course Co-Pilot",
+  "header.title": "CourseCopilot",
   "header.profile": "My Profile",
   "header.dashboard": "Dashboard",
   "header.billing": "Billing",

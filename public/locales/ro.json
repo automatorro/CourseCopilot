@@ -1,6 +1,6 @@
 {
-  "chat.onboarding.greetNoObj": "Salut! Sunt AI Course Co‑Pilot. Văd că vrei să creezi un curs de tip **{env}** despre **\"{title}\"**.\n\nPentru a construi structura potrivită, am nevoie de câteva detalii.\n\n**Care este obiectivul principal pe care vrei să îl atingă participanții până la finalul cursului?**",
-  "chat.onboarding.greetWithObj": "Salut! Sunt AI Course Co‑Pilot. Văd că vrei să creezi un curs de tip **{env}** despre **\"{title}\"**.\n\nAm notat obiectivele tale de învățare:\n\n{los}\n\nExcelent. Spune‑mi puțin despre publicul țintă și nivelul/dificultatea dorită, ca să pot rafina structura.",
+  "chat.onboarding.greetNoObj": "Salut! Sunt CourseCopilot. Văd că vrei să creezi un curs de tip **{env}** despre **\"{title}\"**.\n\nPentru a construi structura potrivită, am nevoie de câteva detalii.\n\n**Care este obiectivul principal pe care vrei să îl atingă participanții până la finalul cursului?**",
+  "chat.onboarding.greetWithObj": "Salut! Sunt CourseCopilot. Văd că vrei să creezi un curs de tip **{env}** despre **\"{title}\"**.\n\nAm notat obiectivele tale de învățare:\n\n{los}\n\nExcelent. Spune‑mi puțin despre publicul țintă și nivelul/dificultatea dorită, ca să pot rafina structura.",
   "chat.onboarding.placeholder": "Scrie răspunsul tău...",
   "blueprint.title": "Revizuire Blueprint Curs",
   "blueprint.subtitle": "AI a generat o structură de curs. Revizuiește și aprobă înainte de generarea conținutului.",
@@ -96,7 +96,7 @@
   "course.livrables.slides": "Set de slide-uri",
   "course.livrables.video_scripts": "Scripturi video",
   "course.livrables.assessment": "Evaluare și teste",
-  "header.title": "AI Course Co-Pilot",
+  "header.title": "CourseCopilot",
   "header.profile": "Profilul Meu",
   "header.dashboard": "Panou de control",
   "header.billing": "Abonament",

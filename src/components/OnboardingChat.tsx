@@ -34,7 +34,7 @@ const OnboardingChat: React.FC<OnboardingChatProps> = ({ course, onBlueprintRead
             const losFormatted = losLines.length > 0 ? losLines.map(l => (l.startsWith('-') ? l : `- ${l}`)).join('\n') : '';
             const content = (() => {
                 if (!isEnabled('localizedChat')) {
-                    return `Hello! I'm your AI Course Co‑Pilot. I see you want to create a **${course.environment}** course on **"${course.title}"**.\n\nTo build the perfect structure for you, I need to know a bit more.\n\n**What is the main goal you want your participants to achieve by the end of this course?**`;
+                    return `Hello! I'm your CourseCopilot. I see you want to create a **${course.environment}** course on **"${course.title}"**.\n\nTo build the perfect structure for you, I need to know a bit more.\n\n**What is the main goal you want your participants to achieve by the end of this course?**`;
                 }
                 if (losFormatted && isEnabled('adaptiveGreeting')) {
                     return t('chat.onboarding.greetWithObj', { env: course.environment, title: course.title, los: losFormatted });
