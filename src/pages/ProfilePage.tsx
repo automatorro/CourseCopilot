@@ -92,7 +92,7 @@ const ProfilePage: React.FC = () => {
 
   if (!user) return <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin" size={32}/></div>;
 
-  const planDetails = user.role === 'admin' ? PRICING_PLANS[Plan.Pro] : PRICING_PLANS[user.plan];
+  const planDetails = user.role === 'admin' ? PRICING_PLANS[Plan.Pro] : (PRICING_PLANS[user.plan] || PRICING_PLANS[Plan.Trial]);
   const canUpgrade = user.role !== 'admin' && (user.plan === Plan.Trial || user.plan === Plan.Basic);
   
   return (
