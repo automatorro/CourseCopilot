@@ -86,8 +86,8 @@ const HomePage: React.FC = () => {
       </div>
 
       {/* Hero Section */}
-      <section className="relative z-10 min-h-screen flex items-center pt-20 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="container mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <section className="relative z-10 pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+        <div className="container mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
           
           {/* Hero Content */}
           <div className={`transition-all duration-1000 transform ${isVisible ? 'translate-x-0 opacity-100' : '-translate-x-10 opacity-0'}`}>
