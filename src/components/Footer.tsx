@@ -10,7 +10,7 @@ const Footer: React.FC = () => {
   const [imageError, setImageError] = useState(false);
 
   return (
-    <footer className="hidden sm:block bg-gradient-to-t from-white to-transparent dark:from-ink-900/40 border-t border-ink-100 dark:border-ink-800">
+    <footer className="bg-gradient-to-t from-white to-transparent dark:from-ink-900/40 border-t border-ink-100 dark:border-ink-800">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-3">

@@ -133,9 +133,9 @@ const HomePage: React.FC = () => {
           </div>
 
           {/* Hero Visual - 3D Mockups */}
-          <div className={`stg-hero-visual relative h-[600px] hidden lg:block transition-all duration-1000 delay-300 transform ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-10 opacity-0'}`}>
+          <div className={`stg-hero-visual relative h-[500px] lg:h-[600px] mt-12 lg:mt-0 transition-all duration-1000 delay-300 transform ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-10 opacity-0'}`}>
             {/* Main Window */}
-            <div className="stg-mockup-window stg-float-main absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] bg-white/90 dark:bg-ink-800/90 backdrop-blur-xl rounded-2xl border border-white/20 dark:border-ink-700 overflow-hidden z-30">
+            <div className="stg-mockup-window stg-float-main absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-[480px] bg-white/90 dark:bg-ink-800/90 backdrop-blur-xl rounded-2xl border border-white/20 dark:border-ink-700 overflow-hidden z-30 shadow-2xl">
               <div className="h-10 bg-gray-50 dark:bg-ink-900/50 border-b border-gray-100 dark:border-ink-700 flex items-center px-4 gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-400" />
                 <div className="w-3 h-3 rounded-full bg-yellow-400" />
@@ -161,14 +161,14 @@ const HomePage: React.FC = () => {
             </div>
 
             {/* Secondary Window 1 */}
-            <div className="stg-mockup-window stg-float-secondary-1 absolute top-[10%] left-[5%] w-[280px] bg-white/80 dark:bg-ink-800/80 backdrop-blur-md rounded-xl border border-white/20 dark:border-ink-700 z-20 p-4">
+            <div className="stg-mockup-window stg-float-secondary-1 absolute top-0 lg:top-[10%] left-0 lg:left-[5%] w-[160px] sm:w-[280px] bg-white/80 dark:bg-ink-800/80 backdrop-blur-md rounded-xl border border-white/20 dark:border-ink-700 z-20 p-3 sm:p-4 shadow-xl transform scale-90 sm:scale-100 origin-top-left">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-ink-900 dark:text-white">Buyer Persona</div>
-                  <div className="text-xs text-ink-500">Analiză automată</div>
+                  <div className="text-xs sm:text-sm font-bold text-ink-900 dark:text-white">Buyer Persona</div>
+                  <div className="text-[10px] sm:text-xs text-ink-500 hidden sm:block">Analiză automată</div>
                 </div>
               </div>
               <div className="space-y-2">
@@ -180,17 +180,17 @@ const HomePage: React.FC = () => {
             </div>
 
             {/* Secondary Window 2 */}
-            <div className="stg-mockup-window stg-float-secondary-2 absolute bottom-[15%] right-[5%] w-[260px] bg-white/80 dark:bg-ink-800/80 backdrop-blur-md rounded-xl border border-white/20 dark:border-ink-700 z-20 p-4">
+            <div className="stg-mockup-window stg-float-secondary-2 absolute bottom-0 lg:bottom-[15%] right-0 lg:right-[5%] w-[150px] sm:w-[260px] bg-white/80 dark:bg-ink-800/80 backdrop-blur-md rounded-xl border border-white/20 dark:border-ink-700 z-20 p-3 sm:p-4 shadow-xl transform scale-90 sm:scale-100 origin-bottom-right">
                <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-green-600 dark:text-green-400" />
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-ink-900 dark:text-white">Timp Salvat</div>
-                  <div className="text-xs text-ink-500">Pe curs generat</div>
+                  <div className="text-xs sm:text-sm font-bold text-ink-900 dark:text-white">Timp Salvat</div>
+                  <div className="text-[10px] sm:text-xs text-ink-500 hidden sm:block">Pe curs generat</div>
                 </div>
               </div>
-              <div className="text-3xl font-bold text-ink-900 dark:text-white">
+              <div className="text-2xl sm:text-3xl font-bold text-ink-900 dark:text-white">
                 80<span className="text-green-500">h</span>
               </div>
             </div>
