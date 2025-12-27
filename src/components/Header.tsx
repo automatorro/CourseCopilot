@@ -12,6 +12,8 @@ const Header: React.FC = () => {
   const { t, language, setLanguage } = useTranslation();
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = async () => {
@@ -36,10 +38,19 @@ const Header: React.FC = () => {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <NavLink to="/" className="flex-shrink-0 flex items-center gap-2">
-               <div className="flex items-center gap-2 text-primary-600 dark:text-primary-400">
-                  <BookOpen size={28}/>
-                  <span className="font-display tracking-tight text-2xl font-bold">{t('header.title')}</span>
-               </div>
+               {(!imageLoaded || imageError) && (
+                  <div className={`flex items-center gap-2 text-primary-600 dark:text-primary-400 ${imageLoaded && !imageError ? 'hidden' : ''}`}>
+                     <BookOpen size={28}/>
+                     <span className="font-display tracking-tight text-2xl font-bold">{t('header.title')}</span>
+                  </div>
+               )}
+               <img 
+                 src="/logo-cc.png" 
+                 alt="CourseCopilot Logo" 
+                 className={`h-10 w-auto ${!imageLoaded || imageError ? 'hidden' : 'block'}`}
+                 onLoad={() => setImageLoaded(true)}
+                 onError={() => setImageError(true)}
+               />
             </NavLink>
           </div>
           <div className="flex items-center gap-4">
