@@ -50,7 +50,7 @@
 @layer components {
   .btn-premium {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold tracking-tight text-white 
-           bg-gradient-to-br from-accent-600 to-accent-700 shadow-premium transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] 
+           bg-gradient-to-br from-[#2DD4BF] to-[#3B82F6] shadow-premium transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] 
            hover:shadow-lg hover:brightness-110 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400;
   }
   .btn-premium--secondary {
@@ -66,7 +66,7 @@
 
   .btn-premium-sm {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold tracking-tight text-white 
-           bg-gradient-to-br from-accent-600 to-accent-700 shadow-premium transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] 
+           bg-gradient-to-br from-[#2DD4BF] to-[#3B82F6] shadow-premium transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] 
            hover:shadow-md hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400;
   }
   .btn-premium--secondary-sm {
@@ -161,4 +161,329 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+}
+
+/* =========================================
+   STAGING HOME ANIMATIONS (Adapted from Claude)
+   ========================================= */
+
+/* Animated Mesh Background - Adapted for Lime/Green */
+.stg-mesh-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background: 
+        radial-gradient(circle at 20% 30%, rgba(46, 184, 46, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(35, 143, 35, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 50% 50%, rgba(20, 184, 166, 0.1) 0%, transparent 50%);
+    animation: stgMeshFloat 15s ease-in-out infinite;
+}
+
+@keyframes stgMeshFloat {
+    0%, 100% { 
+        background-position: 0% 0%, 100% 100%, 50% 50%;
+        background-size: 80% 80%, 90% 90%, 70% 70%;
+    }
+    50% { 
+        background-position: 100% 100%, 0% 0%, 30% 70%;
+        background-size: 100% 100%, 70% 70%, 90% 90%;
+    }
+}
+
+/* Floating Particles */
+.stg-particles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.stg-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--accent-600);
+    border-radius: 50%;
+    opacity: 0.3;
+    animation: stgParticleFloat 20s infinite ease-in-out;
+}
+
+@keyframes stgParticleFloat {
+    0%, 100% { 
+        transform: translateY(0) translateX(0);
+        opacity: 0.3;
+    }
+    50% { 
+        transform: translateY(-100px) translateX(50px);
+        opacity: 0;
+    }
+}
+
+/* 3D Cards Animation */
+.stg-hero-visual {
+    perspective: 1000px;
+}
+
+.stg-mockup-window {
+    transition: transform 0.3s ease;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.stg-mockup-window:hover {
+    transform: translateZ(20px) rotateY(5deg);
+}
+
+.stg-float-main {
+    animation: stgFloatMain 4s ease-in-out infinite;
+}
+
+@keyframes stgFloatMain {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(0, -15px); }
+}
+
+.stg-float-secondary-1 {
+    animation: stgFloatSecondary1 5s ease-in-out infinite;
+}
+
+@keyframes stgFloatSecondary1 {
+    0%, 100% { transform: translateY(0) rotateZ(-3deg); }
+    50% { transform: translateY(-20px) rotateZ(3deg); }
+}
+
+.stg-float-secondary-2 {
+    animation: stgFloatSecondary2 6s ease-in-out infinite;
+}
+
+@keyframes stgFloatSecondary2 {
+    0%, 100% { transform: translateY(0) rotateZ(3deg); }
+    50% { transform: translateY(-25px) rotateZ(-3deg); }
+}
+
+/* Animated Gradient Text */
+.stg-gradient-text {
+    background: linear-gradient(135deg, #2DD4BF 0%, #3B82F6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: inline-block;
+    animation: stgGradientShift 3s ease-in-out infinite;
+}
+
+@keyframes stgGradientShift {
+    0%, 100% { filter: hue-rotate(0deg); }
+    50% { filter: hue-rotate(10deg); }
+}
+
+/* Stat Number Glow */
+.stg-stat-number {
+    position: relative;
+    display: inline-block;
+}
+
+.stg-stat-number::after {
+    content: attr(data-value);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #2DD4BF 0%, #3B82F6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: stgStatGlow 2s ease-in-out infinite;
+    opacity: 0;
+}
+
+@keyframes stgStatGlow {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.5; filter: blur(8px); }
+}
+
+/* New Feature Animations for Expanded Homepage */
+.stg-pulse-ring {
+    position: absolute;
+    border-radius: 50%;
+    animation: stgPulseRing 3s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+@keyframes stgPulseRing {
+    0% { transform: scale(0.33); opacity: 1; }
+    80%, 100% { transform: scale(2); opacity: 0; }
+}
+
+.stg-file-float {
+    animation: stgFileFloat 3s ease-in-out infinite;
+}
+
+@keyframes stgFileFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.stg-feature-card {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stg-feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.1);
+}
+
+.stg-grid-pattern {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+}
+
+.dark .stg-grid-pattern {
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}
+
+/* Slide Deck Animation - 4 Slide Cycle */
+.stg-slide-deck {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    perspective: 1000px;
+}
+
+.stg-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transition: box-shadow 0.3s ease;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    transform-origin: center bottom;
+    /* Use a shared animation for all slides */
+    animation: stgSlideCycle 8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stg-slide-1 { animation-delay: 0s; z-index: 4; }
+.stg-slide-2 { animation-delay: -2s; z-index: 3; }
+.stg-slide-3 { animation-delay: -4s; z-index: 2; }
+.stg-slide-4 { animation-delay: -6s; z-index: 1; }
+
+@keyframes stgSlideCycle {
+    /* State 1: Front (0% - 20%) */
+    0%, 20% {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+        z-index: 4;
+        filter: blur(0px);
+    }
+    /* Transition: Exit to Right (20% - 25%) */
+    25% {
+        transform: translateX(120%) rotate(10deg) scale(0.9);
+        opacity: 0;
+        z-index: 4;
+    }
+    /* Reset: Snap to Back (25.1%) */
+    25.1% {
+        transform: translateY(30px) scale(0.85);
+        opacity: 0;
+        z-index: 1;
+    }
+    /* State 4: Back Position (30% - 45%) */
+    30%, 45% {
+        transform: translateY(30px) scale(0.85);
+        opacity: 0.4;
+        z-index: 1;
+        filter: blur(1px);
+    }
+    /* State 3: Middle-Back (50% - 70%) */
+    50%, 70% {
+        transform: translateY(20px) scale(0.9);
+        opacity: 0.7;
+        z-index: 2;
+        filter: blur(0.5px);
+    }
+    /* State 2: Middle-Front (75% - 95%) */
+    75%, 95% {
+        transform: translateY(10px) scale(0.95);
+        opacity: 0.9;
+        z-index: 3;
+        filter: blur(0px);
+    }
+    /* Return to Front (100%) */
+    100% {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+        z-index: 4;
+    }
+}
+
+/* Expertise Layers Animation */
+.stg-layers-container {
+    position: relative;
+    width: 300px;
+    height: 400px;
+    perspective: 1000px;
+    transform-style: preserve-3d;
+}
+
+.stg-layer {
+    position: absolute;
+    width: 260px;
+    height: 140px;
+    left: 20px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    gap: 16px;
+    transition: all 0.5s ease;
+    animation: stgLayerFloat 6s ease-in-out infinite;
+}
+
+.dark .stg-layer {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stg-layer-1 { top: 0; animation-delay: 0s; z-index: 3; }
+.stg-layer-2 { top: 100px; animation-delay: 2s; z-index: 2; transform: scale(0.95); opacity: 0.8; }
+.stg-layer-3 { top: 200px; animation-delay: 4s; z-index: 1; transform: scale(0.9); opacity: 0.6; }
+
+@keyframes stgLayerFloat {
+    0%, 100% { transform: translateY(0) scale(var(--s, 1)); }
+    50% { transform: translateY(-10px) scale(var(--s, 1)); }
+}
+
+.stg-connector-line {
+    position: absolute;
+    left: 50%;
+    top: 60px;
+    width: 2px;
+    height: 200px;
+    background: linear-gradient(to bottom, var(--accent-500), transparent);
+    z-index: 0;
+    opacity: 0.5;
+}
+
+.stg-brain-pulse {
+    animation: stgBrainPulse 3s infinite;
+}
+
+@keyframes stgBrainPulse {
+    0% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(50, 205, 50, 0)); }
+    50% { transform: scale(1.1); filter: drop-shadow(0 0 15px rgba(50, 205, 50, 0.5)); }
+    100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(50, 205, 50, 0)); }
 }

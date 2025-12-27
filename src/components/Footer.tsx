@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from '../contexts/I18nContext';
 import { BookOpen } from 'lucide-react';
@@ -6,14 +6,27 @@ import { BookOpen } from 'lucide-react';
 const Footer: React.FC = () => {
   const { t } = useTranslation();
   const currentYear = new Date().getFullYear();
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   return (
     <footer className="hidden sm:block bg-gradient-to-t from-white to-transparent dark:from-ink-900/40 border-t border-ink-100 dark:border-ink-800">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-3">
-            <BookOpen size={24} className="text-primary-600 dark:text-primary-400" />
-            <span className="text-lg font-semibold font-display tracking-tight text-ink-900 dark:text-white">{t('header.title')}</span>
+             {(!imageLoaded || imageError) && (
+                <div className={`flex items-center gap-3 ${imageLoaded && !imageError ? 'hidden' : ''}`}>
+                  <BookOpen size={24} className="text-primary-600 dark:text-primary-400" />
+                  <span className="text-lg font-semibold font-display tracking-tight text-ink-900 dark:text-white">{t('header.title')}</span>
+                </div>
+             )}
+             <img 
+               src="/logo-cc.png" 
+               alt="CourseCopilot Logo" 
+               className={`h-8 w-auto ${!imageLoaded || imageError ? 'hidden' : 'block'}`}
+               onLoad={() => setImageLoaded(true)}
+               onError={() => setImageError(true)}
+             />
           </div>
           <div className="text-center md:text-left">
             <p className="text-sm text-ink-500 dark:text-ink-400">

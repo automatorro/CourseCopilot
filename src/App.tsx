@@ -13,6 +13,7 @@ import CourseWorkspacePage from './pages/CourseWorkspacePage';
 import BillingPage from './pages/BillingPage';
 import ProfilePage from './pages/ProfilePage';
 import RlsTestPage from './pages/RlsTestPage';
+import DemoPage from './pages/DemoPage';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -29,6 +30,7 @@ function App() {
         <main className={isWorkspaceRoute ? 'flex-grow' : 'pt-16 flex-grow'}>
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/demo" element={<DemoPage />} />
             <Route path="/login" element={<AuthPage />} />
             <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
             <Route path="/course/:id" element={<PrivateRoute><CourseWorkspacePage /></PrivateRoute>} />
