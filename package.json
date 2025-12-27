@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/automatorro/CourseCopilot.git"
+  },
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
     "build": "tsc && vite build",
