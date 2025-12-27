@@ -391,7 +391,7 @@ const HomePage: React.FC = () => {
                                              {t('homepage.feature3.suggestion_text', { defaultValue: 'Acest paragraf poate fi simplificat pentru o mai bună retenție. Vrei să îl rescriu?' })}
                                          </p>
                                          <div className="flex gap-2 mt-2">
-                                             <button className="text-[10px] bg-accent-600 text-white px-2 py-1 rounded hover:bg-accent-700">{t('homepage.feature3.accept', { defaultValue: 'Da' })}</button>
+                                             <button className="text-[10px] bg-gradient-to-br from-[#2DD4BF] to-[#3B82F6] text-white px-2 py-1 rounded hover:brightness-110">{t('homepage.feature3.accept', { defaultValue: 'Da' })}</button>
                                              <button className="text-[10px] text-gray-500 hover:text-gray-700">{t('homepage.feature3.ignore', { defaultValue: 'Nu' })}</button>
                                          </div>
                                      </div>
@@ -622,7 +622,7 @@ const HomePage: React.FC = () => {
 
                 {/* Card 2: Corporate */}
                 <div className="card-premium p-8 transform transition-all hover:-translate-y-2 hover:shadow-2xl group relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">{t('homepage.whyUsNew.card2.badge', { defaultValue: 'POPULAR' })}</div>
+                    <div className="absolute top-0 right-0 bg-gradient-to-br from-[#2DD4BF] to-[#3B82F6] text-white text-xs font-bold px-3 py-1 rounded-bl-xl">{t('homepage.whyUsNew.card2.badge', { defaultValue: 'POPULAR' })}</div>
                     <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                         <TrendingUp className="w-8 h-8 text-blue-600" />
                     </div>
