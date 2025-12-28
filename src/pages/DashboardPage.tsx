@@ -49,7 +49,10 @@ const DashboardPage: React.FC = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<string | null>(null);
 
-  const courseLimit = (user && PRICING_PLANS[user.plan]) ? PRICING_PLANS[user.plan].courseLimit : 0;
+  // Safe access to pricing plans
+  const planConfig = (user && PRICING_PLANS[user.plan]) ? PRICING_PLANS[user.plan] : undefined;
+  const courseLimit = planConfig ? planConfig.courseLimit : 0;
+  
   const isAdmin = user?.role === 'admin';
   const canCreateCourse = isAdmin || (user ? courses.length < courseLimit : false);
 
