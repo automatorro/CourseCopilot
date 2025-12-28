@@ -1480,10 +1480,11 @@ serve(async (req) => {
     } catch (e) {
         // Error handling
         const msg = e instanceof Error ? e.message : String(e);
-        const isRateLimit = msg.includes("429") || msg.toLowerCase().includes("quota");
+        // Force 200 OK for "Soft Error" handling so client receives the JSON body
+        // const isRateLimit = msg.includes("429") || msg.toLowerCase().includes("quota");
         return new Response(JSON.stringify({ error: msg }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: isRateLimit ? 429 : 500
+            status: 200 // Changed from 500/429 to 200 to ensure client parsing
         });
     }
 
@@ -1492,14 +1493,14 @@ serve(async (req) => {
     const stack = error instanceof Error ? error.stack : '';
     console.error("CRITICAL ERROR in Edge Function:", message, stack, error);
     
-    const isRateLimit = message.includes("429") || message.toLowerCase().includes("quota");
+    // Force 200 OK for "Soft Error" handling so client receives the JSON body
     return new Response(JSON.stringify({ 
       error: message,
       stack: stack, 
       details: String(error)
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: isRateLimit ? 429 : 500
+      status: 200 // Changed from 500/429 to 200 to ensure client parsing
     });
   }
 });

@@ -273,13 +273,33 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 if (fnError) {
                     const ctx = (fnError as any)?.context;
                     let msg = (fnError as any)?.message || 'Edge Function error';
-                    const bodyText = ctx?.body || ctx?.error || ctx;
-                    if (typeof bodyText === 'string') {
-                        try {
-                            const parsed = JSON.parse(bodyText);
-                            if (parsed && typeof parsed.error === 'string') msg = parsed.error;
-                        } catch { /* ignore */ }
+                    
+                    // Try to extract detailed error from response body
+                    if (ctx) {
+                        // If supabase-js parsed it as JSON object
+                        if (typeof ctx === 'object' && ctx !== null) {
+                             if (ctx.error && typeof ctx.error === 'string') {
+                                 msg = ctx.error;
+                             } else if (ctx.body && typeof ctx.body === 'string') {
+                                 try {
+                                     const parsed = JSON.parse(ctx.body);
+                                     if (parsed.error) msg = parsed.error;
+                                 } catch { 
+                                     msg = ctx.body; // Use raw body if not JSON
+                                 }
+                             }
+                        } 
+                        // If it's a string (raw body)
+                        else if (typeof ctx === 'string') {
+                             try {
+                                 const parsed = JSON.parse(ctx);
+                                 if (parsed.error) msg = parsed.error;
+                             } catch {
+                                 msg = ctx;
+                             }
+                        }
                     }
+                    
                     throw new Error(msg);
                 }
                 const generatedContent = data.content;
@@ -554,14 +574,21 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             let data: any = null;
             let fnError: any = null;
             while (attempt < 2) {
+                const requestBody = {
+                    action: 'generate_step_content',
+                    course: course,
+                    step_type: step.type,
+                    previous_steps: prevForContext,
+                    context_summary: summary
+                };
+                
+                // Diagnostic log
+                try {
+                    console.log(`[GenerationProgressModal] Sending request for ${step.type}. Payload size: ~${JSON.stringify(requestBody).length} chars`);
+                } catch (e) { console.warn('Could not calc payload size', e); }
+
                 const resp = await supabase.functions.invoke('generate-course-content', {
-                    body: {
-                        action: 'generate_step_content',
-                        course: course,
-                        step_type: step.type,
-                        previous_steps: prevForContext,
-                        context_summary: summary
-                    }
+                    body: requestBody
                 });
                 data = resp.data;
                 fnError = resp.error;
@@ -573,13 +600,33 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             if (fnError) {
                 const ctx = (fnError as any)?.context;
                 let msg = (fnError as any)?.message || 'Edge Function error';
-                const bodyText = ctx?.body || ctx?.error || ctx;
-                if (typeof bodyText === 'string') {
-                    try {
-                        const parsed = JSON.parse(bodyText);
-                        if (parsed && typeof parsed.error === 'string') msg = parsed.error;
-                    } catch { /* ignore */ }
+
+                // Try to extract detailed error from response body
+                if (ctx) {
+                    // If supabase-js parsed it as JSON object
+                    if (typeof ctx === 'object' && ctx !== null) {
+                            if (ctx.error && typeof ctx.error === 'string') {
+                                msg = ctx.error;
+                            } else if (ctx.body && typeof ctx.body === 'string') {
+                                try {
+                                    const parsed = JSON.parse(ctx.body);
+                                    if (parsed.error) msg = parsed.error;
+                                } catch { 
+                                    msg = ctx.body; // Use raw body if not JSON
+                                }
+                            }
+                    } 
+                    // If it's a string (raw body)
+                    else if (typeof ctx === 'string') {
+                            try {
+                                const parsed = JSON.parse(ctx);
+                                if (parsed.error) msg = parsed.error;
+                            } catch {
+                                msg = ctx;
+                            }
+                    }
                 }
+                
                 throw new Error(msg);
             }
             if (data.error) throw new Error(data.error);

@@ -18,8 +18,18 @@ const Header: React.FC = () => {
 
   const handleLogout = async () => {
     setIsDropdownOpen(false);
-    await supabase.auth.signOut();
-    navigate('/');
+    try {
+      // Attempt global sign out first
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (err) {
+      console.warn('Logout error (likely network or cleanup issue), forcing local cleanup:', err);
+      // Force local session cleanup if server request fails/aborts
+      localStorage.removeItem('sb-kyoxcpyrqlbsychviulm-auth-token'); // Clear Supabase token if known key
+      // Or just rely on Supabase client to clear internal state even on error
+    } finally {
+      navigate('/');
+    }
   };
   
   useEffect(() => {

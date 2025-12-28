@@ -33,7 +33,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error('Error fetching profile:', error);
             setUser(null);
           } else {
-            const userPlan = (profile?.plan as Plan) || Plan.Trial;
+            const rawPlan = profile?.plan;
+            // Validate that the plan from DB actually exists in our Plan enum
+            const isValidPlan = Object.values(Plan).includes(rawPlan as Plan);
+            
+            if (!isValidPlan && rawPlan) {
+                console.warn(`[AuthContext] Invalid plan found in profile: "${rawPlan}". Falling back to ${Plan.Trial}.`);
+            }
+
+            const userPlan = isValidPlan ? (rawPlan as Plan) : Plan.Trial;
             const userRole = (profile?.role as 'admin' | 'user') || 'user';
             const fullUser: User = {
               ...session.user,
