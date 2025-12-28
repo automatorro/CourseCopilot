@@ -1,6 +1,56 @@
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+
+// --- LANGUAGE MAPPING FOR AI ---
+const LANGUAGE_MAP: Record<string, string> = {
+  'en': 'English',
+  'ro': 'Romanian',
+  'es': 'Spanish',
+  'fr': 'French',
+  'de': 'German',
+  'it': 'Italian',
+  'pt': 'Portuguese',
+  'zh': 'Chinese (Simplified)',
+  'zh-TW': 'Chinese (Traditional)',
+  'ja': 'Japanese',
+  'ko': 'Korean',
+  'ru': 'Russian',
+  'ar': 'Arabic',
+  'hi': 'Hindi',
+  'tr': 'Turkish',
+  'nl': 'Dutch',
+  'pl': 'Polish',
+  'sv': 'Swedish',
+  'no': 'Norwegian',
+  'da': 'Danish',
+  'fi': 'Finnish',
+  'hu': 'Hungarian',
+  'cs': 'Czech',
+  'el': 'Greek',
+  'he': 'Hebrew',
+  'th': 'Thai',
+  'id': 'Indonesian',
+  'ms': 'Malay',
+  'vi': 'Vietnamese',
+  'uk': 'Ukrainian',
+  'bg': 'Bulgarian',
+  'hr': 'Croatian',
+  'sr': 'Serbian',
+  'sk': 'Slovak',
+  'sl': 'Slovenian',
+  'et': 'Estonian',
+  'lv': 'Latvian',
+  'lt': 'Lithuanian',
+  'fa': 'Persian',
+  'ur': 'Urdu',
+  'sw': 'Swahili'
+};
+
+function getLanguageName(code: string): string {
+   return LANGUAGE_MAP[code] || code;
+}
+
 const TONE_INSTRUCTIONS = `
 === TONE & STYLE INSTRUCTIONS (MANDATORY) ===
 
@@ -1123,6 +1173,11 @@ serve(async (req) => {
       module_data,
       module_index
     } = await req.json();
+
+    // ENHANCEMENT: Normalize language code to full English name for better AI adherence
+    if (course && course.language) {
+       course.language = getLanguageName(course.language);
+    }
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';

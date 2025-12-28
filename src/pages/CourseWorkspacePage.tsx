@@ -1598,11 +1598,15 @@ const CourseWorkspacePage: React.FC = () => {
               </button>
             </div>
             <div className="flex gap-2 w-full sm:w-auto justify-end">
-              {currentStep.is_completed && hasUnsavedChanges && (
+              {currentStep.is_completed && (
                 <button
                   onClick={() => handleSaveChanges(false)}
                   disabled={isBusy || isSaving}
-                  className="flex-1 sm:flex-none justify-center px-6 py-2 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                  className={`flex-1 sm:flex-none justify-center px-6 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
+                    hasUnsavedChanges 
+                      ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm' 
+                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                  } disabled:opacity-50`}
                 >
                   {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                   {t('course.saveChanges')}
@@ -1959,11 +1963,15 @@ const CourseWorkspacePage: React.FC = () => {
                 {isDownloading ? <Loader2 className="animate-spin" size={16} /> : <DownloadCloud size={16} />}
                 {t(isDownloading ? 'course.download.preparing' : 'course.download.button')}
               </button>
-            ) : currentStep.is_completed && hasUnsavedChanges ? (
+            ) : currentStep.is_completed ? (
               <button
                 onClick={() => handleSaveChanges(false)}
                 disabled={isBusy || isSaving}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
+                  hasUnsavedChanges 
+                    ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm' 
+                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                } disabled:opacity-50`}
               >
                 {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                 {t('course.saveChanges')}

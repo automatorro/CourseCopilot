@@ -66,11 +66,6 @@ export const ONLINE_COURSE_STEPS = [
   'course.steps.tests',
 ];
 
-export const CONTENT_LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Español' },
-  { code: 'fr', name: 'Français' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'ro', name: 'Română' },
-];
+import { ALL_LANGUAGES } from './languages';
+
+export const CONTENT_LANGUAGES = ALL_LANGUAGES;

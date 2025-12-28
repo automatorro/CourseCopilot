@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from '../contexts/I18nContext';
 import { GenerationEnvironment } from '../types';
-import { CONTENT_LANGUAGES } from '../constants';
+import { POPULAR_LANGUAGES, OTHER_LANGUAGES } from '../languages';
 import { X, Presentation, MonitorPlay, Lightbulb } from 'lucide-react';
 
 interface NewCourseModalProps {
@@ -115,7 +115,12 @@ const NewCourseModal: React.FC<NewCourseModalProps> = ({ isOpen, onClose, onCrea
             <div>
               <label htmlFor="language" className="block text-sm font-medium text-ink-600 dark:text-ink-300">{t('modal.newCourse.language')}</label>
               <select id="language" value={language} onChange={e => setLanguage(e.target.value)} className="mt-1 input-premium w-full">
-                {CONTENT_LANGUAGES.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
+                <optgroup label="Popular">
+                  {POPULAR_LANGUAGES.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
+                </optgroup>
+                <optgroup label="All Languages">
+                  {OTHER_LANGUAGES.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
+                </optgroup>
               </select>
             </div>
           </div>
