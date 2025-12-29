@@ -160,14 +160,13 @@ const PROMPT_TEMPLATES = {
     ---
   `,
   slide: `
-    SLIDE [N]: [Title]
-    **Layout**: [Template Name]
-    **Visual**: [Detailed Description]
-    **Key Points**:
-    - [Point 1]
-    - [Point 2]
-    ...
-    **Speaker Notes**: "[Script...]"
+    ## [Titlu Slide]
+    [VISUAL_SEARCH_TERM]: [2-3 keywords for image search, English only]
+    [SLIDE_CONTENT]:
+    - [Bullet point 1]
+    - [Bullet point 2]
+    - [Bullet point 3]
+    [SPEAKER_NOTES]: [Full script for the speaker. Conversational tone.]
   `
 };
 

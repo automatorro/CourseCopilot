@@ -17,6 +17,8 @@ interface ContentSection {
     images: { url: string; alt: string }[];
     rawContent: string;
     bodyText?: string;
+    speakerNotes?: string;
+    visualSearchTerm?: string;
 }
 
 const normalizeExternalImageLinks = (md: string): string => {
@@ -112,28 +114,70 @@ const addContentSlides = async (
     for (const section of sections) {
         const slide = pptx.addSlide();
 
+        // Slide Title
         slide.addText(section.title, {
             x: 0.5, y: 0.5, w: '90%', h: 0.8,
             fontSize: 28, bold: true, color: '1F2937'
         });
 
+        // Content Bullets
         if (section.bulletPoints.length > 0) {
             const bulletText = section.bulletPoints.join('\n');
             slide.addText(bulletText, {
-                x: 0.5, y: 1.5, w: '90%', h: 4,
+                x: 0.5, y: 1.5, w: '50%', h: 4, // Reduced width to make room for image
                 fontSize: 18, bullet: true, color: '374151',
                 lineSpacing: 28
             });
         } else if (section.bodyText) {
             slide.addText(section.bodyText, {
-                x: 0.5, y: 1.5, w: '90%', h: 4.8,
+                x: 0.5, y: 1.5, w: '50%', h: 4.8,
                 fontSize: 20, color: '374151',
                 lineSpacing: 28
             });
         }
 
-        if (section.images.length > 0) {
-            const yPos = 5.5;
+        // Handle Visuals (Placeholder or Real Image)
+        const yPos = 1.5;
+        // Check for Visual Search Term first (New Flow)
+        if (section.visualSearchTerm) {
+             // For now, use a safer placeholder logic
+             // Extract just the first few meaningful words to avoid 503 errors from long queries
+             const keywords = section.visualSearchTerm
+                .split(/[\s,]+/)
+                .filter(w => w.length > 3)
+                .slice(0, 3)
+                .join(',');
+             
+             // Use a more reliable placeholder service if unsplash fails, or catch the error gracefully
+             // We'll try source.unsplash.com but with very simple keywords
+             const placeholderUrl = `https://source.unsplash.com/1600x900/?${keywords || 'business'}`;
+             
+             try {
+                 // Try to fetch image first to handle CORS/Errors before passing to pptxgen
+                 const dataUrl = await fetchToDataUrl(placeholderUrl);
+                 if (dataUrl) {
+                     slide.addImage({ 
+                         data: dataUrl, 
+                         x: 5.8, y: yPos, w: 4, h: 3 
+                     });
+                 } else {
+                     // Fallback: Gray placeholder box if image fetch fails
+                     slide.addText('Image Placeholder', { 
+                         x: 5.8, y: yPos, w: 4, h: 3, 
+                         fill: { color: 'F3F4F6' }, align: 'center', color: '9CA3AF' 
+                     });
+                 }
+             } catch (e) {
+                 console.warn('Failed to load visual placeholder:', e);
+                 // Fallback: Gray placeholder box
+                 slide.addText('Image Placeholder', { 
+                     x: 5.8, y: yPos, w: 4, h: 3, 
+                     fill: { color: 'F3F4F6' }, align: 'center', color: '9CA3AF' 
+                 });
+             }
+        } 
+        // Fallback to legacy embedded images
+        else if (section.images.length > 0) {
             for (const img of section.images.slice(0, 1)) {
                 try {
                     let dataUrl: string | null = null;
@@ -142,9 +186,9 @@ const addContentSlides = async (
                     }
                     const isData = img.url.startsWith('data:') || !!dataUrl;
                     const opts: PptxGenJS.ImageProps = isData
-                        ? { data: dataUrl || img.url, x: 0.5, y: yPos, w: 8, h: 1.5 }
+                        ? { data: dataUrl || img.url, x: 5.8, y: yPos, w: 4, h: 3 }
                         : img.url.startsWith('http')
-                            ? { path: img.url, x: 0.5, y: yPos, w: 8, h: 1.5 }
+                            ? { path: img.url, x: 5.8, y: yPos, w: 4, h: 3 }
                             : null as unknown as PptxGenJS.ImageProps;
                     if (!opts) continue;
                     slide.addImage(opts);
@@ -154,11 +198,14 @@ const addContentSlides = async (
             }
         }
 
-        const matchingScript = findMatchingScript(videoScripts, section.title);
-        if (matchingScript) {
-            slide.addNotes(matchingScript);
+        // Speaker Notes
+        // Prioritize the specific notes from the slide model, fallback to video scripts
+        const notes = section.speakerNotes || findMatchingScript(videoScripts, section.title);
+        if (notes) {
+            slide.addNotes(notes);
         }
 
+        // Footer
         slide.addText(`${course.title} | ${new Date().toLocaleDateString()}`, {
             x: 0.5, y: 6.8, w: '90%', h: 0.3,
             fontSize: 10, color: '9CA3AF', align: 'right'
@@ -213,75 +260,160 @@ const fetchToDataUrl = async (url: string): Promise<string | null> => {
 const parseContentSections = (markdown: string): ContentSection[] => {
     const sections: ContentSection[] = [];
     const lines = markdown.split('\n');
+    
     let currentTitle: string | null = null;
-    let currentBullets: string[] = [];
-    let currentImages: { url: string; alt: string }[] = [];
-    let currentRaw: string[] = [];
+    let currentBuffer: string[] = [];
+
     const flush = () => {
-        if (!currentTitle) {
-            currentRaw = [];
-            return;
+        if (currentTitle && currentBuffer.length > 0) {
+            processSlideBlock(currentTitle, currentBuffer.join('\n'), sections);
         }
-        const rawJoined = normalizeMarkdownImages(currentRaw.join('\n'));
-        const htmlImgs = Array.from(rawJoined.matchAll(/<img[\s\S]*?src=["']([^"']+)["'][\s\S]*?>/ig));
-        htmlImgs.forEach(m => {
-            const url = m[1];
-            const altMatch = (m[0].match(/alt=["']([^"']*)["']/i) || [null, '']);
-            const alt = altMatch[1] || '';
-            currentImages.push({ url, alt });
-        });
-        const plainImgs = Array.from(rawJoined.matchAll(/(https?:\/\/[^\s)]+?\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?)/ig));
-        plainImgs.forEach(m => {
-            const url = m[1];
-            currentImages.push({ url, alt: '' });
-        });
-        const bodyLines = rawJoined.split('\n').filter(l => {
-            const t = l.trim();
-            if (!t) return false;
-            if (t.startsWith('## ')) return false;
-            if (/^\*\s|^-\s|^\d+\.\s|^•\s/.test(t)) return false;
-            if (/!\[[^\]]*\]\([^)]+\)/.test(t)) return false;
-            if (/<img[^>]*>/i.test(t)) return false;
-            return true;
-        });
-        const bodyText = bodyLines.join('\n').trim() || undefined;
-        sections.push({ title: currentTitle, bulletPoints: currentBullets, images: currentImages, rawContent: rawJoined, bodyText });
         currentTitle = null;
-        currentBullets = [];
-        currentImages = [];
-        currentRaw = [];
+        currentBuffer = [];
     };
-    for (const raw of lines) {
-        const line = raw.trim();
-        const isH2 = line.startsWith('## ');
-        const isBoldTitle = line.startsWith('**') && line.endsWith('**') && line.length > 4;
-        if (isH2 || isBoldTitle) {
-            flush();
-            let t = isH2 ? line.substring(3) : line.substring(2, line.length - 2);
-            t = t.replace(/^Slide\s*\d+\s*:\s*/i, '').trim();
-            currentTitle = t;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // --- DETECT NEW SLIDE START ---
+        // 1. Standard Markdown Header (## Title)
+        const h2Match = line.match(/^##\s+(.+)$/);
+        // 2. Explicit Slide Format (Slide X: Title), handles bold/italics
+        const slideMatch = line.match(/^(\*\*|#+)?\s*Slide\s+\d+:\s*(.+?)(\*\*|#+)?$/i);
+        // 3. Module Header (Module X: Title) - treat as a slide title if it appears
+        const moduleMatch = line.match(/^(\*\*|#+)?\s*Modul[e]?\s+\d+:\s*(.+?)(\*\*|#+)?$/i);
+
+        if (h2Match || slideMatch || moduleMatch) {
+            flush(); // Save previous slide
+            
+            // Extract clean title
+            let rawTitle = '';
+            if (h2Match) rawTitle = h2Match[1];
+            else if (slideMatch) rawTitle = slideMatch[2]; // Group 2 is the title part
+            else if (moduleMatch) rawTitle = moduleMatch[0]; // Keep full module title
+
+            // Clean up formatting chars from title end if any
+            currentTitle = rawTitle.replace(/(\*\*|#+)$/, '').trim();
             continue;
         }
-        currentRaw.push(raw);
-        if (line.startsWith('* ') || line.startsWith('- ') || /^\d+\.\s/.test(line) || line.startsWith('• ')) {
-            let b = line.substring(2).trim();
-            b = b.replace(/\*\*|__|`/g, '').trim();
-            if (b.length > 0) currentBullets.push(b);
-            continue;
-        }
-        const mdImg = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
-        if (mdImg) {
-            currentImages.push({ alt: mdImg[1], url: mdImg[2] });
-            continue;
-        }
-        const htmlImg = line.match(/<img[^>]*src=["']([^"']+)["'][^>]*alt=["']?([^"']*)["']?[^>]*>/i);
-        if (htmlImg) {
-            currentImages.push({ alt: htmlImg[2] || '', url: htmlImg[1] });
-            continue;
+
+        // If we are inside a slide, collect lines
+        if (currentTitle) {
+            currentBuffer.push(lines[i]);
+        } else {
+            // Edge case: Content before first header. 
+            // If line is not empty, start a generic slide or skip if it's just noise.
+            if (line && !line.startsWith('Layout:')) {
+                // If we hit content but have no title, assume it belongs to a "Intro" or the previous context
+                // For safety, let's start a slide if we find significant text
+                 if (!currentTitle) currentTitle = "Introduction";
+                 currentBuffer.push(lines[i]);
+            }
         }
     }
-    flush();
-    return sections.filter(s => !!s.title);
+
+    flush(); // Save last slide
+
+    return sections;
+};
+
+const processSlideBlock = (title: string, contentBlock: string, sections: ContentSection[]) => {
+    const lines = contentBlock.trim().split('\n');
+    
+    let currentMode: 'content' | 'notes' | 'visual' | null = 'content';
+    let visualSearchTerm = '';
+    let speakerNotes = '';
+    let bulletPoints: string[] = [];
+    let images: { url: string; alt: string }[] = [];
+    let bodyTextParts: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // --- DETECT MODE SWITCHERS (Both New Tag Style and Old Bullet Style) ---
+        
+        // Visual
+        if (line.includes('[VISUAL_SEARCH_TERM]:')) {
+            currentMode = 'visual';
+            visualSearchTerm = line.replace('[VISUAL_SEARCH_TERM]:', '').trim();
+            continue;
+        }
+        if (line.match(/^[*•-]\s*\*\*Visual:?\*\*/i) || line.match(/^Visual:/i)) {
+            currentMode = 'visual';
+            visualSearchTerm = line.replace(/^[*•-]\s*\*\*Visual:?\*\*/i, '').replace(/^Visual:/i, '').trim();
+            continue;
+        }
+
+        // Content / Text
+        if (line.includes('[SLIDE_CONTENT]:')) {
+            currentMode = 'content';
+            continue;
+        }
+        if (line.match(/^[*•-]\s*\*\*Text:?\*\*/i) || line.match(/^Text:/i)) {
+            currentMode = 'content';
+            continue;
+        }
+
+        // Speaker Notes
+        if (line.includes('[SPEAKER_NOTES]:')) {
+            currentMode = 'notes';
+            speakerNotes = line.replace('[SPEAKER_NOTES]:', '').trim();
+            continue;
+        }
+        if (line.match(/^[*•-]\s*\*\*Speaker Notes:?\*\*/i) || line.match(/^Speaker Notes:/i)) {
+            currentMode = 'notes';
+            speakerNotes = line.replace(/^[*•-]\s*\*\*Speaker Notes:?\*\*/i, '').replace(/^Speaker Notes:/i, '').trim();
+            continue;
+        }
+
+        // --- PROCESS LINE BASED ON MODE ---
+
+        if (currentMode === 'visual') {
+            if (!visualSearchTerm) visualSearchTerm = line;
+            else visualSearchTerm += ' ' + line;
+        } else if (currentMode === 'notes') {
+            speakerNotes += (speakerNotes ? ' ' : '') + line;
+        } else {
+            // Content Mode
+            // Skip layout instructions
+            if (line.toLowerCase().includes('layout:')) continue;
+
+            // Check for bullets
+            if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('• ')) {
+                // If it's a sub-bullet (indented), keep it
+                bulletPoints.push(line.replace(/^[-*•]\s+/, '').trim());
+            } else if (/^\d+\./.test(line)) {
+                bulletPoints.push(line.replace(/^\d+\.\s+/, '').trim());
+            } else if (line.startsWith('![')) {
+                    const match = line.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+                    if (match) images.push({ alt: match[1], url: match[2] });
+            } else {
+                // Regular text line, treat as body text if not a bullet
+                // Filter out empty or filler lines
+                if (line.length > 2) {
+                    bodyTextParts.push(line);
+                }
+            }
+        }
+    }
+
+    // Fallback: If no specific bullets found in 'content' mode, try to use body text as bullets if short
+    if (bulletPoints.length === 0 && bodyTextParts.length > 0) {
+         // If body text looks like a list, use it
+         bulletPoints = bodyTextParts;
+         bodyTextParts = [];
+    }
+
+    sections.push({
+        title,
+        bulletPoints,
+        images,
+        rawContent: contentBlock,
+        bodyText: bodyTextParts.join('\n'),
+        visualSearchTerm,
+        speakerNotes
+    });
 };
 
 const parseVideoScripts = (markdown: string): Record<string, string> => {
@@ -425,15 +557,29 @@ const linkSlideModelsToBlueprint = (course: Course, models: SlideModel[]): Slide
 };
 
 export const getSlideModelsForPreview = async (course: Course): Promise<SlideModel[]> => {
-    const slidesStep = findStepByKey(course, 'course.livrables.slides');
+    // 1. Try to find explicit slide content (Source of Truth)
+    const slidesStep = course.steps?.find(s => 
+        s.title_key.toLowerCase().includes('slides') || 
+        s.title_key.includes('livrables.slides')
+    );
+
     const videoScriptStep = findStepByKey(course, 'video_scripts');
     const scripts = videoScriptStep ? parseVideoScripts(videoScriptStep.content) : {};
-    if (slidesStep && slidesStep.content) {
+
+    if (slidesStep && slidesStep.content && slidesStep.content.length > 50) {
         const contentWithPublic = await replaceBlobUrlsWithPublic(slidesStep.content, course.user_id, course.id);
-        let models = buildSlideModelsFromContent(contentWithPublic, slidesStep.title_key, scripts);
-        models = linkSlideModelsToBlueprint(course, models);
+        const contentAllPublic = await ensurePublicExternalImages(contentWithPublic, course.user_id, course.id);
+        
+        // Use our robust parser WITHOUT linking to blueprint to avoid "ghost" modules overriding explicit slides
+        let models = buildSlideModelsFromContent(contentAllPublic, slidesStep.title_key, scripts);
+        
+        // Do NOT link to blueprint here. We want exactly what is in the editor.
+        // models = linkSlideModelsToBlueprint(course, models); 
+        
         return models;
     }
+    
+    // Fallback logic
     let models = buildSlideModelsFromCourse(course, scripts);
     models = linkSlideModelsToBlueprint(course, models);
     return models;
@@ -678,16 +824,77 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
     const pptx = new PptxGenJS();
     pptx.layout = 'LAYOUT_16x9';
     addTitleSlide(pptx, course);
-    const slidesStep = findStepByKey(course, 'course.livrables.slides');
+    
+    // 1. Try to find explicit slide content (Source of Truth)
+    // Search broadly by key OR by title (e.g. "Set de slide-uri")
+    const slidesStep = course.steps?.find(s => 
+        s.title_key.toLowerCase().includes('slides') || 
+        s.title_key.includes('livrables.slides') ||
+        (s.title && s.title.toLowerCase().includes('slide')) ||
+        (s.title && s.title.toLowerCase().includes('prezentare'))
+    );
+
     const videoScriptStep = findStepByKey(course, 'video_scripts');
     const scripts = videoScriptStep ? parseVideoScripts(videoScriptStep.content) : {};
-    if (slidesStep && slidesStep.content) {
+
+    // Check if we found it and it has content
+    if (slidesStep && slidesStep.content && slidesStep.content.length > 50) {
+        console.log('[Export PPTX] Using explicit slide content from step:', slidesStep.title_key);
+        // Source of Truth found: Use ONLY this content
         const contentWithPublic = await replaceBlobUrlsWithPublic(slidesStep.content, course.user_id, course.id);
         const contentAllPublic = await ensurePublicExternalImages(contentWithPublic, course.user_id, course.id);
+        
+        // Use our robust parser
         let models = buildSlideModelsFromContent(contentAllPublic, slidesStep.title_key, scripts);
-        models = linkSlideModelsToBlueprint(course, models);
+        
+        // --- CLEANUP: Filter out "junk" slides ---
+         // Strict Filter: Valid slides MUST have an image (placeholder or real) OR be a Module header OR be the Agenda
+         // The "junk" slides (2-17) typically have no image and dense text.
+         models = models.filter(m => {
+             const title = (m.title || '').toLowerCase();
+             const isModule = title.startsWith('modul') || title.startsWith('module');
+             const isAgenda = title.includes('agenda');
+             const hasImage = !!m.image_url;
+             
+             // Always keep structural slides (Modules/Agenda)
+             if (isModule || isAgenda) return true;
+             
+             // For content slides, REQUIRE an image/placeholder.
+             // The "bad" slides generated from raw text usually lack the Visual tag, so they have no image.
+             // The "good" slides from the editor ALL have a Visual tag (even if just text), so they get a placeholder.
+             if (hasImage) return true;
+
+             return false;
+         });
+ 
+         // --- ADD AGENDA ---
+        // Generate Agenda based on the ACTUAL modules found in the content
+        const moduleSlides = models.filter(m => (m.title || '').toLowerCase().startsWith('modul'));
+        if (moduleSlides.length > 0) {
+            const agendaItems = moduleSlides.map(m => m.title || '').filter(Boolean);
+            
+            // Create an Agenda Slide Model
+            const agendaSlide: SlideModel = {
+                id: 'generated_agenda',
+                slide_type: SlideArchetype.Agenda,
+                title: 'Agenda',
+                bullets: agendaItems,
+                image_url: null,
+                section_id: undefined,
+                objective_links: [],
+                trainer_notes: 'Agenda pentru sesiunea de astăzi.'
+            };
+            
+            // Insert Agenda at the beginning (before the first content slide)
+            models.unshift(agendaSlide);
+        }
+
+        // Render ONLY these models
         await renderSlideModels(pptx, course, models);
+        
     } else {
+        console.log('[Export PPTX] No explicit slide content found. Falling back to auto-generation.');
+        // Fallback: Generate structure-based slides (Legacy behavior)
         const structureStep = findStepByKey(course, 'structure');
         addAgendaSlide(pptx, course, structureStep, videoScriptStep);
         let models = buildSlideModelsFromCourse(course, scripts);
@@ -695,6 +902,7 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
         await renderSlideModels(pptx, course, models);
         addSummarySlide(pptx);
     }
+
     const fileName = `${course.title.replace(/[^a-z0-9]/gi, '_')}.pptx`;
     await pptx.writeFile({ fileName });
 };
