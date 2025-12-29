@@ -558,10 +558,14 @@ const linkSlideModelsToBlueprint = (course: Course, models: SlideModel[]): Slide
 
 export const getSlideModelsForPreview = async (course: Course): Promise<SlideModel[]> => {
     // 1. Try to find explicit slide content (Source of Truth)
-    const slidesStep = course.steps?.find(s => 
-        s.title_key.toLowerCase().includes('slides') || 
-        s.title_key.includes('livrables.slides')
-    );
+    // Prioritize 'livrables.slides'
+    let slidesStep = course.steps?.find(s => s.title_key === 'livrables.slides');
+    
+    if (!slidesStep) {
+        slidesStep = course.steps?.find(s => 
+            s.title_key.toLowerCase().includes('slides')
+        );
+    }
 
     const videoScriptStep = findStepByKey(course, 'video_scripts');
     const scripts = videoScriptStep ? parseVideoScripts(videoScriptStep.content) : {};
@@ -826,13 +830,15 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
     addTitleSlide(pptx, course);
     
     // 1. Try to find explicit slide content (Source of Truth)
-    // Search broadly by key OR by title (e.g. "Set de slide-uri")
-    const slidesStep = course.steps?.find(s => 
-        s.title_key.toLowerCase().includes('slides') || 
-        s.title_key.includes('livrables.slides') ||
-        (s.title && s.title.toLowerCase().includes('slide')) ||
-        (s.title && s.title.toLowerCase().includes('prezentare'))
-    );
+    // Prioritize 'livrables.slides' as it is the standard key for the generated slides
+    let slidesStep = course.steps?.find(s => s.title_key === 'livrables.slides');
+
+    // If not found, try looser matching on key (legacy support)
+    if (!slidesStep) {
+        slidesStep = course.steps?.find(s => 
+            s.title_key.toLowerCase().includes('slides')
+        );
+    }
 
     const videoScriptStep = findStepByKey(course, 'video_scripts');
     const scripts = videoScriptStep ? parseVideoScripts(videoScriptStep.content) : {};
