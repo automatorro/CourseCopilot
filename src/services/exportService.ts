@@ -6,7 +6,7 @@ import { Course, CourseStep, SlideModel, SlideArchetype, SlideRules } from '../t
 import { replaceBlobUrlsWithPublic, ensurePublicExternalImages } from './imageService';
 import { isEnabled } from '../config/featureFlags';
 import { exportCourseAsPdf } from './pdfExporter';
-import { analyzeSlideContent, SlideDesignJSON, getSmartFallbackDesign } from './presentationAiService';
+import { SlideDesignJSON, getSmartFallbackDesign } from './presentationAiService';
 import { searchImages } from './imageSearchService';
 import { 
     renderHeroSlide, 
@@ -121,8 +121,7 @@ const addAgendaSlide = (
 const addContentSlides = async (
     pptx: PptxGenJS,
     step: CourseStep,
-    course: Course,
-    videoScripts: Record<string, string>
+    course: Course
 ): Promise<void> => {
     const pre = normalizeExternalImageLinks(step.content);
     const withPublic = await replaceBlobUrlsWithPublic(pre, course.user_id, course.id);
@@ -765,13 +764,9 @@ export const exportCourseAsPptx = async (course: Course): Promise<void> => {
     const videoScriptStep = findStepByKey(course, 'video_scripts');
     addAgendaSlide(pptx, course, structureStep, videoScriptStep);
 
-    const videoScripts = videoScriptStep
-        ? parseVideoScripts(videoScriptStep.content)
-        : {};
-
     for (const step of course.steps || []) {
         if (!shouldExcludeFromSlides(step) && step.content) {
-            await addContentSlides(pptx, step, course, videoScripts);
+            await addContentSlides(pptx, step, course);
         }
     }
 
@@ -971,72 +966,6 @@ const buildSlideModelsFromCourse = (course: Course, scripts: Record<string, stri
     return models;
 };
 
-const renderSlideModels = async (pptx: PptxGenJS, course: Course, models: SlideModel[]): Promise<void> => {
-    for (const m of models) {
-        const slide = pptx.addSlide();
-        const bulletsText = (m.bullets || []).join('\n');
-        switch (m.slide_type) {
-            case SlideArchetype.ImageText:
-                slide.addText(m.title || '', { x: 0.5, y: 0.5, w: 5.5, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
-                if (bulletsText) {
-                    slide.addText(bulletsText, { x: 0.5, y: 1.4, w: 5.5, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
-                }
-                try {
-                    if (m.image_url) {
-                        let dataUrl: string | null = null;
-                        if (!m.image_url.startsWith('data:') && m.image_url.startsWith('http')) {
-                            dataUrl = await fetchToDataUrl(m.image_url);
-                        }
-                        const isData = m.image_url.startsWith('data:') || !!dataUrl;
-                        const box = { x: 6.1, y: 0.7, w: 3.4, h: 5.0 };
-                        const pad = 0.15;
-                        const dims = await getImageDims(dataUrl || m.image_url);
-                        const fit = fitContain(box.w - pad * 2, box.h - pad * 2, dims.w, dims.h);
-                        const xPos = box.x + pad + ((box.w - pad * 2) - fit.w) / 2;
-                        const yPos = box.y + pad + ((box.h - pad * 2) - fit.h) / 2;
-                        const opts: PptxGenJS.ImageProps = isData
-                            ? { data: dataUrl || m.image_url, x: xPos, y: yPos, w: fit.w, h: fit.h }
-                            : { path: m.image_url, x: xPos, y: yPos, w: fit.w, h: fit.h };
-                        slide.addImage(opts);
-                    }
-                } catch (e) {
-                    console.warn('Failed to add image in V2 renderer:', e);
-                }
-                break;
-            case SlideArchetype.Quote:
-                slide.addText(m.title || '', { x: 0.8, y: 1.2, w: 8.4, h: 3.2, fontSize: 32, italic: true, color: '111827', align: 'center' });
-                break;
-            case SlideArchetype.Exercise:
-                slide.addText('', { x: 0, y: 0, w: 10, h: 0.9, fill: { color: 'ECFDF5' } });
-                slide.addText('Exercițiu', { x: 0.5, y: 0.2, w: 9, h: 0.5, fontSize: 18, bold: true, color: '065F46' });
-                slide.addText(m.title || '', { x: 0.5, y: 0.9, w: 9, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
-                if (bulletsText) {
-                    slide.addText(bulletsText, { x: 0.5, y: 1.8, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
-                }
-                break;
-            case SlideArchetype.CaseStudy:
-                slide.addText('', { x: 0, y: 0, w: 10, h: 0.9, fill: { color: 'DBEAFE' } });
-                slide.addText('Studiu de caz', { x: 0.5, y: 0.2, w: 9, h: 0.5, fontSize: 18, bold: true, color: '1E40AF' });
-                slide.addText(m.title || '', { x: 0.5, y: 0.9, w: 9, h: 0.8, fontSize: 26, bold: true, color: '1F2937' });
-                if (bulletsText) {
-                    slide.addText(bulletsText, { x: 0.5, y: 1.8, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
-                }
-                break;
-            case SlideArchetype.Summary:
-            case SlideArchetype.Explainer:
-            default:
-                slide.addText(m.title || '', { x: 0.5, y: 0.7, w: 9, h: 0.8, fontSize: 28, bold: true, color: '1F2937' });
-                if (bulletsText) {
-                    slide.addText(bulletsText, { x: 0.5, y: 1.7, w: 9, h: 4.8, fontSize: 18, bullet: true, color: '374151', lineSpacing: 28 });
-                }
-                break;
-        }
-        if (m.trainer_notes) {
-            slide.addNotes(m.trainer_notes);
-        }
-        slide.addText(`${course.title}`, { x: 0.5, y: 6.8, w: 9, h: 0.3, fontSize: 10, color: '9CA3AF', align: 'right' });
-    }
-};
 
 const buildSlideModelsFromContent = (markdown: string, titleKey: string, scripts: Record<string, string>): SlideModel[] => {
     const models: SlideModel[] = [];

@@ -138,7 +138,7 @@ export const renderBigStat = (slide: PptxGenJS.Slide, data: SlideDesignJSON, ima
     });
 };
 
-export const renderComparison = (slide: PptxGenJS.Slide, data: SlideDesignJSON, imageUrl?: string) => {
+export const renderComparison = (slide: PptxGenJS.Slide, data: SlideDesignJSON, _imageUrl?: string) => {
     slide.addText(data.title, {
         x: 0.5, y: 0.3, w: '90%', h: 0.8,
         fontSize: 28, bold: true, color: '1F2937', align: 'center'
@@ -197,7 +197,7 @@ export const renderQuotation = (slide: PptxGenJS.Slide, data: SlideDesignJSON, i
     });
 };
 
-export const renderTriad = (slide: PptxGenJS.Slide, data: SlideDesignJSON, imageUrl?: string) => {
+export const renderTriad = (slide: PptxGenJS.Slide, data: SlideDesignJSON, _imageUrl?: string) => {
     slide.addText(data.title, {
         x: 0.5, y: 0.5, w: '90%', h: 0.8,
         fontSize: 28, bold: true, color: '1F2937', align: 'center'
@@ -225,7 +225,7 @@ export const renderTriad = (slide: PptxGenJS.Slide, data: SlideDesignJSON, image
     });
 };
 
-export const renderTimeline = (slide: PptxGenJS.Slide, data: SlideDesignJSON, imageUrl?: string) => {
+export const renderTimeline = (slide: PptxGenJS.Slide, data: SlideDesignJSON, _imageUrl?: string) => {
     slide.addText(data.title, {
         x: 0.5, y: 0.5, w: '90%', h: 0.8,
         fontSize: 28, bold: true, color: '1F2937'
@@ -245,7 +245,7 @@ export const renderTimeline = (slide: PptxGenJS.Slide, data: SlideDesignJSON, im
         const xPos = 1 + (idx * step);
         
         // Dot
-        slide.addShape('oval', {
+        slide.addShape('ellipse' as any, {
             x: xPos - 0.15, y: 3.35, w: 0.3, h: 0.3,
             fill: { color: data.accentColor || '1E3A8A' }
         });
@@ -316,7 +316,7 @@ export const renderImageCenter = (slide: PptxGenJS.Slide, data: SlideDesignJSON,
     });
 };
 
-export const renderThreeColumns = (slide: PptxGenJS.Slide, data: SlideDesignJSON, imageUrl?: string) => {
+export const renderThreeColumns = (slide: PptxGenJS.Slide, data: SlideDesignJSON, _imageUrl?: string) => {
     slide.addText(data.title, {
         x: 0.5, y: 0.3, w: '90%', h: 0.8,
         fontSize: 28, bold: true, color: '1F2937'
@@ -401,7 +401,7 @@ export const renderFullImage = (slide: PptxGenJS.Slide, data: SlideDesignJSON, i
     }
 };
 
-export const renderGridCards = (slide: PptxGenJS.Slide, data: SlideDesignJSON, imageUrl?: string) => {
+export const renderGridCards = (slide: PptxGenJS.Slide, data: SlideDesignJSON, _imageUrl?: string) => {
     slide.addText(data.title, {
         x: 0.5, y: 0.3, w: '90%', h: 0.8,
         fontSize: 28, bold: true, color: '1F2937'
@@ -430,7 +430,7 @@ export const renderGridCards = (slide: PptxGenJS.Slide, data: SlideDesignJSON, i
         });
 
         // Icon placeholder (Circle)
-        slide.addShape('oval', {
+        slide.addShape('ellipse' as any, {
             x: p.x + 0.2, y: p.y + 0.2, w: 0.5, h: 0.5,
             fill: { color: data.accentColor || '1E3A8A' }
         });
