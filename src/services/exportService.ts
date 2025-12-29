@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 
 import { Course, CourseStep, SlideModel, SlideArchetype, SlideRules } from '../types';
 import { replaceBlobUrlsWithPublic, ensurePublicExternalImages } from './imageService';
-import { isEnabled } from '../config/featureFlags';
+// import { isEnabled } from '../config/featureFlags';
 import { exportCourseAsPdf } from './pdfExporter';
 import { SlideDesignJSON, getSmartFallbackDesign } from './presentationAiService';
 import { searchImages } from './imageSearchService';
@@ -391,18 +391,18 @@ const processSlideBlock = (title: string, contentBlock: string, sections: Conten
     let images: { url: string; alt: string }[] = [];
     let bodyTextParts: string[] = [];
 
-    // Helper regex for strict mode detection
-    const visualRegex = /^\s*[*_]*Visual[*_]*\s*:/i;
-    const textRegex = /^\s*[*_]*(Text|Content)[*_]*\s*:/i;
-    const notesRegex = /^\s*[*_]*Speaker\s*Notes[*_]*\s*:/i;
+    // Helper regex for strict mode detection - UPDATED to be more permissive with bullets
+    const visualRegex = /^\s*[-*•_]*\s*Visual\s*[:\-]?\s*/i;
+    const textRegex = /^\s*[-*•_]*\s*(Text|Content)\s*[:\-]?\s*/i;
+    const notesRegex = /^\s*[-*•_]*\s*Speaker\s*Notes\s*[:\-]?\s*/i;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
         // --- FILTER OUT NOISE ---
-        // If the line looks like a Slide title or Module header that slipped in
-        if (/^(Slide|Modul[e]?)\s*#?\s*\d+:/i.test(line)) continue;
+        // If the line looks like a Slide title or Module header that slipped in (handling bold/headers)
+        if (/^(\*\*|#+)?\s*(Slide|Modul[e]?)\s*#?\s*\d+:/i.test(line)) continue;
         if (line.startsWith('---')) continue;
 
         // --- DETECT MODE SWITCHERS ---
@@ -446,8 +446,8 @@ const processSlideBlock = (title: string, contentBlock: string, sections: Conten
             // Content Mode
             if (line.toLowerCase().includes('layout:')) continue;
             // Ignore "Visual:" or "Speaker Notes:" if they appear without colon but clearly mark a section
-            if (/^\s*[*_]*Visual[*_]*\s*$/i.test(line)) { currentMode = 'visual'; continue; }
-            if (/^\s*[*_]*Speaker\s*Notes[*_]*\s*$/i.test(line)) { currentMode = 'notes'; continue; }
+            if (visualRegex.test(line)) { currentMode = 'visual'; continue; }
+            if (notesRegex.test(line)) { currentMode = 'notes'; continue; }
 
             // Check for bullets
             if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('• ')) {
@@ -747,14 +747,15 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
 };
 
 export const exportCourseAsPptx = async (course: Course): Promise<void> => {
-    if (isEnabled('newPptxExporter')) {
+    // ALWAYS use V2 exporter as it contains the critical fixes for PPTX corruption and content parsing
+    // if (isEnabled('newPptxExporter')) {
         try {
             await exportCourseAsPptxV2(course);
             return;
         } catch (e) {
             console.warn('[Export] V2 exporter failed, falling back to legacy:', e);
         }
-    }
+    // }
     const pptx = new PptxGenJS();
     pptx.layout = 'LAYOUT_16x9';
 
@@ -908,24 +909,6 @@ const splitSentences = (text: string): string[] => {
 const deriveBulletsFromBody = (body: string): string[] => {
     const sents = splitSentences(body);
     return sents.slice(0, 6);
-};
-
-const getImageDims = (url: string): Promise<{ w: number; h: number }> => {
-    return new Promise((resolve) => {
-        try {
-            const img = new Image();
-            img.onload = () => resolve({ w: img.naturalWidth || 1600, h: img.naturalHeight || 900 });
-            img.onerror = () => resolve({ w: 1600, h: 900 });
-            img.src = url;
-        } catch {
-            resolve({ w: 1600, h: 900 });
-        }
-    });
-};
-
-const fitContain = (boxW: number, boxH: number, imgW: number, imgH: number): { w: number; h: number } => {
-    const scale = Math.min(boxW / imgW, boxH / imgH);
-    return { w: Math.max(0.1, imgW * scale), h: Math.max(0.1, imgH * scale) };
 };
 
 // V2 exporter: builds SlideModel IR and renders archetypes deterministically
