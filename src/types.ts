@@ -152,6 +152,7 @@ export interface SlideModel {
   core_message?: string;
   bullets?: string[];
   image_url?: string | null;
+  image_prompt?: string; // NEW: Visual description for AI/Search
   trainer_notes?: string | null;
   objective_links?: string[];
   section_id?: string;

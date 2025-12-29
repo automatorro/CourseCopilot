@@ -20,7 +20,7 @@ export const FEATURE_FLAGS: Record<FeatureFlagKey, boolean> = {
   // păstrând funcționalitatea din cod pentru utilizări viitoare/administrative.
   editorRefineButtonEnabled: false,
   editorGenerateButtonEnabled: false,
-  newPptxExporter: false,
+  newPptxExporter: true,
 };
 
 export const FEATURE_DOCS: Record<FeatureFlagKey, string> = {

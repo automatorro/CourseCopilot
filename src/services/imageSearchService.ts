@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient';
+
 export type ImageSearchResult = {
   url: string
   thumb: string
@@ -8,11 +10,25 @@ export type ImageSearchResult = {
 
 export const searchImages = async (query: string, page = 1): Promise<ImageSearchResult[]> => {
   try {
-    const { data } = await (window as any).supabase.functions.invoke('image-search', {
-      body: { query, page }
+    // Try the new Unsplash Edge Function first
+    const { data, error } = await supabase.functions.invoke('unsplash-search', {
+      body: { query, page, per_page: 20 }
     })
-    if (data && Array.isArray(data.results)) return data.results as ImageSearchResult[]
-  } catch {}
+    
+    if (!error && data && Array.isArray(data.results)) {
+        return data.results.map((r: any) => ({
+            url: r.urls.regular,
+            thumb: r.urls.small,
+            author: r.user.name,
+            source: 'Unsplash',
+            link: r.links.html
+        }));
+    }
+  } catch (e) {
+    console.warn('Unsplash search failed, falling back to Lexica', e);
+  }
+
+  // Fallback to Lexica (existing logic)
   const baseUrl = `https://lexica.art/api/v1/search?q=${encodeURIComponent(query)}&page=${page}`
   const tryFetchJson = async (u: string) => {
     const res = await fetch(u, { cache: 'no-store' })
