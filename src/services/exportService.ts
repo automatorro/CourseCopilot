@@ -21,7 +21,17 @@ import {
     renderFullImage,
     renderGridCards,
     renderImageCenter,
-    renderThreeColumns
+    renderThreeColumns,
+    renderSectionHeader,
+    renderChecklist,
+    renderDoDont,
+    renderProcessSteps,
+    renderKeyTakeaways,
+    renderDataPoints,
+    renderQuoteCenter,
+    renderTableSimple,
+    renderImageSidebar,
+    renderAgendaCompact
 } from '../lib/pptx/templates';
 
 // ============================================================================
@@ -158,10 +168,12 @@ const addContentSlides = async (
         if (section.visualSearchTerm) {
              // For now, use a safer placeholder logic
              // Extract just the first few meaningful words to avoid 503 errors from long queries
+             const STOP = ['si','și','the','and','of','for','în','cu','la','din','pe','un','o','este','sunt','de','că','ca','的','和','是','在','de','e','para','em','uma','um','dos','das','ao','à'];
              const keywords = section.visualSearchTerm
+                .toLowerCase()
                 .split(/[\s,]+/)
-                .filter(w => w.length > 3)
-                .slice(0, 3)
+                .filter(w => w.length > 3 && !STOP.includes(w))
+                .slice(0, 4)
                 .join(',');
              
              // Use a more reliable placeholder service if unsplash fails, or catch the error gracefully
@@ -223,19 +235,19 @@ const addContentSlides = async (
                 .join(',');
                 
              if (keywords) {
-                 const placeholderUrl = `https://source.unsplash.com/1600x900/?${keywords}`;
-                 try {
-                     const dataUrl = await fetchToDataUrl(placeholderUrl);
-                     if (dataUrl) {
-                         slide.addImage({ 
-                             data: dataUrl, 
-                             x: 5.8, y: yPos, w: 4, h: 3 
-                         });
-                     }
-                 } catch (e) {
-                     console.warn('Failed to load title-based placeholder:', e);
-                 }
-             }
+                    const placeholderUrl = `https://source.unsplash.com/1600x900/?${keywords}`;
+                    try {
+                        const dataUrl = await fetchToDataUrl(placeholderUrl);
+                        if (dataUrl) {
+                            slide.addImage({ 
+                                data: dataUrl, 
+                                x: 5.8, y: yPos, w: 4, h: 3 
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('Failed to load title-based placeholder:', e);
+                    }
+                }
         }
 
         // Speaker Notes
@@ -307,7 +319,10 @@ const fetchToDataUrl = async (url: string): Promise<string | null> => {
 const parseContentSections = (markdown: string): ContentSection[] => {
     const sections: ContentSection[] = [];
     const lines = markdown.split('\n');
-    
+
+    // First pass: detect if the editor uses explicit "Slide nr:" markers
+    const hasSlideMarkers = lines.some(l => /^\s*(\*\*|#+)?\s*Slide\s*(nr\.|#)?\s*\d+:/i.test(l.trim()));
+
     let currentTitle: string | null = null;
     let currentBuffer: string[] = [];
 
@@ -320,58 +335,32 @@ const parseContentSections = (markdown: string): ContentSection[] => {
     };
 
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // --- DETECT NEW SLIDE START ---
-        // 1. Markdown Header (##, ###, ####) - Broadened to catch subsections as slides
-        const headerMatch = line.match(/^(#{2,4})\s+(.+)$/);
-        // 2. Explicit Slide Format (Slide X: Title), handles bold/italics
-        const slideMatch = line.match(/^(\*\*|#+)?\s*Slide\s*#?\s*\d+:\s*(.+?)(\*\*|#+)?$/i);
-        // 3. Module Header (Module X: Title) - treat as a slide title if it appears
-        const moduleMatch = line.match(/^(\*\*|#+)?\s*Modul[e]?\s*#?\s*\d+:\s*(.+?)(\*\*|#+)?$/i);
-        // 4. Horizontal Rule (---) - explicit slide break
-        const hrMatch = line.match(/^(\-{3,}|\*{3,})$/);
+        const raw = lines[i];
+        const line = raw.trim();
 
-        if (headerMatch || slideMatch || moduleMatch || hrMatch) {
-            flush(); // Save previous slide
-            
-            // Extract clean title
+        // --- DETECT NEW SLIDE START (PRIORITIZE \"Slide nr:\") ---
+        // Accept "Slide 1" with or without a title part, optional colon
+        const slideMatch = line.match(/^(\*\*|#+)?\s*(Slide|幻灯片)\s*(nr\.|#)?\s*\d+(?:\s*[:：]\s*(.+?))?(\*\*|#+)?$/i);
+        const headerMatch = !hasSlideMarkers ? line.match(/^(#{2,4})\s+(.+)$/) : null;
+        // module headers intentionally ignored to avoid over-segmentation
+        const hrMatch = (!hasSlideMarkers ? line.match(/^(\-{3,}|\*{3,})$/) : null);
+
+        if (slideMatch || headerMatch || hrMatch) {
+            flush();
             let rawTitle = '';
-            if (headerMatch) rawTitle = headerMatch[2];
-            else if (slideMatch) rawTitle = slideMatch[2];
-            else if (moduleMatch) rawTitle = moduleMatch[0];
-            else if (hrMatch) {
-                // For HR, we don't have a title yet. 
-                // We'll peek at the next line? Or just use "Slide" and let the next non-empty line become the title if it looks like one?
-                // For simplicity, let's look for a title in the next non-empty line logic (not here).
-                // But we reset currentTitle so the "Introduction" fallback or next text triggers a title?
-                // Actually, let's name it "Slide" and if the content has a header, it might override? 
-                // No, current logic is simple. Let's just use "Slide" for HR-separated slides if no header follows immediately.
-                rawTitle = "Slide"; 
-            }
-
-            // Clean up formatting chars from title end if any
+            if (slideMatch) rawTitle = (slideMatch[4] || 'Slide').toString();
+            else if (headerMatch) rawTitle = headerMatch[2];
+            else if (hrMatch) rawTitle = 'Slide';
             currentTitle = rawTitle.replace(/(\*\*|#+)$/, '').trim();
             continue;
         }
 
-        // If we are inside a slide, collect lines
         if (currentTitle) {
-            currentBuffer.push(lines[i]);
-        } else {
-            // Edge case: Content before first header. 
-            // If line is not empty, start a generic slide or skip if it's just noise.
-            if (line && !line.startsWith('Layout:')) {
-                // If we hit content but have no title, assume it belongs to a "Intro" or the previous context
-                // For safety, let's start a slide if we find significant text
-                 if (!currentTitle) currentTitle = "Introduction";
-                 currentBuffer.push(lines[i]);
-            }
+            currentBuffer.push(raw);
         }
     }
 
-    flush(); // Save last slide
-
+    flush();
     return sections;
 };
 
@@ -384,17 +373,19 @@ const sanitizeText = (text: string): string => {
 const processSlideBlock = (title: string, contentBlock: string, sections: ContentSection[]) => {
     const lines = contentBlock.trim().split('\n');
     
-    let currentMode: 'content' | 'notes' | 'visual' | null = 'content';
+    let currentMode: 'content' | 'notes' | 'visual' | null = null;
     let visualSearchTerm = '';
     let speakerNotes = '';
     let bulletPoints: string[] = [];
     let images: { url: string; alt: string }[] = [];
     let bodyTextParts: string[] = [];
 
-    // Helper regex for strict mode detection - UPDATED to be more permissive with bullets
-    const visualRegex = /^\s*[-*•_]*\s*Visual\s*[:\-]?\s*/i;
-    const textRegex = /^\s*[-*•_]*\s*(Text|Content)\s*[:\-]?\s*/i;
-    const notesRegex = /^\s*[-*•_]*\s*Speaker\s*Notes\s*[:\-]?\s*/i;
+    // Helper regex for strict mode detection
+    const visualRegex = /^\s*[-*•_]*\s*(Visual|Imagine\s*Sugerată|Image|Visual\s*cue|Prompt|Vizual|视觉|图像|图片|图示|视觉提示|Visual|Imagem)\s*[:：\-]?\s*/i;
+    const textRegex = /^\s*[-*•_]*\s*(Text|Content|Conținut|Texto|文本|内容)\s*[:：\-]?\s*/i;
+    const notesRegex = /^\s*[-*•_]*\s*(Speaker\s*Notes|Note\s*Vorbit|Note\s*Trainer|讲者备注|讲者注释|演讲备注|旁白|Notas\s*do\s*Apresentador|Notas\s*do\s*Orador|Notas\s*do\s*Palestrante)\s*[:：\-]?\s*/i;
+    const titleLabelRegex = /^\s*[-*•_]*\s*(Titlu|Subtitlu)\s*[:\-]?\s*/i;
+    const imageLabelRegex = /^\s*[-*•_]*\s*(Imagine\s*Sugerată|Imagine|Visual)\s*[:\-]?\s*/i;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -442,10 +433,12 @@ const processSlideBlock = (title: string, contentBlock: string, sections: Conten
         } else if (currentMode === 'notes') {
             // IGNORE NOTES CONTENT as requested
             continue; 
-        } else {
+        } else if (currentMode === 'content') {
             // Content Mode
             if (line.toLowerCase().includes('layout:')) continue;
-            // Ignore "Visual:" or "Speaker Notes:" if they appear without colon but clearly mark a section
+            // Ignore labels that should never become content
+            if (titleLabelRegex.test(line)) continue;
+            if (imageLabelRegex.test(line)) continue;
             if (visualRegex.test(line)) { currentMode = 'visual'; continue; }
             if (notesRegex.test(line)) { currentMode = 'notes'; continue; }
 
@@ -464,6 +457,9 @@ const processSlideBlock = (title: string, contentBlock: string, sections: Conten
                     bodyTextParts.push(line);
                 }
             }
+        } else {
+            // Before \"Text:\" we ignore content-only lines to avoid capturing labels or noise
+            continue;
         }
     }
 
@@ -481,10 +477,11 @@ const processSlideBlock = (title: string, contentBlock: string, sections: Conten
         bulletPoints = bulletPoints.slice(0, 7);
     }
 
-    // Clean up bullets that might have captured Slide/Module headers
+    // Clean up bullets that might have captured labels/headers
     bulletPoints = bulletPoints.filter(b => 
         !/^(Slide|Modul[e]?)\s*#?\s*\d+:/i.test(b) &&
-        !/^---$/.test(b)
+        !/^---$/.test(b) &&
+        !/^\s*(Titlu|Subtitlu|Imagine\s*Sugerată|Speaker\s*Notes)\s*[:\-]?/i.test(b)
     );
 
     // SANITIZE TEXT to prevent XML corruption
@@ -493,8 +490,13 @@ const processSlideBlock = (title: string, contentBlock: string, sections: Conten
     const cleanBody = sanitizeText(bodyTextParts.join('\n'));
     const cleanNotes = sanitizeText(speakerNotes);
 
+    let finalTitle = cleanTitle;
+    if (!finalTitle || /^slide(\s*\d+)?$/i.test(finalTitle)) {
+        finalTitle = cleanBullets[0] || (cleanBody.split('\n').filter(Boolean)[0] || 'Slide');
+    }
+
     sections.push({
-        title: cleanTitle,
+        title: finalTitle,
         bulletPoints: cleanBullets,
         images,
         rawContent: contentBlock,
@@ -640,7 +642,10 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
                     if (section.bulletPoints.length > 0) {
                         aiDesign.content = section.bulletPoints;
                     } else if (section.bodyText) {
-                        aiDesign.content = [section.bodyText];
+                        aiDesign.content = section.bodyText
+                            .split('\n')
+                            .map(s => s.trim())
+                            .filter(Boolean);
                     } else {
                         // Safety: If parser found no content, do not fallback to raw dump
                         aiDesign.content = [];
@@ -699,6 +704,24 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
                         }
                     }
 
+                    // Helper: choose layout depending on image presence
+                    const chooseLayoutForContent = (hasImage: boolean, desired: SlideDesignJSON['layout']): SlideDesignJSON['layout'] => {
+                        const imageLayouts: SlideDesignJSON['layout'][] = [
+                            'HERO','SPLIT_LEFT','SPLIT_RIGHT','FULL_IMAGE','IMAGE_CENTER','IMAGE_SIDEBAR'
+                        ];
+                        const textLayouts: SlideDesignJSON['layout'][] = [
+                            'DEFAULT','TRIAD','THREE_COLUMNS','COMPARISON','TIMELINE',
+                            'SECTION_HEADER','CHECKLIST','DO_DONT','PROCESS_STEPS','KEY_TAKEAWAYS','DATA_POINTS','QUOTE_CENTER','TABLE_SIMPLE','AGENDA_COMPACT'
+                        ];
+                        const pool = hasImage ? imageLayouts : textLayouts;
+                        // If desired fits pool, keep it; otherwise pick from pool by simple rotation
+                        if (pool.includes(desired)) return desired;
+                        const idx = Math.floor(Math.random() * pool.length);
+                        return pool[idx];
+                    };
+
+                    aiDesign.layout = chooseLayoutForContent(!!imageUrl, aiDesign.layout);
+
                     // Render based on Layout
                     try {
                         switch (aiDesign.layout) {
@@ -714,6 +737,16 @@ const exportCourseAsPptxV2 = async (course: Course): Promise<void> => {
                             case 'GRID_CARDS': renderGridCards(slide, aiDesign, imageUrl); break;
                             case 'IMAGE_CENTER': renderImageCenter(slide, aiDesign, imageUrl); break;
                             case 'THREE_COLUMNS': renderThreeColumns(slide, aiDesign, imageUrl); break;
+                            case 'SECTION_HEADER': renderSectionHeader(slide, aiDesign, imageUrl); break;
+                            case 'CHECKLIST': renderChecklist(slide, aiDesign, imageUrl); break;
+                            case 'DO_DONT': renderDoDont(slide, aiDesign, imageUrl); break;
+                            case 'PROCESS_STEPS': renderProcessSteps(slide, aiDesign, imageUrl); break;
+                            case 'KEY_TAKEAWAYS': renderKeyTakeaways(slide, aiDesign, imageUrl); break;
+                            case 'DATA_POINTS': renderDataPoints(slide, aiDesign, imageUrl); break;
+                            case 'QUOTE_CENTER': renderQuoteCenter(slide, aiDesign, imageUrl); break;
+                            case 'TABLE_SIMPLE': renderTableSimple(slide, aiDesign, imageUrl); break;
+                            case 'IMAGE_SIDEBAR': renderImageSidebar(slide, aiDesign, imageUrl); break;
+                            case 'AGENDA_COMPACT': renderAgendaCompact(slide, aiDesign, imageUrl); break;
                             case 'DEFAULT': 
                             default: renderDefault(slide, aiDesign, imageUrl); break;
                         }
@@ -1257,3 +1290,6 @@ export const exportCourseAsZip = async (course: Course, t: (key: string) => stri
 
 // Re-export PDF export function
 export { exportCourseAsPdf };
+
+// Debug/testing export for parser
+export { parseContentSections as __debugParseContentSections };

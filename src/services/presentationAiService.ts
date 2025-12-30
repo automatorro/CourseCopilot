@@ -1,7 +1,8 @@
 import { supabase } from './supabaseClient';
 
 export interface SlideDesignJSON {
-  layout: 'HERO' | 'SPLIT_LEFT' | 'SPLIT_RIGHT' | 'BIG_STAT' | 'COMPARISON' | 'QUOTATION' | 'TRIAD' | 'TIMELINE' | 'FULL_IMAGE' | 'GRID_CARDS' | 'IMAGE_CENTER' | 'THREE_COLUMNS' | 'DEFAULT';
+  layout: 'HERO' | 'SPLIT_LEFT' | 'SPLIT_RIGHT' | 'BIG_STAT' | 'COMPARISON' | 'QUOTATION' | 'TRIAD' | 'TIMELINE' | 'FULL_IMAGE' | 'GRID_CARDS' | 'IMAGE_CENTER' | 'THREE_COLUMNS' | 'DEFAULT'
+    | 'SECTION_HEADER' | 'CHECKLIST' | 'DO_DONT' | 'PROCESS_STEPS' | 'KEY_TAKEAWAYS' | 'DATA_POINTS' | 'QUOTE_CENTER' | 'TABLE_SIMPLE' | 'IMAGE_SIDEBAR' | 'AGENDA_COMPACT';
   title: string;
   content: string[];
   imagePrompt: string;
@@ -36,18 +37,9 @@ let fallbackCounter = 0;
 export const getSmartFallbackDesign = (content: string): SlideDesignJSON => {
   // Extended layout rotation for variety
   const layouts: SlideDesignJSON['layout'][] = [
-      'HERO', 
-      'SPLIT_LEFT', 
-      'SPLIT_RIGHT', 
-      'TRIAD', 
-      'FULL_IMAGE', 
-      'GRID_CARDS', 
-      'IMAGE_CENTER',
-      'THREE_COLUMNS',
-      'BIG_STAT', 
-      'QUOTATION', 
-      'COMPARISON',
-      'TIMELINE'
+      'HERO','SPLIT_LEFT','SPLIT_RIGHT','TRIAD','FULL_IMAGE','GRID_CARDS','IMAGE_CENTER','THREE_COLUMNS',
+      'BIG_STAT','QUOTATION','COMPARISON','TIMELINE',
+      'SECTION_HEADER','CHECKLIST','DO_DONT','PROCESS_STEPS','KEY_TAKEAWAYS','DATA_POINTS','QUOTE_CENTER','TABLE_SIMPLE','IMAGE_SIDEBAR','AGENDA_COMPACT'
   ];
   const layout = layouts[fallbackCounter % layouts.length];
   fallbackCounter++;

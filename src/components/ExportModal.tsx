@@ -16,6 +16,7 @@ interface ExportModalProps {
 const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, isExporting, course }) => {
     const { t } = useTranslation();
     const [hasCritical, setHasCritical] = useState(false);
+    const [ackImages, setAckImages] = useState(false);
 
     useEffect(() => {
         const check = async () => {
@@ -30,6 +31,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
             }
         };
         check();
+        setAckImages(false);
     }, [isOpen, course?.id]);
 
     if (!isOpen) return null;
@@ -51,6 +53,24 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
                         Există probleme critice identificate de asistent, dar poți continua exportul.
                     </div>
                 )}
+                
+                <div className="px-6 py-3 border-b border-orange-100 dark:border-orange-900/30 bg-orange-50 dark:bg-orange-900/10 text-orange-700 dark:text-orange-300 text-sm">
+                    În unele cazuri, slide-urile pot avea imagini placeholder dacă nu se găsesc rezultate relevante. Puteți înlocui ușor imaginile direct în PowerPoint.
+                </div>
+                
+                <div className="px-6 pt-3 text-sm">
+                    <label className="inline-flex items-start gap-3 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={ackImages}
+                            onChange={(e) => setAckImages(e.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-gray-700 dark:text-gray-300">
+                            Am înțeles că unele imagini pot fi placeholder și pot fi înlocuite ușor ulterior.
+                        </span>
+                    </label>
+                </div>
 
                 <div className="p-6 space-y-4">
                     <p className="text-gray-600 dark:text-gray-300 mb-4">
@@ -59,7 +79,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
 
                     <button
                         onClick={() => onExport('pptx')}
-                        disabled={isExporting}
+                        disabled={isExporting || !ackImages}
                         className={`w-full flex items-center p-4 border-2 rounded-xl transition-all group ${
                             hasCritical 
                                 ? 'border-yellow-100 dark:border-yellow-900/30 bg-yellow-50 dark:bg-yellow-900/10 hover:border-yellow-500' 

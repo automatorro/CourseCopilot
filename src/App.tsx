@@ -14,6 +14,7 @@ import BillingPage from './pages/BillingPage';
 import ProfilePage from './pages/ProfilePage';
 import RlsTestPage from './pages/RlsTestPage';
 import DemoPage from './pages/DemoPage';
+import AutoExportPage from './pages/AutoExportPage';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -31,6 +32,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/demo" element={<DemoPage />} />
+            <Route path="/auto-export" element={<AutoExportPage />} />
             <Route path="/login" element={<AuthPage />} />
             <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
             <Route path="/course/:id" element={<PrivateRoute><CourseWorkspacePage /></PrivateRoute>} />
