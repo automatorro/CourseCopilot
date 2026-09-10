@@ -1340,26 +1340,14 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                               parsedDNA = {
                                   _status: "parse_error",
                                   _raw_content: typeof generatedContent === 'string' ? generatedContent : JSON.stringify(generatedContent),
-                                  terminology: { 
-                                      participant: "Participant", 
-                                      trainer: "Trainer", 
+                                  terminology: {
+                                      participant: "Participant",
+                                      trainer: "Trainer",
                                       exercise: "Exercise",
-                                      mandatoryTerms: {} 
+                                      mandatoryTerms: {},
+                                      forbiddenPhrases: []
                                   },
-                                  narrativeUniverse: { 
-                                      protagonists: [] 
-                                  },
-                                  voiceProfile: {
-                                      formality: "professional",
-                                      humorLevel: "none",
-                                      forbiddenPhrases: [],
-                                      signaturePhrases: []
-                                  },
-                                  masterTimeline: {
-                                      totalDuration: 0,
-                                      bufferPerModule: 0,
-                                      modules: []
-                                  }
+                                  toneFreeText: ""
                               };
                           }
                           

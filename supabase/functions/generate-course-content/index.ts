@@ -1285,11 +1285,103 @@ interface ModuleContext {
   }>;
 }
 
-/** Pre-built DNA context blocks ready for prompt injection */
+/** Environment (LIVE/ONLINE) delivery constraints — shared by the legacy DNA
+ *  blocks below and by buildTonePreamble (A.3). Single source of truth so the
+ *  two architectures never drift on what "ONLINE" or "LIVE" actually means. */
+function buildEnvConstraints(environment?: string): string {
+  return (environment || 'LIVE').toUpperCase() === 'ONLINE'
+    ? `**ENVIRONMENT: ONLINE (VIRTUAL CLASSROOM — ZOOM/TEAMS)**
+- INTERACTION: Must use "Breakout Rooms", "Chat Polls", "Miro Board links", "Screen Share".
+- CONSTRAINTS: Max 10 min monologues (Zoom Fatigue). Frequent "Type in chat" prompts.
+- MATERIALS: PDFs, Digital Workbooks, Online Quizzes.`
+    : `**ENVIRONMENT: LIVE (IN-PERSON WORKSHOP)**
+- INTERACTION: Face-to-face ONLY: "Turn to your neighbor", "Physical Flipcharts", "Room Movement", "Gallery Walk", "Role Play in room", "Group Discussions".
+- FORBIDDEN: DO NOT mention videos, webinars, online dashboards, virtual forums, zoom links, or screen sharing.
+- MATERIALS: Printed Workbooks, Sticky Notes, Markers, Flipchart paper.`;
+}
+
+// ==========================================
+// F3-T1: PROMPT ARCHITECTURE (docs/CURATENIE-SI-MODERNIZARE-CourseCopilot.md §A.1/A.3)
+// Installed here; consumed by the 7 new prompt files in F3-T2. Not yet wired
+// into the Golden Path generators below (generateWorkbookContent etc.), which
+// keep using buildDNABlocks()/fillPromptTemplate() unchanged for this task —
+// per D-008, that pipeline still serves live users and F3-T1 must not touch it.
+// ==========================================
+
+/** The 7 standard layers of any content-generation prompt, assembled in this
+ *  fixed order by buildPrompt(). Layers 1/5/6/7 are fixed per call type and
+ *  live in prompts/<type>.ts (F3-T2); layers 2/3/4 are built from data at
+ *  runtime (layer 2 via buildTonePreamble below). */
+interface PromptLayers {
+  roleFrame: string;
+  tonePreamble: string;
+  courseContext: string;
+  unitContext: string;
+  taskSpec: string;
+  formatSpec: string;
+  qualityRules: string;
+}
+
+/** Assembles the 7 prompt layers in order. Never concatenate ad-hoc — every
+ *  new prompt (F3-T2 onward) goes through this single builder. */
+function buildPrompt(layers: PromptLayers): string {
+  return [
+    layers.roleFrame,
+    layers.tonePreamble,
+    layers.courseContext,
+    layers.unitContext,
+    layers.taskSpec,
+    layers.formatSpec,
+    layers.qualityRules,
+  ].filter(l => l && l.trim().length > 0).join('\n\n');
+}
+
+/** Layer 2 (TONE PREAMBLE) per §A.3 — replaces the old DNA voice/archetype
+ *  system with the author's own verbatim voice sample. Identical across every
+ *  call type that uses buildPrompt(). */
+function buildTonePreamble(course: Course): string {
+  const dna = course.dna;
+  const terminology = dna?.terminology;
+
+  const lines: string[] = [
+    '## VOICE (verbatim from the course author — emulate faithfully)',
+    `"${dna?.toneFreeText || 'Professional, clear, encouraging.'}"`,
+    'Write every sentence as if this author wrote it. Their phrasing habits, warmth level,',
+    'and humor apply to ALL prose, including exercise instructions and speaker notes.',
+    '',
+    '## TERMINOLOGY (mandatory)',
+    `Use exactly: participant="${terminology?.participant || 'Participant'}", trainer="${terminology?.trainer || 'Trainer'}", exercise="${terminology?.exercise || 'Exercise'}".`,
+  ];
+
+  const mandatoryTermsList = terminology?.mandatoryTerms
+    ? Object.values(terminology.mandatoryTerms)
+        .map((v: any) => (v?.term ? `${v.term}${v.definition ? ` (${v.definition})` : ''}` : ''))
+        .filter(Boolean)
+        .join(', ')
+    : '';
+  if (mandatoryTermsList) lines.push(`Required terms: ${mandatoryTermsList}.`);
+
+  if (terminology?.forbiddenPhrases?.length) {
+    lines.push(`NEVER use: ${terminology.forbiddenPhrases.join(', ')}.`);
+  }
+
+  lines.push(
+    '',
+    '## DELIVERY ENVIRONMENT',
+    buildEnvConstraints(course.environment),
+    '',
+    '## LANGUAGE',
+    `Every word of output in ${course.language || 'Romanian'}. Technical loanwords standard in this language are allowed;`,
+    'full sentences in any other language are not.',
+  );
+
+  return lines.join('\n');
+}
+
+/** Pre-built DNA context blocks ready for prompt injection (legacy Golden Path — D-008) */
 interface DNABlocks {
   terminologyBlock: string;
   voiceProfileBlock: string;
-  philosophyBlock: string;
   domainContextBlock: string;
   envConstraints: string;
 }
@@ -1314,26 +1406,15 @@ function buildDNABlocks(course: Course): DNABlocks {
     terminologyBlock += `\n`;
   }
 
-  // T2: Voice Profile
+  // T2: Voice — free-form verbatim voice sample (replaces the old
+  // formality/humorLevel enums, which the model kept translating into
+  // generic Mentor/Coach/Buddy archetypes instead of the author's actual voice).
   let voiceProfileBlock = "";
-  if (course.dna?.voiceProfile) {
-    const v = course.dna.voiceProfile;
-    voiceProfileBlock = `\n\n### VOICE & TONE (FROM DNA)\n`;
-    if (v.formality) voiceProfileBlock += `- Formality: ${v.formality}\n`;
-    if (v.humorLevel) voiceProfileBlock += `- Humor Level: ${v.humorLevel}\n`;
-    if (v.forbiddenPhrases?.length) voiceProfileBlock += `- Forbidden phrases: ${v.forbiddenPhrases.join(', ')}\n`;
-    if (v.signaturePhrases?.length) voiceProfileBlock += `- Signature phrases: ${v.signaturePhrases.join(', ')}\n`;
-    voiceProfileBlock += `- Use these voice profile values exactly as provided by the Course DNA. Do not translate them into Mentor/Coach/Buddy archetypes.\n`;
+  if (course.dna?.toneFreeText) {
+    voiceProfileBlock = `\n\n### VOICE & TONE (verbatim from the course author — emulate faithfully)\n"${course.dna.toneFreeText}"\nWrite every sentence as if this author wrote it.\n`;
   }
-
-  // T3: Learning Philosophy
-  let philosophyBlock = "";
-  if (course.dna?.learningPhilosophy) {
-    const p = course.dna.learningPhilosophy;
-    philosophyBlock = `\n\n### LEARNING PHILOSOPHY\n`;
-    if (p.manifesto?.length) philosophyBlock += `- Manifesto: ${p.manifesto.join('. ')}\n`;
-    if (p.rules_of_engagement?.length) philosophyBlock += `- Rules: ${p.rules_of_engagement.join('. ')}\n`;
-    philosophyBlock += `\n`;
+  if (course.dna?.terminology?.forbiddenPhrases?.length) {
+    voiceProfileBlock += `- Forbidden phrases: ${course.dna.terminology.forbiddenPhrases.join(', ')}\n`;
   }
 
   // T4: Domain Context
@@ -1365,17 +1446,9 @@ function buildDNABlocks(course: Course): DNABlocks {
   }
 
   // T5: Environment constraints
-  const envConstraints = (course.environment || 'LIVE').toUpperCase() === 'ONLINE'
-    ? `**ENVIRONMENT: ONLINE (VIRTUAL CLASSROOM — ZOOM/TEAMS)**
-- INTERACTION: Must use "Breakout Rooms", "Chat Polls", "Miro Board links", "Screen Share".
-- CONSTRAINTS: Max 10 min monologues (Zoom Fatigue). Frequent "Type in chat" prompts.
-- MATERIALS: PDFs, Digital Workbooks, Online Quizzes.`
-    : `**ENVIRONMENT: LIVE (IN-PERSON WORKSHOP)**
-- INTERACTION: Face-to-face ONLY: "Turn to your neighbor", "Physical Flipcharts", "Room Movement", "Gallery Walk", "Role Play in room", "Group Discussions".
-- FORBIDDEN: DO NOT mention videos, webinars, online dashboards, virtual forums, zoom links, or screen sharing.
-- MATERIALS: Printed Workbooks, Sticky Notes, Markers, Flipchart paper.`;
+  const envConstraints = buildEnvConstraints(course.environment);
 
-  return { terminologyBlock, voiceProfileBlock, philosophyBlock, domainContextBlock, envConstraints };
+  return { terminologyBlock, voiceProfileBlock, domainContextBlock, envConstraints };
 }
 
 function isValidModuleContext(data: any): data is ModuleContext {
@@ -1673,9 +1746,6 @@ This is the trainer's bible — complete, actionable, and containing everything 
 
 ### VOICE & TONE
 {{voiceProfile}}
-
-### LEARNING PHILOSOPHY
-{{philosophy}}
 
 ### MACRO POSITION (Previous/Next modules)
 {{macroPosition}}
@@ -2707,7 +2777,6 @@ async function generateManualContent(
     timingPlan: formatTimingPlan(ctx),
     terminology: dna.terminologyBlock,
     voiceProfile: dna.voiceProfileBlock,
-    philosophy: dna.philosophyBlock,
     macroPosition: macroPos,
     envConstraints: dna.envConstraints,
     envRules,
@@ -3479,10 +3548,10 @@ function hasMinimalCourseDNA(course: Course): boolean {
   const dna = course.dna;
   if (!dna) return false;
 
-  const firstProtagonistName = dna.narrativeUniverse?.protagonists?.[0]?.name;
+  const participantTerm = dna.terminology?.participant;
   const lang = String(course.language || '').trim();
 
-  if (!firstProtagonistName || String(firstProtagonistName).trim().length === 0) {
+  if (!participantTerm || String(participantTerm).trim().length === 0) {
     return false;
   }
 
@@ -3805,8 +3874,8 @@ async function handleLegacyStep(
       **TIMING**: Total course duration is ${blueprintDuration}.
       ${kbBlock}
       
-      **GOAL**: Define the terminology, narrative universe, and learning philosophy.
-      
+      **GOAL**: Define the terminology and the author's authentic voice for this course.
+
       **OUTPUT FORMAT**:
       Strict JSON object with this structure:
       {
@@ -3814,41 +3883,10 @@ async function handleLegacyStep(
           "participant": "Term for learner (e.g. Participant, Student, Explorer)",
           "exercise": "Term for activity (e.g. Exercise, Challenge, Mission)",
           "trainer": "Term for instructor (e.g. Trainer, Facilitator, Guide)",
-          "mandatoryTerms": {}
+          "mandatoryTerms": {},
+          "forbiddenPhrases": []
         },
-        "narrativeUniverse": {
-          "protagonists": [
-             { "name": "Name", "role": "Role", "initial_state": "Starting mindset" }
-          ],
-          "setting": "Where does this take place? (e.g. Corporate Office, Start-up, Factory)",
-          "tone": "Voice/Tone (e.g. Professional, Playful, Strict)"
-        },
-        "voiceProfile": {
-          "formality": "Formality level (e.g. Professional, Casual, Academic)",
-          "humorLevel": "Humor level (e.g. None, Light, Witty)",
-          "forbiddenPhrases": ["Phrase 1", "Phrase 2"],
-          "signaturePhrases": ["Phrase 1", "Phrase 2"]
-        },
-        "learningPhilosophy": {
-          "manifesto": ["Principle 1", "Principle 2"],
-          "rules_of_engagement": ["Rule 1", "Rule 2"]
-        },
-        "masterTimeline": {
-          "totalDuration": 480,
-          "bufferPerModule": 10,
-          "modules": [
-            {
-              "id": "1",
-              "title": "Suggested Module Title",
-              "duration": 60,
-              "activities": [
-                { "type": "theory", "duration": 15, "description": "Intro" },
-                { "type": "exercise", "duration": 40, "description": "Practice" },
-                { "type": "break", "duration": 5, "description": "Coffee" }
-              ]
-            }
-          ]
-        },
+        "toneFreeText": "A short paragraph, in the author's own words, describing how they sound: formality, warmth, humor, any signature phrasing. Written in ${course.language || "Romanian"}.",
         "domainContext": {
           "industryTerms": { "term": "definition" },
           "clientProfiles": [{ "type": "...", "decisionLogic": "...", "approach": "..." }],
@@ -3857,7 +3895,7 @@ async function handleLegacyStep(
           "negotiationFrameworks": [{ "name": "...", "steps": [...] }]
         }
       }
-      
+
       **IMPORTANT**: Return ONLY valid JSON. The content MUST be in ${course.language || "Romanian"}.
       Populate domainContext ONLY from the reference materials above. If no materials are provided, leave arrays empty.
       `;
@@ -3877,28 +3915,10 @@ async function handleLegacyStep(
             participant: isRo ? "Participant" : "Participant",
             exercise: isRo ? "Exercițiu" : "Exercise",
             trainer: isRo ? "Trainer" : "Trainer",
-            mandatoryTerms: {}
+            mandatoryTerms: {},
+            forbiddenPhrases: []
           },
-          narrativeUniverse: {
-            protagonists: [],
-            setting: isRo ? "Mediu Profesional Standard" : "Standard Professional Environment",
-            tone: isRo ? "Profesional și Încurajator" : "Professional and Encouraging"
-          },
-          voiceProfile: {
-            formality: isRo ? "Profesional" : "Professional",
-            humorLevel: isRo ? "Redus" : "Low",
-            forbiddenPhrases: [],
-            signaturePhrases: []
-          },
-          learningPhilosophy: {
-            manifesto: isRo ? ["Învățare prin practică", "Implicare activă"] : ["Learning by Doing", "Interactive Engagement"],
-            rules_of_engagement: isRo ? ["Respect reciproc", "Participare activă"] : ["Mutual respect", "Active participation"]
-          },
-          masterTimeline: {
-            totalDuration: 480,
-            bufferPerModule: 10,
-            modules: []
-          },
+          toneFreeText: isRo ? "Profesional, clar și încurajator." : "Professional, clear and encouraging.",
           domainContext: {
             industryTerms: {},
             clientProfiles: [],
@@ -4170,7 +4190,9 @@ async function handleLegacyStep(
   }
 
   if (step_type === 'course_macro_structure' || step_type === 'course.steps.macro_structure') {
-      const masterTimeline = course.dna?.masterTimeline || {
+      // No AI-authored master timeline anymore (F3-T1 removed CourseDNA.masterTimeline,
+      // which was never editable in the DNA UI) — always derive from the blueprint.
+      const masterTimeline = {
           totalDuration: parseInt(blueprintDuration) * 60 || 480,
           bufferPerModule: 10,
           modules: (course.blueprint?.modules || []).map((m: any, i: number) => ({
@@ -4240,14 +4262,13 @@ async function handleLegacyStep(
       
       // Extract DNA for Voice & Terminology
       const dna = course.dna || {};
-      const voice = dna.voiceProfile || {};
       const terminology = dna.terminology || {};
-      
+
       let dnaContext = "";
       if (terminology.participant || terminology.trainer) {
           dnaContext += `\n**TERMINOLOGY**:\n- Participant: ${terminology.participant || "Participant"}\n- Trainer: ${terminology.trainer || "Trainer"}\n`;
       }
-      dnaContext += `\n**VOICE**:\n- Formality: ${voice.formality || "Professional"}\n- Humor: ${voice.humorLevel || "Light"}\n`;
+      dnaContext += `\n**VOICE**: ${dna.toneFreeText || "Professional, clear and encouraging."}\n`;
 
       const prompt = `
       **TASK**: Create a Comprehensive Facilitator Manual (Trainer Guide).
@@ -4300,14 +4321,13 @@ async function handleLegacyStep(
       const modules = (course.blueprint && Array.isArray(course.blueprint.modules)) ? course.blueprint.modules : [];
       const moduleList = modules.map((m: any, i: number) => `${i + 1}. ${m.title}`).join('\n');
       const dna = course.dna || {};
-      const voice = dna.voiceProfile || {};
 
       const prompt = `
       **TASK**: Create a "Discussion Guide" — a facilitation cheat sheet with one Hook Question and one Key Takeaway for each course module.
       **COURSE**: "${course.title}"
       **TARGET AUDIENCE**: "${course.target_audience}"
       **LANGUAGE**: ${course.language || 'Romanian'} (STRICT — every word)
-      **VOICE**: ${voice.formality || 'Professional'}, humor: ${voice.humorLevel || 'light'}
+      **VOICE**: ${dna.toneFreeText || 'Professional, clear and encouraging.'}
 
       ${mandatoryContext}
 
@@ -4433,9 +4453,10 @@ async function handleLegacyStep(
           const sectionTitles = Array.isArray(m.sections) ? m.sections.map((s: any) => s.title).join(', ') : 'Activities';
           return `Module ${i + 1}: ${m.title} | Sections: ${sectionTitles}`;
       }).join('\n');
-      const dna = course.dna || {};
-      const timeline = dna.masterTimeline || {};
-      const totalDuration = timeline.totalDuration || 0;
+      // No AI-authored master timeline anymore (F3-T1) — total duration, when known,
+      // comes from the blueprint's own estimate; otherwise the prompt asks the model
+      // to infer it from the module list, same as before when masterTimeline was unset.
+      const totalDuration = parseInt(blueprintDuration) * 60 || 0;
 
       const prompt = `
       **TASK**: Create a detailed "Training Agenda" — a structured, chronometric agenda table for the trainer to manage the session.

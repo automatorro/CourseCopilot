@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Plus, Trash2, Wand2 } from 'lucide-react';
 import { useTranslation } from '../contexts/I18nContext';
-import { CourseDNA, Course, TrainerStepType } from '../types';
+import { CourseDNA, Course, TrainerStepType, GenerationEnvironment } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { isEnabled } from '../config/featureFlags';
 
@@ -15,10 +15,10 @@ interface DNAEditModalProps {
 
 const DNAEditModal: React.FC<DNAEditModalProps> = ({ isOpen, dna, course, onClose, onSave }) => {
     const { t } = useTranslation();
-    
+
     // Form State (Source of Truth)
     const [formData, setFormData] = useState<Partial<CourseDNA>>({});
-    
+
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -33,28 +33,28 @@ const DNAEditModal: React.FC<DNAEditModalProps> = ({ isOpen, dna, course, onClos
 
     const handleAutoGenerate = async () => {
         if (!course) return;
-        
+
         try {
             setIsGenerating(true);
             setError(null);
-            
+
             const { data, error } = await supabase.functions.invoke('generate-course-content', {
-                body: { 
-                    action: 'generate_step_content', 
-                    step_type: TrainerStepType.CourseDNA, 
-                    course 
+                body: {
+                    action: 'generate_step_content',
+                    step_type: TrainerStepType.CourseDNA,
+                    course
                 }
             });
 
             if (error) throw error;
-            
+
             let content = data?.content || '';
             // Clean markdown code blocks if present
             content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-            
+
             const generatedDNA = JSON.parse(content);
             setFormData(generatedDNA);
-            
+
         } catch (err: any) {
             console.error("Auto-generation failed:", err);
             setError("Failed to generate DNA: " + (err.message || "Unknown error"));
@@ -66,24 +66,24 @@ const DNAEditModal: React.FC<DNAEditModalProps> = ({ isOpen, dna, course, onClos
     const handleSave = async () => {
         try {
             setError(null);
-            
+
             let dataToSave = formData;
 
             // Auto-generate if empty and course is available
-            if ((!dataToSave.terminology || !dataToSave.narrativeUniverse) && course) {
+            if (!dataToSave.terminology && course) {
                 setIsSaving(true); // Show saving/processing state
                 try {
                     const { data, error } = await supabase.functions.invoke('generate-course-content', {
-                        body: { 
-                            action: 'generate_step_content', 
-                            step_type: TrainerStepType.CourseDNA, 
+                        body: {
+                            action: 'generate_step_content',
+                            step_type: TrainerStepType.CourseDNA,
                             course,
                             contractPipeline: isEnabled('contractPipeline')
                         }
                     });
-                    
+
                     if (error) throw error;
-                    
+
                     let content = data?.content || '';
                     content = content.replace(/```json/g, '').replace(/```/g, '').trim();
                     dataToSave = JSON.parse(content);
@@ -94,15 +94,14 @@ const DNAEditModal: React.FC<DNAEditModalProps> = ({ isOpen, dna, course, onClos
                     return;
                 }
             }
-            
+
             // Basic validation
-            if (!dataToSave.terminology || !dataToSave.narrativeUniverse) {
+            if (!dataToSave.terminology) {
                 throw new Error(t('dna.edit.error.structure') || "Invalid DNA structure.");
             }
 
             setIsSaving(true);
             // We cast to CourseDNA because we assume the structure is valid based on the form inputs
-            // Any hidden fields (like masterTimeline) are preserved in formData since we initialized it with the full object
             await onSave(dataToSave as CourseDNA);
             setIsSaving(false);
             onClose();
@@ -113,6 +112,10 @@ const DNAEditModal: React.FC<DNAEditModalProps> = ({ isOpen, dna, course, onClos
     };
 
     if (!isOpen) return null;
+
+    const environmentLabelKey = course?.environment === GenerationEnvironment.OnlineCourse
+        ? 'dna.edit.environment.online'
+        : 'dna.edit.environment.live';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -259,323 +262,89 @@ const DNAEditModal: React.FC<DNAEditModalProps> = ({ isOpen, dna, course, onClos
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Forbidden Phrases */}
+                            <div className="mt-6">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="block">
+                                        <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                            {t('dna.edit.section.forbidden')}
+                                        </label>
+                                        <p className="text-[10px] font-normal text-gray-500 mt-0.5">{t('dna.edit.forbidden.help')}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const current = formData.terminology?.forbiddenPhrases || [];
+                                            setFormData({
+                                                ...formData,
+                                                terminology: { ...formData.terminology!, forbiddenPhrases: [...current, ''] }
+                                            });
+                                        }}
+                                        className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
+                                    >
+                                        <Plus size={14} />
+                                        {t('dna.edit.phrase.add')}
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    {(formData.terminology?.forbiddenPhrases || []).map((phrase, idx) => (
+                                        <div key={idx} className="flex gap-2 items-center group">
+                                            <input
+                                                type="text"
+                                                value={phrase}
+                                                onChange={(e) => {
+                                                    const newPhrases = [...(formData.terminology?.forbiddenPhrases || [])];
+                                                    newPhrases[idx] = e.target.value;
+                                                    setFormData({
+                                                        ...formData,
+                                                        terminology: { ...formData.terminology!, forbiddenPhrases: newPhrases }
+                                                    });
+                                                }}
+                                                className="w-full rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm p-1.5"
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    const newPhrases = [...(formData.terminology?.forbiddenPhrases || [])];
+                                                    newPhrases.splice(idx, 1);
+                                                    setFormData({
+                                                        ...formData,
+                                                        terminology: { ...formData.terminology!, forbiddenPhrases: newPhrases }
+                                                    });
+                                                }}
+                                                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </section>
 
-                        {/* Voice Profile Section */}
+                        {/* Voice Section — verbatim, free-form (replaces the old formality/humor enums) */}
                         <section>
                             <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 border-b pb-2">
                                 {t('dna.edit.section.voice')}
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        {t('dna.edit.field.formality')}
-                                    </label>
-                                    <select
-                                        value={formData.voiceProfile?.formality || 'professional'}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            voiceProfile: { ...formData.voiceProfile!, formality: e.target.value as any }
-                                        })}
-                                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm p-2"
-                                    >
-                                        <option value="professional">{t('dna.edit.formality.professional')}</option>
-                                        <option value="buddy">{t('dna.edit.formality.buddy')}</option>
-                                        <option value="academic">{t('dna.edit.formality.academic')}</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        {t('dna.edit.field.humor')}
-                                    </label>
-                                    <select
-                                        value={formData.voiceProfile?.humorLevel || 'none'}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            voiceProfile: { ...formData.voiceProfile!, humorLevel: e.target.value as any }
-                                        })}
-                                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm p-2"
-                                    >
-                                        <option value="none">{t('dna.edit.humor.none')}</option>
-                                        <option value="light">{t('dna.edit.humor.light')}</option>
-                                        <option value="heavy">{t('dna.edit.humor.heavy')}</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Forbidden & Signature Phrases */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="block">
-                                            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                                {t('dna.edit.section.forbidden')}
-                                            </label>
-                                            <p className="text-[10px] font-normal text-gray-500 mt-0.5">{t('dna.edit.forbidden.help')}</p>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                const current = formData.voiceProfile?.forbiddenPhrases || [];
-                                                setFormData({
-                                                    ...formData,
-                                                    voiceProfile: {
-                                                        ...formData.voiceProfile!,
-                                                        forbiddenPhrases: [...current, '']
-                                                    }
-                                                });
-                                            }}
-                                            className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
-                                        >
-                                            <Plus size={14} />
-                                            {t('dna.edit.phrase.add')}
-                                        </button>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {(formData.voiceProfile?.forbiddenPhrases || []).map((phrase, idx) => (
-                                            <div key={idx} className="flex gap-2 items-center group">
-                                                <input
-                                                    type="text"
-                                                    value={phrase}
-                                                    onChange={(e) => {
-                                                        const newPhrases = [...(formData.voiceProfile?.forbiddenPhrases || [])];
-                                                        newPhrases[idx] = e.target.value;
-                                                        setFormData({
-                                                            ...formData,
-                                                            voiceProfile: { ...formData.voiceProfile!, forbiddenPhrases: newPhrases }
-                                                        });
-                                                    }}
-                                                    className="w-full rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm p-1.5"
-                                                />
-                                                <button
-                                                    onClick={() => {
-                                                        const newPhrases = [...(formData.voiceProfile?.forbiddenPhrases || [])];
-                                                        newPhrases.splice(idx, 1);
-                                                        setFormData({
-                                                            ...formData,
-                                                            voiceProfile: { ...formData.voiceProfile!, forbiddenPhrases: newPhrases }
-                                                        });
-                                                    }}
-                                                    className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="block">
-                                            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                                {t('dna.edit.section.signature')}
-                                            </label>
-                                            <p className="text-[10px] font-normal text-gray-500 mt-0.5">{t('dna.edit.signature.help')}</p>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                const current = formData.voiceProfile?.signaturePhrases || [];
-                                                setFormData({
-                                                    ...formData,
-                                                    voiceProfile: {
-                                                        ...formData.voiceProfile!,
-                                                        signaturePhrases: [...current, '']
-                                                    }
-                                                });
-                                            }}
-                                            className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
-                                        >
-                                            <Plus size={14} />
-                                            {t('dna.edit.phrase.add')}
-                                        </button>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {(formData.voiceProfile?.signaturePhrases || []).map((phrase, idx) => (
-                                            <div key={idx} className="flex gap-2 items-center group">
-                                                <input
-                                                    type="text"
-                                                    value={phrase}
-                                                    onChange={(e) => {
-                                                        const newPhrases = [...(formData.voiceProfile?.signaturePhrases || [])];
-                                                        newPhrases[idx] = e.target.value;
-                                                        setFormData({
-                                                            ...formData,
-                                                            voiceProfile: { ...formData.voiceProfile!, signaturePhrases: newPhrases }
-                                                        });
-                                                    }}
-                                                    className="w-full rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm p-1.5"
-                                                />
-                                                <button
-                                                    onClick={() => {
-                                                        const newPhrases = [...(formData.voiceProfile?.signaturePhrases || [])];
-                                                        newPhrases.splice(idx, 1);
-                                                        setFormData({
-                                                            ...formData,
-                                                            voiceProfile: { ...formData.voiceProfile!, signaturePhrases: newPhrases }
-                                                        });
-                                                    }}
-                                                    className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                            <p className="text-xs text-gray-500 mb-2">{t('dna.edit.voice.help')}</p>
+                            <textarea
+                                value={formData.toneFreeText || ''}
+                                onChange={(e) => setFormData({ ...formData, toneFreeText: e.target.value })}
+                                rows={5}
+                                placeholder={t('dna.edit.voice.placeholder')}
+                                className="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm p-3 resize-none"
+                            />
                         </section>
 
-                        {/* Narrative Section */}
+                        {/* Environment Section — read-only, set at course creation */}
                         <section>
-                            <div className="flex items-center justify-between mb-4 border-b pb-2">
-                                <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold">
-                                    {t('dna.edit.section.narrative')}
-                                </h3>
-                                <button
-                                    onClick={() => {
-                                        const currentProtagonists = formData.narrativeUniverse?.protagonists || [];
-                                        const newProtagonists = [
-                                            ...currentProtagonists,
-                                            { name: '', role: '', personality: '', arc: '' }
-                                        ];
-                                        setFormData({
-                                            ...formData,
-                                            narrativeUniverse: {
-                                                ...(formData.narrativeUniverse || {}),
-                                                protagonists: newProtagonists
-                                            }
-                                        });
-                                    }}
-                                    className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
-                                >
-                                    <Plus size={14} />
-                                    {t('dna.edit.protagonist.add')}
-                                </button>
+                            <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 border-b pb-2">
+                                {t('dna.edit.section.environment')}
+                            </h3>
+                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm text-gray-700 dark:text-gray-300">
+                                {t(environmentLabelKey)}
                             </div>
-                            
-                            <div className="space-y-4">
-                                {(formData.narrativeUniverse?.protagonists || []).map((protagonist, index) => (
-                                    <div key={index} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 relative group">
-                                        <button
-                                            onClick={() => {
-                                                const newProtagonists = [...(formData.narrativeUniverse?.protagonists || [])];
-                                                newProtagonists.splice(index, 1);
-                                                setFormData({
-                                                    ...formData,
-                                                    narrativeUniverse: {
-                                                        ...(formData.narrativeUniverse || {}),
-                                                        protagonists: newProtagonists
-                                                    }
-                                                });
-                                            }}
-                                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title={t('dna.edit.protagonist.remove')}
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-500 mb-1">
-                                                    {t('dna.edit.protagonist.name')}
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={protagonist.name}
-                                                    onChange={(e) => {
-                                                        const newProtagonists = [...(formData.narrativeUniverse?.protagonists || [])];
-                                                        newProtagonists[index] = { ...protagonist, name: e.target.value };
-                                                        setFormData({
-                                                            ...formData,
-                                                            narrativeUniverse: { ...(formData.narrativeUniverse || {}), protagonists: newProtagonists }
-                                                        });
-                                                    }}
-                                                    className="w-full rounded border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm p-1.5"
-                                                    placeholder="Ex: Ana Popescu"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-500 mb-1">
-                                                    {t('dna.edit.protagonist.role')}
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={protagonist.role}
-                                                    onChange={(e) => {
-                                                        const newProtagonists = [...(formData.narrativeUniverse?.protagonists || [])];
-                                                        newProtagonists[index] = { ...protagonist, role: e.target.value };
-                                                        setFormData({
-                                                            ...formData,
-                                                            narrativeUniverse: { ...(formData.narrativeUniverse || {}), protagonists: newProtagonists }
-                                                        });
-                                                    }}
-                                                    className="w-full rounded border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm p-1.5"
-                                                    placeholder="Ex: Manager Vânzări"
-                                                />
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="mb-3">
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">
-                                                {t('dna.edit.protagonist.personality')}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={protagonist.personality}
-                                                onChange={(e) => {
-                                                    const newProtagonists = [...(formData.narrativeUniverse?.protagonists || [])];
-                                                    newProtagonists[index] = { ...protagonist, personality: e.target.value };
-                                                    setFormData({
-                                                        ...formData,
-                                                        narrativeUniverse: { ...(formData.narrativeUniverse || {}), protagonists: newProtagonists }
-                                                    });
-                                                }}
-                                                className="w-full rounded border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm p-1.5"
-                                                placeholder="Ex: Ambițioasă, orientată spre rezultate..."
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">
-                                                {t('dna.edit.protagonist.arc')}
-                                            </label>
-                                            <textarea
-                                                value={protagonist.arc}
-                                                onChange={(e) => {
-                                                    const newProtagonists = [...(formData.narrativeUniverse?.protagonists || [])];
-                                                    newProtagonists[index] = { ...protagonist, arc: e.target.value };
-                                                    setFormData({
-                                                        ...formData,
-                                                        narrativeUniverse: { ...(formData.narrativeUniverse || {}), protagonists: newProtagonists }
-                                                    });
-                                                }}
-                                                rows={2}
-                                                className="w-full rounded border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm p-1.5 resize-none"
-                                                placeholder="Ex: Învață să delege și să aibă încredere în echipă..."
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                                
-                                {(!formData.narrativeUniverse?.protagonists || formData.narrativeUniverse.protagonists.length === 0) && (
-                                    <div className="text-center p-8 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-dashed border-gray-300 dark:border-gray-700">
-                                        <p className="text-sm text-gray-500 mb-2">Nu există protagoniști definiți.</p>
-                                        <button
-                                            onClick={() => {
-                                                setFormData({
-                                                    ...formData,
-                                                    narrativeUniverse: {
-                                                        ...(formData.narrativeUniverse || {}),
-                                                        protagonists: [{ name: '', role: '', personality: '', arc: '' }]
-                                                    }
-                                                });
-                                            }}
-                                            className="text-sm text-indigo-600 hover:underline"
-                                        >
-                                            + {t('dna.edit.protagonist.add')}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                            <p className="text-[10px] font-normal text-gray-500 mt-1">{t('dna.edit.environment.help')}</p>
                         </section>
                     </div>
                 </div>
@@ -608,8 +377,8 @@ const DNAEditModal: React.FC<DNAEditModalProps> = ({ isOpen, dna, course, onClos
                             disabled={isSaving || isGenerating}
                             className="btn-primary flex items-center gap-2"
                         >
-                            {isSaving || isGenerating ? <span className="animate-spin">⏳</span> : ((!formData.terminology && !formData.narrativeUniverse && course) ? <Wand2 size={18} /> : <Save size={18} />)}
-                            {(!formData.terminology && !formData.narrativeUniverse && course) ? t('dna.edit.generate_save') : t('dna.edit.save')}
+                            {isSaving || isGenerating ? <span className="animate-spin">⏳</span> : ((!formData.terminology && course) ? <Wand2 size={18} /> : <Save size={18} />)}
+                            {(!formData.terminology && course) ? t('dna.edit.generate_save') : t('dna.edit.save')}
                         </button>
                     </div>
                 </div>

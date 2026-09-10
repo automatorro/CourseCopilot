@@ -11,7 +11,59 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-09-05, sesiunea S12 — F2 închis, pregătire F3)
+## ▶ REIA DE AICI (scris 2026-09-10, sesiunea S13 — F3-T1 DONE)
+
+**Task terminat: F3-T1** — `buildPrompt(layers)` + `buildTonePreamble` instalate (A.1/A.3), arhetipurile
+Mentor/Coach/Buddy + `narrativeUniverse` + `learningPhilosophy` + `masterTimeline` șterse din
+`CourseDNA` (`src/types.ts`), `DNAEditModal.tsx` redus la 3 secțiuni (Terminologie + expresii
+interzise / Vocea ta — text liber verbatim / Mediu de livrare — afișaj read-only din
+`course.environment`).
+
+**Decizii de implementare (surgical, per D-008 — `buildDNABlocks()` alimentează Golden Path-ul încă
+live pentru userii existenți):**
+- Câmp nou pe `CourseDNA`: `toneFreeText` (nu `userToneText` — am aliniat numele la fixture-ul
+  F0-T4 deja commis, `src/tests/fixtures/etalonCourse.ts`, care îl folosea deja sub acest nume).
+  `forbiddenPhrases` mutat sub `terminology` (tot aliniat la același fixture), nu câmp separat.
+- `buildPrompt(layers)`/`buildTonePreamble` sunt funcții noi, **instalate dar neconectate încă** la
+  randarea vie — le consumă abia F3-T2 (cele 7 fișiere de prompt). Așa cum cere eticheta de risc a
+  planului pentru F3-T1 ("izolat, nu atinge randarea existentă") — dacă aș fi băgat
+  `buildTonePreamble` direct în `buildDNABlocks()`, terminologia ar fi apărut de două ori în prompt
+  (block dedicat + preambul), cost de tokeni fără beneficiu.
+- `buildDNABlocks()` păstrat (D-008), dar `voiceProfileBlock` acum derivă din `toneFreeText` +
+  `terminology.forbiddenPhrases` în loc de vechiul `voiceProfile` (formality/humorLevel/etc.) —
+  toate cele 5 generatoare Golden Path (`generateWorkbookContent`, `generateManualContent`,
+  `generateSlidesContent`, `generateVideoScriptContent`, `generateModuleContext`) continuă
+  neschimbate structural, doar sursa de date s-a simplificat. `philosophyBlock` eliminat complet
+  (secțiunea „LEARNING PHILOSOPHY" din `MANUAL_PROMPT` ștearsă — nu era niciodată editabilă din UI).
+- Cod legacy încă folosit prin `GLOBAL_STEPS` (nu doar Golden Path): pasul `course_dna` (promptul +
+  fallback-ul de generare AI) rescris pe schema nouă; `course_macro_structure`/`agenda_table` nu mai
+  citesc `masterTimeline` (oricum nu era niciodată editabil, fallback identic la ce se întâmpla deja
+  când lipsea); `facilitator_manual`/`discussion_guide` citesc acum `toneFreeText` în loc de
+  `voiceProfile.formality/humorLevel`.
+- `hasMinimalCourseDNA()` verifică acum `terminology.participant` în loc de primul protagonist.
+- Fallback-ul din `GenerationProgressModal.tsx` (JSON parse error) aliniat la schema nouă.
+- Locale actualizate (en/ro/es/fr/it/de): chei narrative/protagonist/formality/humor/signature
+  șterse; chei noi `dna.edit.section.voice`/`voice.help`/`voice.placeholder`/`section.environment`/
+  `environment.live`/`environment.online`/`environment.help` adăugate (es/fr/it/de au text EN,
+  consistent cu restul secțiunii DNA în acele fișiere — gap de traducere pre-existent, nu introdus
+  acum). `t()` cade pe fallback EN pentru chei lipsă (`I18nContext.tsx`), verificat în cod.
+- Verificat: `npm run typecheck` verde; `npx vitest run` → 14/15 (singurul eșec e D-003,
+  pre-existent, neatins de acest task). Nu s-a putut testa generarea live (fără acces la Supabase
+  din acest mediu) — la fel ca D-002/D-012; recomandat owner-ului un test manual de generare pe un
+  curs existent cu DNA vechi (verifică nedistructiv: `course.dna` cu formă veche în DB nu se strică,
+  doar câmpurile noi lipsesc și cad pe fallback-urile din prompturi).
+
+**Următorul pas: F3-T2** — cele 7 fișiere de prompt (`prompts/localized-labels.ts`,
+`module-contract.ts`, `participant-manual.ts`, `exercise-sheet.ts`, `trainer-guide.ts`,
+`slides-copy.ts`, `trainer-flow-polish.ts`, per A.4) + `PROMPT_CHANGELOG.md`. Acestea sunt primele
+locuri unde `buildPrompt`/`buildTonePreamble` chiar intră în uz.
+
+**Rămân deschise, neschimbate față de sesiunea trecută**: F1-T4 (smoke owner, tot BLOCKED), cele două
+propuneri neconfirmate pentru F4-T7 (baseline substitut) și F3-T4 (dicționar Bloom RO+EN).
+
+---
+
+## ▶ REIA DE AICI — istoric (scris 2026-09-05, sesiunea S12 — F2 închis, pregătire F3)
 
 **Context de sesiune**: owner-ul a cerut o pauză de reconciliere după migrarea Claude (S11) — „am
 făcut o mare paranteză, să vedem cum stăm cu planul de implementare". Am auditat direct în cod (nu
@@ -396,7 +448,7 @@ rând cu ☐, se postează SQL-ul complet în chat, se bifează doar după confi
 - **DoD F2:** M2 — testul verde pe EN și RO; inspecție manuală fără amestec
 
 ### F3 — Instalarea arhitecturii de prompturi + contractul de modul (3 zile) · Risc: mare, izolat
-- **F3-T1** [TODO] `buildPrompt(layers)` + `buildTonePreamble` (A.1, A.3). Șterge din cod arhetipurile Mentor/Coach/Buddy, `narrativeUniverse`, `learningPhilosophy`, `masterTimeline`. `DNAEditModal` → 3 câmpuri
+- **F3-T1** [DONE 2026-09-10] `buildPrompt(layers)` + `buildTonePreamble` (A.1, A.3) instalate în `index.ts` (neconectate încă la randarea vie — le consumă F3-T2). Șterse din `CourseDNA`: arhetipurile Mentor/Coach/Buddy (era doar un comentariu-gardă în prompt, nu cod structurat), `narrativeUniverse`, `learningPhilosophy`, `masterTimeline`. `DNAEditModal` → 3 secțiuni (terminologie+expresii interzise / voce liberă `toneFreeText` / mediu, read-only). `buildDNABlocks()` păstrat pentru Golden Path (D-008), adaptat la schema nouă. Detalii complete în §REIA DE AICI (S13). Typecheck verde; vitest 14/15 (D-003 neatins).
 - **F3-T2** [TODO] Cele 7 fișiere de prompt (A.4) + `PROMPT_CHANGELOG.md` cu intrarea „v1 instalată"
 - **F3-T3** [TODO] Schema `ModuleContract` (server types + Zod client) — obiectiv/blocks/exerciseSpec/transitions
 - **F3-T4** [TODO] `validateModuleContract()` determinist: ≥1 ACT+DEM+APP; sumă minute = durată (±5); APP ≥40% la bloomLevel≥APPLY; niciun bloc >25 min fără schimbare de fază; BREAK la module ≥90 min; verbi Bloom din dicționar per limbă. Eșec → 1 re-apel → apoi eroare
@@ -467,7 +519,7 @@ rând cu ☐, se postează SQL-ul complet în chat, se bifează doar după confi
    lui `main` nu s-a mai schimbat niciun fișier sub `supabase/functions/`, deci **live rulează exact
    codul de pe `main`**: fără ProtagonistEnforcer, fără protagonist global, cu F2-T2/T3/T4 incluse.
    Nu mai e nevoie de deploy manual. Începe direct de la pasul 2.
-2. **Loghează-te în UI, creează cursul-etalon** cu parametrii din `src/tests/fixtures/etalonCourse.ts` (RO). Tonul rămâne un preset (Mentor/Coach/Buddy) — asta nu se schimbă până la F3-T1.
+2. **Loghează-te în UI, creează cursul-etalon** cu parametrii din `src/tests/fixtures/etalonCourse.ts` (RO). Notă (2026-09-10, actualizată după F3-T1): DNA-ul nu mai are preset Mentor/Coach/Buddy — completează câmpul liber de voce din `DNAEditModal` cu `toneFreeText` din fixture, dacă vrei tonul exact etalon.
 3. **Generează complet.** Toate step-urile din STEPS_ORDER (17).
 4. **Verifică rapid:**
    - **Personaje distincte per exercițiu.** Fiecare exercițiu ar trebui să conțină nume distincte (Maria, Andrei, Elena…), NU aceeași persoană peste tot. Deschide 2-3 exerciții și verifică.
@@ -545,6 +597,8 @@ run înainte de a declara task-ul închis. Nu propun automatizare acum — e în
 
 **Decizie (owner, 2026-08-07).** Nu se aduce F1-T5 pe `main`. CourseDNA rămâne ca funcționalitate. Planul formal însuși (F3-T1) prevede deja ce owner-ul de fapt vrea: *simplificare*, nu eliminare — „Șterge arhetipurile Mentor/Coach/Buddy, `narrativeUniverse`, `learningPhilosophy`, `masterTimeline`. `DNAEditModal` → 3 câmpuri." Senzația că „DNA încurcă" vine din supra-complexitatea actuală (arhetipuri, narrative universe, master timeline), nu din conceptul în sine. F1-T5 rămâne un artefact orfan pe branch-ul de refactor — nu se șterge branch-ul (păstrează istoricul), dar nu se mai integrează ca atare.
 
+**Închidere (2026-09-10, S13).** F3-T1 a executat exact simplificarea prevăzută mai sus. `buildDNABlocks()` a fost păstrat (nu șters) și doar adaptat la schema nouă — Golden Path-ul rămâne intact structural, exact cum cerea acest discovery.
+
 ### D-009 — Fir de lucru ad-hoc pe `main` (31 iul – 7 aug), în afara fazelor F2–F4 documentate
 **Context.** Între ultima actualizare a acestui fișier (F1-T4 BLOCKED, 18 iul) și azi, `main` a primit 10 commit-uri care nu trec prin protocolul de triaj și nu sunt reflectate în tabelul de borne M0–M10, deși unele se suprapun conceptual cu F3/F4:
 - `b51ba87` (31 iul) — introduce flag `contractPipeline` (inițial `false`) + rutare parțială "Golden per-module generation" pentru manual. **Nu** e schema `ModuleContract` din F3-T3 (verificat prin grep — nu există în repo); e o implementare paralelă, informală, mult mai restrânsă decât F3/F4.
@@ -592,6 +646,7 @@ Reprodus și pe HEAD-ul curat (înainte de modificările F0), deci defectul e pr
 | 2026-08-10–11 | S05 (ad-hoc, fără faze) | Fix-uri audit + features | 9 commit-uri nedocumentate (PRs #21-23 + fix-uri directe): per-modul iterare client-side (Exercises/Examples/Manual), token usage logging, fix resolveModuleId, i18n landing, UsageSection UI, TS fix, SUPABASE_SECRET_KEYS fallback, ACTION_OPERATION_COSTS corectat. Niciuna din F2–F10 formal. Typecheck verde la finalul sesiunii. |
 | 2026-08-17 | S07 | Audit de status pe `main` (fără cod de producție atins) | Sincronizat folderul local cu `main` (era deja identic; `main` local adus la zi `b84715f`→`52feda2`, ref stale `origin/claude/sync-local-folder-main-gtsn0h` curățat). Verificat statusul punct cu punct față de cod: F2-T3/T4 confirmate în cod, F2-T5 confirmat inexistent, fix-urile D-013 confirmate prezente, typecheck verde, `npx vitest run` 12/13 (D-003 singurul eșec). **Descoperit D-014: CI-ul e verde din 15 aug și edge function-ul e deployat live cu codul de pe `main`** — invalidează notele „CI roșu / live rulează versiunea veche" din tot fișierul. Corectate 7 discrepanțe de documentație: §B bifat (contrazicea §REIA), premisa „fără Node/npm" din §Verificări restante, secțiunea F2-T5 duplicată, referințele moarte la D-005 (→ D-012 / D-014), afirmația „grep → 0" din DoD F1 (real: 2 hit-uri într-o migrație istorică), capcana `npm test` = watch mode. **F1-T4 rămâne BLOCKED** — smoke-ul cere login în UI-ul live și consumă credite AI pe producție, deci îl rulează owner-ul; M1 nebifat intenționat. |
 | 2026-08-14 | S06 | F2-T3 DONE · F2-T4 DONE · status actualizat | Pornit cu typecheck+test verde (Node 22 disponibil în mediu remote — nu mai e limitarea D-012). Documentate commit-urile S05 nedocumentate. F2-T3 implementat: `skipAiValidation` eliminat din toate call-site-urile (15 ocurențe), prag 400 chars pe conținut raw, `LANG_SIGNATURES` extins (+it/pt/nl/pl), `NON_LATIN_SCRIPTS` adăugat (26 limbi cu scripturi non-latine via regex Unicode). F2-T4: inventar complet prompturi — singurele probleme în MANUAL_PROMPT: "English/Romanian" → "English" + "# Modul:" hardcodat eliminat. Typecheck verde per commit. |
+| 2026-09-10 | S13 | F3-T1 DONE | `buildPrompt`/`buildTonePreamble` instalate (A.1/A.3), neconectate încă la randare. `CourseDNA` simplificat: șters `narrativeUniverse`/`learningPhilosophy`/`masterTimeline`/`voiceProfile`, adăugat `toneFreeText` + `terminology.forbiddenPhrases` (nume aliniate la fixture-ul F0-T4 existent). `DNAEditModal.tsx` rescris la 3 secțiuni. `buildDNABlocks()` adaptat surgical (D-008), Golden Path neatins structural. Toate punctele de citire legacy (`course_dna`, `course_macro_structure`, `agenda_table`, `facilitator_manual`, `discussion_guide`, `hasMinimalCourseDNA`) migrate la schema nouă. Locale (en/ro/es/fr/it/de) actualizate. Typecheck verde, vitest 14/15 (D-003 neatins). Commit+push direct pe `main` (regulă owner 2026-09-04). |
 
 ### D-012 — Local terminal lacks Node/npm; cannot execute local repro here
 **Notă de renumerotare (2026-08-08, corectată 2026-08-17).** Acest discovery a fost scris inițial cu ID-ul `D-005`, care era deja folosit informal pentru „CI-ul de deploy Supabase eșuează" — cel referit din `CLAUDE.md § Convenții de lucru → CI`. Renumerotat aici la `D-012`. **Corecție S07:** o intrare `### D-005` nu a existat niciodată în acest fișier (ID-urile prezente sunt D-001…D-004, D-007…D-009, D-011…D-014; lipsesc D-005, D-006, D-010), deci trimiterea de mai sus la „`D-005` mai jos" era o referință moartă. Toate referințele la „D-005 = lipsă Node" au fost înlocuite cu D-012, iar cele la „D-005 = CI roșu" cu **D-014**, care documentează subiectul cap-coadă, inclusiv rezolvarea. ID-urile sărite rămân sărite — nu se reciclează.

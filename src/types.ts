@@ -59,7 +59,15 @@ export interface Course {
 }
 
 // === COURSE DNA (Global Source of Truth) ===
+// F3-T1: simplified per docs/CURATENIE-SI-MODERNIZARE-CourseCopilot.md §A.3 —
+// the author's voice is captured verbatim (toneFreeText) instead of being
+// forced through formality/humor enums, which the model would translate into
+// generic Mentor/Coach/Buddy archetypes. narrativeUniverse (global
+// protagonists), masterTimeline and learningPhilosophy are removed: the first
+// two were superseded by F1's local-characters rule and the deterministic
+// macro-structure fallback; the third was never exposed in the editor UI.
 export interface CourseDNA {
+  toneFreeText?: string; // verbatim voice sample, in the author's own words
   terminology: {
     participant: string; // e.g. "Participant" vs "Learner"
     exercise: string;    // e.g. "Exercise" vs "Activity"
@@ -70,42 +78,7 @@ export interface CourseDNA {
       definition: string;
       firstMention?: string;
     }>;
-  };
-  narrativeUniverse: {
-    protagonists: Array<{
-      name: string;
-      role: string;
-      personality: string;
-      arc: string;
-    }>;
-    bannedNames?: string[];
-    bannedNamesByLanguage?: Record<string, string[]>;
-  };
-  masterTimeline: {
-    totalDuration: number; // minutes
-    bufferPerModule: number; // minutes
-    modules: Array<{
-      id: string;
-      title: string;
-      duration: number; // minutes
-      startTime?: string; // "09:00"
-      endTime?: string;   // "10:30"
-      activities: Array<{
-        type: 'theory' | 'exercise' | 'break' | 'debrief';
-        duration: number;
-        description: string;
-      }>
-    }>;
-  };
-  voiceProfile: {
-    formality: 'buddy' | 'professional' | 'academic';
-    humorLevel: 'none' | 'light' | 'heavy';
-    forbiddenPhrases: string[];
-    signaturePhrases: string[];
-  };
-  learningPhilosophy?: {
-    manifesto?: string[];
-    rules_of_engagement?: string[];
+    forbiddenPhrases?: string[];
   };
   domainContext?: {
     industryTerms: Record<string, string>;
