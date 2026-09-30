@@ -11,7 +11,12 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-09-10, sesiunea S13 — F3-T1 DONE)
+## ▶ REIA DE AICI (scris 2026-09-10, sesiunea S13 — F3-T1 DONE; completat 2026-09-30, S14)
+
+**Actualizare S14 (2026-09-30, fără cod):** înainte de F3-T2, citește **D-015** și **D-016** din
+§Descoperiri. Ambele așteaptă decizia owner-ului: (a) dacă amendamentul „orchestrare pe server" intră
+acum în F3-T5/F4 sau se discută la M4; (b) dacă F3-T2 pornește de la scheletele deja scrise pe
+`claude/context-rlv61y`. Până la răspuns, nu se începe F3-T2.
 
 **Task terminat: F3-T1** — `buildPrompt(layers)` + `buildTonePreamble` instalate (A.1/A.3), arhetipurile
 Mentor/Coach/Buddy + `narrativeUniverse` + `learningPhilosophy` + `masterTimeline` șterse din
@@ -536,6 +541,49 @@ Notă (istorică, rezolvată): CI-ul `Deploy Supabase Functions` eșua consecven
 
 Notează aici orice descoperire sau nelămurire care apare în timpul execuției, cu propunere. Owner-ul decide.
 
+### D-015 — Planul v2.0 nu acoperă generarea autonomă pe server, reluarea exactă și cache-ul pe unitate
+**Severitate:** mare (promisiune de produs), dar **nu blochează faza curentă (F3)** → ramura „NU" din D-007.
+**Context.** Comparație cerută de owner (2026-09-30, S14) între planul v2.0 și 4 comportamente-țintă:
+(1) după injectarea în editor, textele se modifică doar manual, fără AI; (2) cache precis; (3) orice
+lucru se reia exact de unde a rămas; (4) generarea rulează autonom până la final, și cu pagina/browserul
+închise. Verificat în cod pe `main` (`042b857`):
+- **(1) Acoperit în mare parte.** Butoanele Generate/Rafinează șterse (F1-T1); `analyzeSlideContent`
+  nu mai are apelanți în `src/` (exportul nu mai cheamă AI; ștergerea funcției rămâne la F7-T4). Mai
+  există puncte AI în afara editorului propriu-zis: regenerarea DNA din `DNAEditModal.tsx` (2 apeluri),
+  `LearningObjectivesGenerator`, „regenerează livrabilele afectate" din `GenerationProgressModal`
+  (plafon 3).
+- **(2) Parțial.** `ai_cache` pe hash SHA-256 al promptului exact (S11) + cache în `localStorage`
+  (doar în browserul curent). `CourseWorkspacePage.tsx` golește tot cache-ul de generare la orice
+  schimbare de DNA/blueprint → regenerare completă. Planul aduce `is_dirty` per modul (F3-T5), dar nu
+  definește ce input invalidează ce unitate.
+- **(3) Parțial.** Draft-uri per pas în `course_steps` (D-009), deci reluare la nivel de pas. F4-T2
+  sparge generarea în ~25 unități, dar planul nu prevede stare persistată per unitate.
+- **(4) Lipsește complet.** Orchestrarea e în browser (bucla din `GenerationProgressModal.tsx`, câte un
+  `functions.invoke` per pas, timeout client 240 s). Închis tab-ul → generarea se oprește. Pe server nu
+  există job/coadă/worker; planul v2.0 nu atinge subiectul.
+
+**Propunere (neconfirmată; decide owner-ul — acum sau la M4).** Nu se atinge fluxul legacy. Fluxul nou
+din F4 (care oricum se scrie de la zero, sub flag `contractPipeline`) se construiește direct cu
+orchestrare pe server: (a) F3-T5 extins — aceeași migrație adaugă și o tabelă de unități de generare
+(stare `pending/running/done/failed`, `input_hash` = hash contract-bloc + ton + etichete + versiune
+prompt, output, încercări); (b) un task nou F4-T0 — worker pe server care procesează unitățile
+(declanșat de `start_generation` + pg_cron/pg_net ca plasă), browserul doar afișează progresul;
+(c) cache = unitatea cu `input_hash` identic și status `done` nu se mai regenerează niciodată;
+(d) după finalizare, singura acțiune AI rămasă e opțional „regenerează modulul X" explicit, taxat.
+Cost estimat: +1–1,5 zile pe F3-T5/F4, fără fază nouă. Detalii în jurnalul S14 / discuția cu owner-ul.
+
+### D-016 — Branch nemergiat `claude/context-rlv61y` (14–15 aug) cu F2/F3-T1/F3-T2 făcute în paralel
+**Context.** Sesiunea „Context" (14–15 aug) a lucrat pe `claude/context-rlv61y` (HEAD `4b75b17`),
+niciodată adus pe `main`. Conține: F2-T1/T5, F3-T1 (altă implementare decât cea de pe `main` din 10 sep)
+și **F3-T2 complet** — cele 7 schelete în `prompts/` (`localized-labels`, `module-contract`,
+`participant-manual`, `exercise-sheet`, `trainer-guide`, `slides-copy`, `trainer-flow-polish`) +
+`prompts/types.ts` + `PROMPT_CHANGELOG.md`. Status-ul de pe acel branch declară M1/M2/M3 DONE, ceea ce
+NU corespunde cu `main` (M1 ALMOST, M3 TODO). Scheletele au forma `{role, task, format, quality}`, care
+se mapează 1:1 pe `PromptLayers` de pe `main` (`roleFrame/taskSpec/formatSpec/qualityRules`).
+**Propunere.** Nu se face merge pe branch (F3-T1 ar intra în conflict cu varianta de pe `main`). Pentru
+F3-T2 se preiau doar fișierele din `prompts/` ca punct de plecare, se revizuiesc față de A.4 și se
+adaptează la `PromptLayers`. Branch-ul rămâne ca istoric. Decide owner-ul.
+
 ### D-014 — CI-ul de deploy s-a reparat pe 15 aug; edge function-ul E live cu codul de pe `main`
 **Context.** Toate notele anterioare din acest fișier și din `CLAUDE.md § Convenții de lucru → CI`
 presupun că workflow-ul `Deploy Supabase Functions` e roșu („eșuează consecutiv din 6 iulie, cauza
@@ -647,6 +695,7 @@ Reprodus și pe HEAD-ul curat (înainte de modificările F0), deci defectul e pr
 | 2026-08-17 | S07 | Audit de status pe `main` (fără cod de producție atins) | Sincronizat folderul local cu `main` (era deja identic; `main` local adus la zi `b84715f`→`52feda2`, ref stale `origin/claude/sync-local-folder-main-gtsn0h` curățat). Verificat statusul punct cu punct față de cod: F2-T3/T4 confirmate în cod, F2-T5 confirmat inexistent, fix-urile D-013 confirmate prezente, typecheck verde, `npx vitest run` 12/13 (D-003 singurul eșec). **Descoperit D-014: CI-ul e verde din 15 aug și edge function-ul e deployat live cu codul de pe `main`** — invalidează notele „CI roșu / live rulează versiunea veche" din tot fișierul. Corectate 7 discrepanțe de documentație: §B bifat (contrazicea §REIA), premisa „fără Node/npm" din §Verificări restante, secțiunea F2-T5 duplicată, referințele moarte la D-005 (→ D-012 / D-014), afirmația „grep → 0" din DoD F1 (real: 2 hit-uri într-o migrație istorică), capcana `npm test` = watch mode. **F1-T4 rămâne BLOCKED** — smoke-ul cere login în UI-ul live și consumă credite AI pe producție, deci îl rulează owner-ul; M1 nebifat intenționat. |
 | 2026-08-14 | S06 | F2-T3 DONE · F2-T4 DONE · status actualizat | Pornit cu typecheck+test verde (Node 22 disponibil în mediu remote — nu mai e limitarea D-012). Documentate commit-urile S05 nedocumentate. F2-T3 implementat: `skipAiValidation` eliminat din toate call-site-urile (15 ocurențe), prag 400 chars pe conținut raw, `LANG_SIGNATURES` extins (+it/pt/nl/pl), `NON_LATIN_SCRIPTS` adăugat (26 limbi cu scripturi non-latine via regex Unicode). F2-T4: inventar complet prompturi — singurele probleme în MANUAL_PROMPT: "English/Romanian" → "English" + "# Modul:" hardcodat eliminat. Typecheck verde per commit. |
 | 2026-09-10 | S13 | F3-T1 DONE | `buildPrompt`/`buildTonePreamble` instalate (A.1/A.3), neconectate încă la randare. `CourseDNA` simplificat: șters `narrativeUniverse`/`learningPhilosophy`/`masterTimeline`/`voiceProfile`, adăugat `toneFreeText` + `terminology.forbiddenPhrases` (nume aliniate la fixture-ul F0-T4 existent). `DNAEditModal.tsx` rescris la 3 secțiuni. `buildDNABlocks()` adaptat surgical (D-008), Golden Path neatins structural. Toate punctele de citire legacy (`course_dna`, `course_macro_structure`, `agenda_table`, `facilitator_manual`, `discussion_guide`, `hasMinimalCourseDNA`) migrate la schema nouă. Locale (en/ro/es/fr/it/de) actualizate. Typecheck verde, vitest 14/15 (D-003 neatins). Commit+push direct pe `main` (regulă owner 2026-09-04). |
+| 2026-09-30 | S14 | Fără cod — analiză de direcție cerută de owner | Comparat planul v2.0 cu 4 comportamente-țintă (fără AI după editor, cache precis, reluare exactă, generare autonomă cu browserul închis). Descoperit și notat **D-015** (orchestrarea e în browser; planul nu o mută pe server) și **D-016** (branch `claude/context-rlv61y` cu F3-T2 deja scris, nemergiat). Propunere de amendament neinvaziv prezentată owner-ului; nimic implementat. |
 
 ### D-012 — Local terminal lacks Node/npm; cannot execute local repro here
 **Notă de renumerotare (2026-08-08, corectată 2026-08-17).** Acest discovery a fost scris inițial cu ID-ul `D-005`, care era deja folosit informal pentru „CI-ul de deploy Supabase eșuează" — cel referit din `CLAUDE.md § Convenții de lucru → CI`. Renumerotat aici la `D-012`. **Corecție S07:** o intrare `### D-005` nu a existat niciodată în acest fișier (ID-urile prezente sunt D-001…D-004, D-007…D-009, D-011…D-014; lipsesc D-005, D-006, D-010), deci trimiterea de mai sus la „`D-005` mai jos" era o referință moartă. Toate referințele la „D-005 = lipsă Node" au fost înlocuite cu D-012, iar cele la „D-005 = CI roșu" cu **D-014**, care documentează subiectul cap-coadă, inclusiv rezolvarea. ID-urile sărite rămân sărite — nu se reciclează.
