@@ -433,6 +433,15 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         const dbCached = await loadProgressFromDb();
         if (dbCached && dbCached.completedSteps.length > 0) {
             console.log('[GenerationProgressModal] Resuming from DB cache:', dbCached.completedSteps.length, 'steps done.');
+            // The DNA checkpoint holds the AI's first draft; the user may have edited
+            // the DNA since (DNAEditModal writes courses.dna). courses.dna wins.
+            if (course.dna) {
+                dbCached.accumulatedContent = dbCached.accumulatedContent.map((item: any) =>
+                    item.step_type === TrainerStepType.CourseDNA
+                        ? { ...item, content: JSON.stringify(course.dna, null, 2) }
+                        : item
+                );
+            }
             accumulatedContentRef.current = dbCached.accumulatedContent;
             saveProgressToCache(dbCached.completedSteps, dbCached.accumulatedContent);
 

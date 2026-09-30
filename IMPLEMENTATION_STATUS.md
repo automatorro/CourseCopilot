@@ -26,6 +26,9 @@ Convenții:
   04:16 UTC, HEAD `62fd1e0`). Fișierele noi nu sunt importate de `index.ts`, deci comportamentul live
   nu se schimbă.
 
+**Regresie reparată în S14: D-018** (pauza ADN bloca cursurile noi în editor) — verificarea ei face
+parte din smoke-ul F1-T4.
+
 **Așteaptă owner-ul:** smoke F1-T4 (instrucțiuni în §Smoke F1 și trimise în chat pe 2026-09-30) →
 „F1 smoke OK" închide M1.
 
@@ -563,6 +566,31 @@ Notă (istorică, rezolvată): CI-ul `Deploy Supabase Functions` eșua consecven
 
 Notează aici orice descoperire sau nelămurire care apare în timpul execuției, cu propunere. Owner-ul decide.
 
+### D-018 — Regresie: după pauza de la ADN, cursurile noi rămân blocate în editor (reparat, aprobat owner)
+**Simptom (owner, 2026-09-30, la pregătirea smoke-ului F1-T4).** Curs nou → „Generează" → pasul ADN →
+modalul cere „Închide" pentru revizuirea ADN-ului → după închidere, utilizatorul ajunge în editor cu
+ADN-ul afișat ca JSON brut (pas „ADN-ul Cursului (Sursa Unică de Adevăr)"), fără cale spre „Editează
+ADN"/„Generează" (acestea există doar pe ecranul de blueprint).
+**Cauza rădăcină.** Trei piese scrise independent, care erau corecte separat:
+1. Pauza după ADN + mesajul „Apasă acum Închide" (design din ian. 2026).
+2. Rutarea din `CourseWorkspacePage.tsx`: „cursul are orice rând în `course_steps` ⇒ e generat ⇒
+   editor"; la închiderea modalului „0 rânduri ⇒ înapoi la blueprint" (același design).
+3. `f3cb0f0` (7 aug, fir ad-hoc D-009): fiecare pas generat e salvat imediat în `course_steps` ca
+   checkpoint de reluare (`status='draft'`, `title_key='generation.steps.*'`) — **inclusiv ADN-ul,
+   înainte de pauză**. Commit-ul n-a actualizat regulile de rutare de la punctul 2, care numără orice
+   rând ca „material generat".
+De la 7 aug, orice curs nou se blochează deterministic la pauza ADN. **De ce nu s-a văzut până acum:**
+nicio generare completă a unui curs NOU din UI nu a mai fost rulată după 7 aug — F1-T4 e BLOCKED din
+iulie, D-013 (8 aug) a verificat doar typecheck-ul, smoke-ul S11 (4–5 sep) a verificat doar acțiunile
+de sănătate (ping/provider_status/test_connection). Cursurile existente nu erau afectate (au deja
+materiale). Lecție: checkpoint-urile de generare și materialele trăiesc în aceeași tabelă — exact
+amestecul pe care F3-T5 extins / F4-T0 (D-015) îl elimină prin `generation_units` separat.
+**Reparat (aprobat owner 2026-09-30, 2 fișiere, fără schemă):** rutarea numără ca „generat" doar
+rânduri care NU sunt checkpoint-uri `generation.steps.*` (materialele finale sunt `course.livrables.*`),
+deci pauza ADN și orice generare întreruptă duc înapoi la blueprint, unde „Generează" reia din
+checkpoint-uri. În plus, la reluare, conținutul checkpoint-ului ADN e înlocuit cu `courses.dna`
+(ADN-ul editat de owner câștigă, nu prima variantă AI). **De verificat la smoke-ul F1-T4.**
+
 ### D-015 — Planul v2.0 nu acoperă generarea autonomă pe server, reluarea exactă și cache-ul pe unitate
 **Severitate:** mare (promisiune de produs), dar **nu blochează faza curentă (F3)** → ramura „NU" din D-007.
 **Context.** Comparație cerută de owner (2026-09-30, S14) între planul v2.0 și 4 comportamente-țintă:
@@ -734,6 +762,7 @@ Reprodus și pe HEAD-ul curat (înainte de modificările F0), deci defectul e pr
 | 2026-08-17 | S07 | Audit de status pe `main` (fără cod de producție atins) | Sincronizat folderul local cu `main` (era deja identic; `main` local adus la zi `b84715f`→`52feda2`, ref stale `origin/claude/sync-local-folder-main-gtsn0h` curățat). Verificat statusul punct cu punct față de cod: F2-T3/T4 confirmate în cod, F2-T5 confirmat inexistent, fix-urile D-013 confirmate prezente, typecheck verde, `npx vitest run` 12/13 (D-003 singurul eșec). **Descoperit D-014: CI-ul e verde din 15 aug și edge function-ul e deployat live cu codul de pe `main`** — invalidează notele „CI roșu / live rulează versiunea veche" din tot fișierul. Corectate 7 discrepanțe de documentație: §B bifat (contrazicea §REIA), premisa „fără Node/npm" din §Verificări restante, secțiunea F2-T5 duplicată, referințele moarte la D-005 (→ D-012 / D-014), afirmația „grep → 0" din DoD F1 (real: 2 hit-uri într-o migrație istorică), capcana `npm test` = watch mode. **F1-T4 rămâne BLOCKED** — smoke-ul cere login în UI-ul live și consumă credite AI pe producție, deci îl rulează owner-ul; M1 nebifat intenționat. |
 | 2026-08-14 | S06 | F2-T3 DONE · F2-T4 DONE · status actualizat | Pornit cu typecheck+test verde (Node 22 disponibil în mediu remote — nu mai e limitarea D-012). Documentate commit-urile S05 nedocumentate. F2-T3 implementat: `skipAiValidation` eliminat din toate call-site-urile (15 ocurențe), prag 400 chars pe conținut raw, `LANG_SIGNATURES` extins (+it/pt/nl/pl), `NON_LATIN_SCRIPTS` adăugat (26 limbi cu scripturi non-latine via regex Unicode). F2-T4: inventar complet prompturi — singurele probleme în MANUAL_PROMPT: "English/Romanian" → "English" + "# Modul:" hardcodat eliminat. Typecheck verde per commit. |
 | 2026-09-10 | S13 | F3-T1 DONE | `buildPrompt`/`buildTonePreamble` instalate (A.1/A.3), neconectate încă la randare. `CourseDNA` simplificat: șters `narrativeUniverse`/`learningPhilosophy`/`masterTimeline`/`voiceProfile`, adăugat `toneFreeText` + `terminology.forbiddenPhrases` (nume aliniate la fixture-ul F0-T4 existent). `DNAEditModal.tsx` rescris la 3 secțiuni. `buildDNABlocks()` adaptat surgical (D-008), Golden Path neatins structural. Toate punctele de citire legacy (`course_dna`, `course_macro_structure`, `agenda_table`, `facilitator_manual`, `discussion_guide`, `hasMinimalCourseDNA`) migrate la schema nouă. Locale (en/ro/es/fr/it/de) actualizate. Typecheck verde, vitest 14/15 (D-003 neatins). Commit+push direct pe `main` (regulă owner 2026-09-04). |
+| 2026-09-30 | S14 (fix D-018) | Regresie găsită de owner la pregătirea smoke-ului | Cauză rădăcină: checkpoint-urile de generare din `f3cb0f0` (7 aug) numărate de rutare drept materiale. Reparat în `CourseWorkspacePage.tsx` + `GenerationProgressModal.tsx` (aprobat owner). Typecheck verde, vitest 17/18 (D-003). |
 | 2026-09-30 | S14 (continuare) | D-015 + D-016 aprobate · F3-T2 DONE · M3 DONE | Owner a aprobat amendamentul „orchestrare pe server" (F3-T5 extins, F4-T0 nou) și preluarea scheletelor de pe `claude/context-rlv61y`. F3-T2 instalat (commit `1038da2`), D-017 notat și rezolvat parțial. Test nou `promptSkeletons.test.ts`. Typecheck verde, vitest 17/18 (D-003). Instrucțiuni smoke F1-T4 trimise owner-ului. |
 | 2026-09-30 | S14 | Fără cod — analiză de direcție cerută de owner | Comparat planul v2.0 cu 4 comportamente-țintă (fără AI după editor, cache precis, reluare exactă, generare autonomă cu browserul închis). Descoperit și notat **D-015** (orchestrarea e în browser; planul nu o mută pe server) și **D-016** (branch `claude/context-rlv61y` cu F3-T2 deja scris, nemergiat). Propunere de amendament neinvaziv prezentată owner-ului; nimic implementat. |
 

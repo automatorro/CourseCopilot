@@ -56,6 +56,13 @@ const safeMarkedParse = (content: string, options?: any): string => {
   }
 };
 
+// GenerationProgressModal checkpoints each step into course_steps under its
+// `generation.steps.*` key so an interrupted generation can resume (f3cb0f0).
+// Those rows are progress, not materials: finished deliverables are saved under
+// `course.livrables.*`. Routing must only treat the latter as "course generated".
+const hasGeneratedMaterials = (steps: CourseStep[] | undefined): boolean =>
+  (steps || []).some(s => !String(s.title_key || '').startsWith('generation.steps.'));
+
 const HelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useTranslation();
   const helpItems = [
@@ -502,9 +509,10 @@ const CourseWorkspacePage: React.FC = () => {
       setShowBlueprintReview(false);
     } else {
       // Both exist. Check if we should show the review or the editor.
-      // Heuristic: If we have any steps, we assume the course is generated.
+      // Generation checkpoints alone (e.g. the pause after Course DNA) keep the
+      // user on the blueprint review, where "Generate" resumes from them.
       const stepCount = (course.steps || []).length;
-      const hasGeneratedSteps = stepCount > 0;
+      const hasGeneratedSteps = hasGeneratedMaterials(course.steps);
 
       console.log('[CourseWorkspace] Routing check:', { stepCount, hasGeneratedSteps });
 
@@ -1371,14 +1379,14 @@ const CourseWorkspacePage: React.FC = () => {
                     setCourse(latestCourse);
                 }
                 
-                // If we closed without generating steps, go back to blueprint
-                if ((latestCourse?.steps || []).length === 0) {
+                // If we closed without generating materials, go back to blueprint
+                if (!hasGeneratedMaterials(latestCourse?.steps)) {
                   setShowBlueprintReview(true);
                 }
             } catch (e) {
                 console.error("Failed to refresh course on modal close", e);
                 // Fallback
-                if ((course.steps || []).length === 0) {
+                if (!hasGeneratedMaterials(course.steps)) {
                   setShowBlueprintReview(true);
                 }
             }
