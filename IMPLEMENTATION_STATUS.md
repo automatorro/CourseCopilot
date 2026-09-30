@@ -22,9 +22,9 @@ Convenții:
   `1038da2`, doar fișierele din `prompts/`, fără merge). **D-017** (chei de etichete lipsă) notat;
   alinierea din index.ts rămâne pentru F4-T3.
 - Test nou `src/tests/promptSkeletons.test.ts`. Typecheck verde; `npx vitest run` → 17/18 (D-003).
-- Commit `1038da2` atinge `supabase/functions/**` → deploy CI; fișierele noi nu sunt importate de
-  `index.ts`, deci comportamentul live nu se schimbă. **Verifică concluzia run-ului CI** dacă nu e
-  deja notată în jurnal.
+- Commit `1038da2` atinge `supabase/functions/**` → deploy CI **run #32: `success`** (2026-09-30
+  04:16 UTC, HEAD `62fd1e0`). Fișierele noi nu sunt importate de `index.ts`, deci comportamentul live
+  nu se schimbă.
 
 **Așteaptă owner-ul:** smoke F1-T4 (instrucțiuni în §Smoke F1 și trimise în chat pe 2026-09-30) →
 „F1 smoke OK" închide M1.
