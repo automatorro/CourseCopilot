@@ -334,10 +334,12 @@ Acest capitol este răspunsul la „ce se întâmplă dacă implementăm 100% co
 - **F3-T3.** Schema `ModuleContract` (server types + Zod client, exact ca în A.4.2/planul v1: objective{statement,bloomLevel,bloomVerb}, blocks{id,phase,title,durationMinutes,keyPoints,exerciseSpec{format,scenarioSeed,characters[roluri],evidenceOfLearning,debriefBloomVerb}}, transitions).
 - **F3-T4.** `validateModuleContract()` determinist: ≥1 ACTIVATION+DEMONSTRATION+APPLICATION; suma minutelor = durata (±5, corecție programatică pe ultimul bloc non-break); APPLICATION ≥40% la bloomLevel≥APPLY; niciun bloc >25 min fără schimbare de fază; BREAK la module ≥90 min; `bloomVerb`/`debriefBloomVerb` din dicționarul de verbi per nivel per limbă (dicționar nou în cod). Eșec → 1 re-apel cu erorile enumerate → apoi eroare vizibilă.
 - **F3-T5.** Persistență: migrație `course_modules.contract jsonb` + `contract_version`; `is_dirty` invalidează; cache (nu se regenerează dacă există și e curat).
+- **Amendament 2026-09-30 (D-015, aprobat owner):** F3-T5 se extinde cu tabelele `generation_jobs` + `generation_units` (o unitate = un apel LLM, cu `input_hash` și stare) în aceeași migrație; cache-ul = unitate `done` cu același `input_hash`. Detalii în `IMPLEMENTATION_STATUS.md` (F3-T5).
 - **F3-T6.** Orchestrator: parametru `modelTier` per tip de apel (pregătire pentru scara B.3-2; default: tot Flash).
 **DoD:** M3 (prompts/ + preambul + changelog instalate) și M4 (4 contracte valide pe etalon, salvate, **aprobate de owner** — poarta umană nr. 1).
 
 ## F4 — Cele 5 livrabile ca randări (4 zile) · Risc: mare, controlat prin flag
+- **F4-T0 (amendament 2026-09-30, D-015, aprobat owner).** Orchestrare pe server a fluxului nou: `start_generation` creează job + unități, un worker le execută (auto-reînlănțuire + pg_cron ca plasă), clientul doar afișează progresul. Generarea continuă cu browserul închis și se reia exact pe unitate. Detalii în `IMPLEMENTATION_STATUS.md` (F4-T0).
 - **F4-T1.** Feature flag `contractPipeline` (fluxul vechi rămâne intact până la F10; comparație A/B + revenire instant).
 - **F4-T2.** Granularitate (P1): Manual 1 apel/modul (split la >6 blocuri); Exercise Sheets **1 apel/exerciseSpec**; Trainer Guide 1 apel/modul; Trainer Flow asamblare deterministă + 1 apel de finisare/curs; Slides în F7. Etalon: ~25 apeluri total.
 - **F4-T3.** Consistență prin cod (P3): renderer-ele construiesc headerele din contract+labels prin `BLOCK_HEADER_TOKEN`; LLM-ul scrie doar corpul; ID-urile exercițiilor se propagă programatic în guide și flow.

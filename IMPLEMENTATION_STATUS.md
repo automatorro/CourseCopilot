@@ -11,12 +11,33 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-09-10, sesiunea S13 — F3-T1 DONE; completat 2026-09-30, S14)
+## ▶ REIA DE AICI (scris 2026-09-30, sesiunea S14 — F3-T2 DONE, M3 DONE, D-015 aprobat)
 
-**Actualizare S14 (2026-09-30, fără cod):** înainte de F3-T2, citește **D-015** și **D-016** din
-§Descoperiri. Ambele așteaptă decizia owner-ului: (a) dacă amendamentul „orchestrare pe server" intră
-acum în F3-T5/F4 sau se discută la M4; (b) dacă F3-T2 pornește de la scheletele deja scrise pe
-`claude/context-rlv61y`. Până la răspuns, nu se începe F3-T2.
+**Ce s-a întâmplat în S14:**
+- Analiză de direcție cerută de owner: planul v2.0 vs 4 comportamente-țintă (fără AI după editor, cache
+  precis, reluare exactă, generare autonomă cu browserul închis) → **D-015**. Owner-ul a **aprobat
+  acum** amendamentul: F3-T5 extins (tabele `generation_jobs` + `generation_units` în aceeași migrație)
+  și F4-T0 nou (worker pe server). Legacy rămâne neatins până la F10.
+- **D-016** aprobat: F3-T2 făcut preluând cele 7 schelete de pe `claude/context-rlv61y` (commit
+  `1038da2`, doar fișierele din `prompts/`, fără merge). **D-017** (chei de etichete lipsă) notat;
+  alinierea din index.ts rămâne pentru F4-T3.
+- Test nou `src/tests/promptSkeletons.test.ts`. Typecheck verde; `npx vitest run` → 17/18 (D-003).
+- Commit `1038da2` atinge `supabase/functions/**` → deploy CI; fișierele noi nu sunt importate de
+  `index.ts`, deci comportamentul live nu se schimbă. **Verifică concluzia run-ului CI** dacă nu e
+  deja notată în jurnal.
+
+**Așteaptă owner-ul:** smoke F1-T4 (instrucțiuni în §Smoke F1 și trimise în chat pe 2026-09-30) →
+„F1 smoke OK" închide M1.
+
+**Următorul pas: F3-T3** — schema `ModuleContract` (server types în `prompts/` sau `contract.ts` +
+Zod client în `src/schemas/`), exact câmpurile din F3-T3 și A.4.2. Apoi F3-T4 (validare deterministă;
+propunerea „dicționar Bloom RO+EN riguros, restul degradare grațioasă" e încă neconfirmată — întreabă
+owner-ul înainte de F3-T4), apoi F3-T5 **extins** (migrație SQL scrisă + postată integral în chat,
+marcată „așteaptă deploy owner").
+
+---
+
+## ▶ REIA DE AICI — istoric (scris 2026-09-10, sesiunea S13 — F3-T1 DONE)
 
 **Task terminat: F3-T1** — `buildPrompt(layers)` + `buildTonePreamble` instalate (A.1/A.3), arhetipurile
 Mentor/Coach/Buddy + `narrativeUniverse` + `learningPhilosophy` + `masterTimeline` șterse din
@@ -261,7 +282,7 @@ Niciuna din cele de mai sus nu e parte din F2–F10 formal. Sunt fix-uri/feature
 | M0 | F0 | Tag + status file + baseline „before" + fixture etalon | DONE (baseline SKIPPED prin decizie owner — vezi F0-T3) |
 | M1 | F1 | Cod mort șters (butoane editor, ProtagonistEnforcer, fixes/); build verde | ALMOST (cod șters + typecheck verde + **deploy live confirmat**, D-014; rămâne DOAR smoke-ul manual F1-T4 la owner) |
 | M2 | F2 | Test puritate lingvistică verde (EN fără RO, RO fără EN) | DONE (2026-09-05 — F2-T1..T5 toate DONE; testul verde + audit exhaustiv manual, zero amestec găsit) |
-| M3 | F3 | Arhitectura de prompturi instalată: prompts/ + changelog + preambul de ton | TODO |
+| M3 | F3 | Arhitectura de prompturi instalată: prompts/ + changelog + preambul de ton | DONE (2026-09-30 — F3-T1 preambul + F3-T2 prompts/ + changelog; F3-T3…T6 continuă spre M4) |
 | M4 | F4 | Contracte de modul valide pe etalon; **aprobate de owner** (poarta umană 1) | TODO |
 | M5 | F5 | Cele 5 livrabile randate din contract, validare deterministă verde | TODO |
 | M6 | F6 | **Rubrica ≥ prag pe cursul-etalon (RO+EN)** — poarta de calitate (poarta umană 2) | TODO |
@@ -454,14 +475,15 @@ rând cu ☐, se postează SQL-ul complet în chat, se bifează doar după confi
 
 ### F3 — Instalarea arhitecturii de prompturi + contractul de modul (3 zile) · Risc: mare, izolat
 - **F3-T1** [DONE 2026-09-10] `buildPrompt(layers)` + `buildTonePreamble` (A.1, A.3) instalate în `index.ts` (neconectate încă la randarea vie — le consumă F3-T2). Șterse din `CourseDNA`: arhetipurile Mentor/Coach/Buddy (era doar un comentariu-gardă în prompt, nu cod structurat), `narrativeUniverse`, `learningPhilosophy`, `masterTimeline`. `DNAEditModal` → 3 secțiuni (terminologie+expresii interzise / voce liberă `toneFreeText` / mediu, read-only). `buildDNABlocks()` păstrat pentru Golden Path (D-008), adaptat la schema nouă. Detalii complete în §REIA DE AICI (S13). Typecheck verde; vitest 14/15 (D-003 neatins).
-- **F3-T2** [TODO] Cele 7 fișiere de prompt (A.4) + `PROMPT_CHANGELOG.md` cu intrarea „v1 instalată"
+- **F3-T2** [DONE 2026-09-30] Cele 7 schelete în `prompts/` (`localized-labels`, `module-contract`, `participant-manual`, `exercise-sheet`, `trainer-guide`, `slides-copy`, `trainer-flow-polish`) + `types.ts` (`PromptSkeleton` role/task/format/quality → `PromptLayers`) + `PROMPT_CHANGELOG.md` „v1 instalată". Preluate de pe `claude/context-rlv61y` (D-016, aprobat owner), revizuite față de A.4; adăugate 7 chei de etichete lipsă (D-017). Necablate încă (F4-T2). Test nou `src/tests/promptSkeletons.test.ts` (3 teste: 7 schelete complete, orice `{{label_*}}` declarat în `LABEL_KEYS`, meta-instrucțiuni fără diacritice RO). Typecheck verde; vitest 17/18 (D-003).
 - **F3-T3** [TODO] Schema `ModuleContract` (server types + Zod client) — obiectiv/blocks/exerciseSpec/transitions
 - **F3-T4** [TODO] `validateModuleContract()` determinist: ≥1 ACT+DEM+APP; sumă minute = durată (±5); APP ≥40% la bloomLevel≥APPLY; niciun bloc >25 min fără schimbare de fază; BREAK la module ≥90 min; verbi Bloom din dicționar per limbă. Eșec → 1 re-apel → apoi eroare
-- **F3-T5** [TODO] Persistență: migrație `course_modules.contract jsonb` + `contract_version`; `is_dirty` invalidează; cache
+- **F3-T5** [TODO — extins prin D-015, aprobat owner 2026-09-30] Persistență: migrație `course_modules.contract jsonb` + `contract_version` + `contract_hash`; `is_dirty` invalidează. **În aceeași migrație:** tabela `generation_jobs` (un job per generare de curs: stare, progres) și `generation_units` (o unitate = un apel LLM: `job_id`, `course_id`, `module_id`, `unit_type`, `unit_key`, `input_hash` = hash(bloc contract + ton + etichete + versiune prompt), `status` pending/running/done/failed, `attempts`, `output`, `error`, timestamps), cu RLS pe owner-ul cursului. Cache = unitate cu același `input_hash` și `status=done` nu se regenerează niciodată.
 - **F3-T6** [TODO] Orchestrator: parametru `modelTier` per tip de apel (default: tot Flash)
 - **DoD F3:** M3 (prompts/ + preambul + changelog) și M4 (4 contracte valide pe etalon, **aprobate de owner — poarta umană 1**)
 
 ### F4 — Cele 5 livrabile ca randări (4 zile) · Risc: mare, controlat prin flag
+- **F4-T0** [TODO — nou prin D-015, aprobat owner 2026-09-30] Orchestrare pe server pentru fluxul nou (legacy neatins până la F10): acțiune `start_generation` (creează job + unități, răspunde imediat cu `job_id`); worker care preia atomic unități `pending` (și `running` expirate), le execută câte un apel LLM per invocare, se auto-reînlănțuie (`EdgeRuntime.waitUntil`) și e reluat de pg_cron + pg_net la 1 min ca plasă de siguranță (extensiile activate de owner, SQL în chat); creditele se debitează per unitate `done`, idempotent. Clientul (`GenerationProgressModal`, sub flag) doar citește progresul din `generation_units` (Realtime sau poll) — închiderea tab-ului nu oprește nimic; redeschiderea arată starea reală. DoD suplimentar: generare etalon pornită, tab închis după primul modul, redeschis → job terminat fără unități duplicate.
 - **F4-T1** [TODO] Feature flag `contractPipeline` (fluxul vechi intact până la F10; A/B + revenire instant)
 - **F4-T2** [TODO] Granularitate: Manual 1 apel/modul (split >6 blocuri); Exercise Sheets 1 apel/exerciseSpec; Trainer Guide 1 apel/modul; Trainer Flow asamblare deterministă + 1 apel finisare; Slides în F7. Țintă etalon: ~25 apeluri
 - **F4-T3** [TODO] Consistență prin cod (P3): renderer-ele construiesc headerele din contract+labels via `BLOCK_HEADER_TOKEN`; LLM scrie doar corpul; ID-urile exercițiilor se propagă programatic
@@ -572,6 +594,9 @@ prompt, output, încercări); (b) un task nou F4-T0 — worker pe server care pr
 (d) după finalizare, singura acțiune AI rămasă e opțional „regenerează modulul X" explicit, taxat.
 Cost estimat: +1–1,5 zile pe F3-T5/F4, fără fază nouă. Detalii în jurnalul S14 / discuția cu owner-ul.
 
+**Decizie owner (2026-09-30): APROBAT acum** (nu la M4). Intră în F3-T5 (extins) și F4-T0 (nou) — vezi
+§Task-uri pe faze. Legacy rămâne client-side până la F10.
+
 ### D-016 — Branch nemergiat `claude/context-rlv61y` (14–15 aug) cu F2/F3-T1/F3-T2 făcute în paralel
 **Context.** Sesiunea „Context" (14–15 aug) a lucrat pe `claude/context-rlv61y` (HEAD `4b75b17`),
 niciodată adus pe `main`. Conține: F2-T1/T5, F3-T1 (altă implementare decât cea de pe `main` din 10 sep)
@@ -583,6 +608,20 @@ se mapează 1:1 pe `PromptLayers` de pe `main` (`roleFrame/taskSpec/formatSpec/q
 **Propunere.** Nu se face merge pe branch (F3-T1 ar intra în conflict cu varianta de pe `main`). Pentru
 F3-T2 se preiau doar fișierele din `prompts/` ca punct de plecare, se revizuiesc față de A.4 și se
 adaptează la `PromptLayers`. Branch-ul rămâne ca istoric. Decide owner-ul.
+
+**Decizie owner (2026-09-30): APROBAT.** Făcut în F3-T2 (commit `1038da2`): cele 7 schelete + `types.ts`
++ `PROMPT_CHANGELOG.md` preluate fără merge; restul branch-ului (F2/F3-T1 paralel) ignorat.
+
+### D-017 — Inventarul de etichete (18 chei) nu acoperă headerele cerute de A.4.4 și A.4.7
+**Severitate:** mică; nu blochează F3 (prompturile nu sunt încă cablate). **Context.** A.1 interzice
+headere în limbă naturală în FORMAT SPEC, dar foaia de exercițiu (A.4.4) cere secțiuni pentru spațiul de
+lucru, tabelul de timing, checklist-ul observatorului, indicatorii de succes și adaptări, iar Trainer
+Flow (A.4.7) cere ritualurile de deschidere/închidere — niciuna nu are cheie în `LOCALIZED_LABEL_KEYS`
+(index.ts). **Făcut în F3-T2:** cheile `workspace`, `timing`, `observerChecklist`, `successIndicators`,
+`adaptation`, `openingRitual`, `closingRitual` adăugate în `prompts/localized-labels.ts → LABEL_KEYS`
+(superset declarat) și folosite ca `{{label_*}}`; testul `promptSkeletons.test.ts` păzește
+consistența. **Rămâne pentru F4-T3:** aliniere `LOCALIZED_LABEL_KEYS` + `getDefaultEnglishLabels()` din
+index.ts la aceeași listă (+ fallback-urile statice), când renderer-ele încep să consume prompturile.
 
 ### D-014 — CI-ul de deploy s-a reparat pe 15 aug; edge function-ul E live cu codul de pe `main`
 **Context.** Toate notele anterioare din acest fișier și din `CLAUDE.md § Convenții de lucru → CI`
@@ -695,6 +734,7 @@ Reprodus și pe HEAD-ul curat (înainte de modificările F0), deci defectul e pr
 | 2026-08-17 | S07 | Audit de status pe `main` (fără cod de producție atins) | Sincronizat folderul local cu `main` (era deja identic; `main` local adus la zi `b84715f`→`52feda2`, ref stale `origin/claude/sync-local-folder-main-gtsn0h` curățat). Verificat statusul punct cu punct față de cod: F2-T3/T4 confirmate în cod, F2-T5 confirmat inexistent, fix-urile D-013 confirmate prezente, typecheck verde, `npx vitest run` 12/13 (D-003 singurul eșec). **Descoperit D-014: CI-ul e verde din 15 aug și edge function-ul e deployat live cu codul de pe `main`** — invalidează notele „CI roșu / live rulează versiunea veche" din tot fișierul. Corectate 7 discrepanțe de documentație: §B bifat (contrazicea §REIA), premisa „fără Node/npm" din §Verificări restante, secțiunea F2-T5 duplicată, referințele moarte la D-005 (→ D-012 / D-014), afirmația „grep → 0" din DoD F1 (real: 2 hit-uri într-o migrație istorică), capcana `npm test` = watch mode. **F1-T4 rămâne BLOCKED** — smoke-ul cere login în UI-ul live și consumă credite AI pe producție, deci îl rulează owner-ul; M1 nebifat intenționat. |
 | 2026-08-14 | S06 | F2-T3 DONE · F2-T4 DONE · status actualizat | Pornit cu typecheck+test verde (Node 22 disponibil în mediu remote — nu mai e limitarea D-012). Documentate commit-urile S05 nedocumentate. F2-T3 implementat: `skipAiValidation` eliminat din toate call-site-urile (15 ocurențe), prag 400 chars pe conținut raw, `LANG_SIGNATURES` extins (+it/pt/nl/pl), `NON_LATIN_SCRIPTS` adăugat (26 limbi cu scripturi non-latine via regex Unicode). F2-T4: inventar complet prompturi — singurele probleme în MANUAL_PROMPT: "English/Romanian" → "English" + "# Modul:" hardcodat eliminat. Typecheck verde per commit. |
 | 2026-09-10 | S13 | F3-T1 DONE | `buildPrompt`/`buildTonePreamble` instalate (A.1/A.3), neconectate încă la randare. `CourseDNA` simplificat: șters `narrativeUniverse`/`learningPhilosophy`/`masterTimeline`/`voiceProfile`, adăugat `toneFreeText` + `terminology.forbiddenPhrases` (nume aliniate la fixture-ul F0-T4 existent). `DNAEditModal.tsx` rescris la 3 secțiuni. `buildDNABlocks()` adaptat surgical (D-008), Golden Path neatins structural. Toate punctele de citire legacy (`course_dna`, `course_macro_structure`, `agenda_table`, `facilitator_manual`, `discussion_guide`, `hasMinimalCourseDNA`) migrate la schema nouă. Locale (en/ro/es/fr/it/de) actualizate. Typecheck verde, vitest 14/15 (D-003 neatins). Commit+push direct pe `main` (regulă owner 2026-09-04). |
+| 2026-09-30 | S14 (continuare) | D-015 + D-016 aprobate · F3-T2 DONE · M3 DONE | Owner a aprobat amendamentul „orchestrare pe server" (F3-T5 extins, F4-T0 nou) și preluarea scheletelor de pe `claude/context-rlv61y`. F3-T2 instalat (commit `1038da2`), D-017 notat și rezolvat parțial. Test nou `promptSkeletons.test.ts`. Typecheck verde, vitest 17/18 (D-003). Instrucțiuni smoke F1-T4 trimise owner-ului. |
 | 2026-09-30 | S14 | Fără cod — analiză de direcție cerută de owner | Comparat planul v2.0 cu 4 comportamente-țintă (fără AI după editor, cache precis, reluare exactă, generare autonomă cu browserul închis). Descoperit și notat **D-015** (orchestrarea e în browser; planul nu o mută pe server) și **D-016** (branch `claude/context-rlv61y` cu F3-T2 deja scris, nemergiat). Propunere de amendament neinvaziv prezentată owner-ului; nimic implementat. |
 
 ### D-012 — Local terminal lacks Node/npm; cannot execute local repro here
