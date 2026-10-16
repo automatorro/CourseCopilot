@@ -11,7 +11,30 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-09-30, sesiunea S14 — F3-T2 DONE, M3 DONE, D-015 aprobat)
+## ▶ REIA DE AICI (scris 2026-10-16, sesiunea S18 — F3-T5 aplicat manual de owner)
+
+**Ce s-a făcut în S16–S18:**
+- F3-T4: adăugat `prompts/validate-module-contract.ts` cu faze obligatorii, durată ±5 min și corecție
+  pe ultimul non-break, blocuri 15–25 min, APPLICATION ≥40% la APPLY+, BREAK la module ≥90 min,
+  dicționar Bloom strict RO/EN și un singur retry cu erorile enumerate. Erorile persistente aruncă
+  `ModuleContractValidationError`.
+- Decizia Bloom a fost aprobată prin „ok, treci mai departe”; verb necunoscut/sub nivel este eroare,
+  fără acceptare automată prin fallback.
+- F3-T5: migrația `supabase/migrations/20261016_module_contract_generation_queue.sql` a fost aplicată
+  manual de owner în Supabase Studio (confirmat 2026-10-16). Adaugă contractul și metadata pe
+  `course_modules`, plus job/unit queue, indici pentru claim/cache, FK-uri și RLS de citire pentru
+  owner. Scrierile sunt rezervate workerului server-side.
+- Verificare F3-T4: test focalizat 10/10; typecheck verde; suita completă 27/28, singurul eșec
+  preexistent D-003 (`src/tests/e2e_generation.test.ts`, import lipsă `index_bundled`).
+
+**Așteaptă owner-ul:** smoke-ul manual F1-T4 rămâne nerezolvat.
+
+**Următorul pas: F3-T6** — orchestratorul primește `modelTier` per tip de apel. Migrația este deja
+aplicată manual; nicio operație SQL remote nu a fost făcută de aici.
+
+---
+
+## ▶ REIA DE AICI — istoric (scris 2026-09-30, sesiunea S14 — F3-T2 DONE, M3 DONE, D-015 aprobat)
 
 **Ce s-a întâmplat în S14:**
 - Analiză de direcție cerută de owner: planul v2.0 vs 4 comportamente-țintă (fără AI după editor, cache
@@ -32,7 +55,7 @@ parte din smoke-ul F1-T4.
 **Așteaptă owner-ul:** smoke F1-T4 (instrucțiuni în §Smoke F1 și trimise în chat pe 2026-09-30) →
 „F1 smoke OK" închide M1.
 
-**Următorul pas: F3-T3** — schema `ModuleContract` (server types în `prompts/` sau `contract.ts` +
+**La finalul S14, următorul pas era F3-T3** — schema `ModuleContract` (server types în `prompts/` sau `contract.ts` +
 Zod client în `src/schemas/`), exact câmpurile din F3-T3 și A.4.2. Apoi F3-T4 (validare deterministă;
 propunerea „dicționar Bloom RO+EN riguros, restul degradare grațioasă" e încă neconfirmată — întreabă
 owner-ul înainte de F3-T4), apoi F3-T5 **extins** (migrație SQL scrisă + postată integral în chat,
@@ -479,9 +502,9 @@ rând cu ☐, se postează SQL-ul complet în chat, se bifează doar după confi
 ### F3 — Instalarea arhitecturii de prompturi + contractul de modul (3 zile) · Risc: mare, izolat
 - **F3-T1** [DONE 2026-09-10] `buildPrompt(layers)` + `buildTonePreamble` (A.1, A.3) instalate în `index.ts` (neconectate încă la randarea vie — le consumă F3-T2). Șterse din `CourseDNA`: arhetipurile Mentor/Coach/Buddy (era doar un comentariu-gardă în prompt, nu cod structurat), `narrativeUniverse`, `learningPhilosophy`, `masterTimeline`. `DNAEditModal` → 3 secțiuni (terminologie+expresii interzise / voce liberă `toneFreeText` / mediu, read-only). `buildDNABlocks()` păstrat pentru Golden Path (D-008), adaptat la schema nouă. Detalii complete în §REIA DE AICI (S13). Typecheck verde; vitest 14/15 (D-003 neatins).
 - **F3-T2** [DONE 2026-09-30] Cele 7 schelete în `prompts/` (`localized-labels`, `module-contract`, `participant-manual`, `exercise-sheet`, `trainer-guide`, `slides-copy`, `trainer-flow-polish`) + `types.ts` (`PromptSkeleton` role/task/format/quality → `PromptLayers`) + `PROMPT_CHANGELOG.md` „v1 instalată". Preluate de pe `claude/context-rlv61y` (D-016, aprobat owner), revizuite față de A.4; adăugate 7 chei de etichete lipsă (D-017). Necablate încă (F4-T2). Test nou `src/tests/promptSkeletons.test.ts` (3 teste: 7 schelete complete, orice `{{label_*}}` declarat în `LABEL_KEYS`, meta-instrucțiuni fără diacritice RO). Typecheck verde; vitest 17/18 (D-003).
-- **F3-T3** [TODO] Schema `ModuleContract` (server types + Zod client) — obiectiv/blocks/exerciseSpec/transitions
-- **F3-T4** [TODO] `validateModuleContract()` determinist: ≥1 ACT+DEM+APP; sumă minute = durată (±5); APP ≥40% la bloomLevel≥APPLY; niciun bloc >25 min fără schimbare de fază; BREAK la module ≥90 min; verbi Bloom din dicționar per limbă. Eșec → 1 re-apel → apoi eroare
-- **F3-T5** [TODO — extins prin D-015, aprobat owner 2026-09-30] Persistență: migrație `course_modules.contract jsonb` + `contract_version` + `contract_hash`; `is_dirty` invalidează. **În aceeași migrație:** tabela `generation_jobs` (un job per generare de curs: stare, progres) și `generation_units` (o unitate = un apel LLM: `job_id`, `course_id`, `module_id`, `unit_type`, `unit_key`, `input_hash` = hash(bloc contract + ton + etichete + versiune prompt), `status` pending/running/done/failed, `attempts`, `output`, `error`, timestamps), cu RLS pe owner-ul cursului. Cache = unitate cu același `input_hash` și `status=done` nu se regenerează niciodată.
+- **F3-T3** [DONE 2026-10-16] Schema `ModuleContract`: tipuri server în `prompts/contract.ts`, Zod client în `src/schemas/moduleContractSchema.ts`; test focalizat 4/4 și typecheck verde.
+- **F3-T4** [DONE 2026-10-16] `validateModuleContract()` în `prompts/validate-module-contract.ts`: faze obligatorii; total durată cu toleranță ±5 și corecție pe ultimul non-break; blocuri 15–25 min; APPLICATION ≥40% la APPLY+; BREAK la module ≥90 min; dicționar Bloom RO/EN strict, eroare pentru verb necunoscut sau sub nivel. Erori trimise la un singur retry, apoi eroare vizibilă. Test focalizat 10/10; typecheck verde.
+- **F3-T5** [DONE 2026-10-16, deploy manual owner confirmat] `supabase/migrations/20261016_module_contract_generation_queue.sql`: `course_modules.contract`/`contract_version`/`contract_hash`, `generation_jobs`, `generation_units`, indici pentru claim/cache și RLS. Cache-ul se caută per curs după același `input_hash` cu `status=done`.
 - **F3-T6** [TODO] Orchestrator: parametru `modelTier` per tip de apel (default: tot Flash)
 - **DoD F3:** M3 (prompts/ + preambul + changelog) și M4 (4 contracte valide pe etalon, **aprobate de owner — poarta umană 1**)
 
