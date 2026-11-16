@@ -295,7 +295,7 @@ parametru: granularitate/model) → regenerează DOAR unitățile afectate → r
 ### B.3 Scara de escaladare (dacă calibrarea stagnează) — în ordine, fiecare treaptă doar dacă precedenta n-a atins pragul
 
 1. **Few-shot chirurgical:** fragmente scurte (300–600 cuvinte) din referințele-aur, injectate DOAR în promptul criteriului deficitar (ex. un exemplu de secțiune de manual „nota 5" în `participant-manual.ts`).
-2. **Model mai puternic pe apelurile cu levier maxim:** contractul (A.4.2) și exercițiile (A.4.4) trec pe clasa Pro (ex. gemini-pro curent) — sunt ~12 apeluri/curs; restul rămân pe Flash. Cost estimat: creștere <2× total, impact maxim pe criteriile 1–4. Orchestratorul primește parametru `modelTier` per tip de apel (pregătit în F3).
+2. **Model mai puternic pe apelurile cu levier maxim:** contractul (A.4.2) și exercițiile (A.4.4) pot trece pe tier-ul premium — sunt ~12 apeluri/curs. La providerul Claude curent, ambele tier-uri folosesc inițial Sonnet; trecerea la un model mai puternic (de ex. Opus) necesită decizia owner-ului la F6. Orchestratorul primește parametrul `modelTier` per apel în F3.
 3. **Granularitate mai fină:** manualul trece de la per-modul la per-2-blocuri; ghidul similar. Crește numărul de apeluri (~35–40/curs), crește densitatea.
 4. **Îmbogățirea contractului:** dacă proza e bună dar „generică", problema e amonte — se adaugă în contract câmpuri de context (un „world seed" per modul: companie fictivă, cifre, constrângeri) generate o dată și reutilizate de toate livrabilele.
 5. **Concluzia onestă (ultima treaptă):** dacă după 1–4 materialele sunt „draft foarte bun, nu gata-de-sală", produsul se poziționează explicit așa (landing-ul deja spune „You keep the pen. It sharpens it."), iar investiția se mută în experiența de editare. Decizie de business, luată de owner pe date (scoruri + costuri), nu prin abandon tăcut.
@@ -335,7 +335,7 @@ Acest capitol este răspunsul la „ce se întâmplă dacă implementăm 100% co
 - **F3-T4.** `validateModuleContract()` determinist: ≥1 ACTIVATION+DEMONSTRATION+APPLICATION; suma minutelor = durata (±5, corecție programatică pe ultimul bloc non-break); APPLICATION ≥40% la bloomLevel≥APPLY; niciun bloc >25 min fără schimbare de fază; BREAK la module ≥90 min; `bloomVerb`/`debriefBloomVerb` din dicționarul de verbi per nivel per limbă (dicționar nou în cod). Eșec → 1 re-apel cu erorile enumerate → apoi eroare vizibilă.
 - **F3-T5.** Persistență: migrație `course_modules.contract jsonb` + `contract_version`; `is_dirty` invalidează; cache (nu se regenerează dacă există și e curat).
 - **Amendament 2026-09-30 (D-015, aprobat owner):** F3-T5 se extinde cu tabelele `generation_jobs` + `generation_units` (o unitate = un apel LLM, cu `input_hash` și stare) în aceeași migrație; cache-ul = unitate `done` cu același `input_hash`. Detalii în `IMPLEMENTATION_STATUS.md` (F3-T5).
-- **F3-T6.** Orchestrator: parametru `modelTier` per tip de apel (pregătire pentru scara B.3-2; default: tot Flash).
+- **F3-T6.** Orchestrator: parametru `modelTier` per apel (`standard`/`premium`); providerul Claude folosește momentan Sonnet pentru ambele tier-uri, iar escaladarea premium se decide la F6.
 **DoD:** M3 (prompts/ + preambul + changelog instalate) și M4 (4 contracte valide pe etalon, salvate, **aprobate de owner** — poarta umană nr. 1).
 
 ## F4 — Cele 5 livrabile ca randări (4 zile) · Risc: mare, controlat prin flag

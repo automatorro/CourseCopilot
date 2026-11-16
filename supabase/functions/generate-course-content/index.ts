@@ -7,6 +7,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Anthropic from "npm:@anthropic-ai/sdk";
+import { getModelTierCacheInput, resolveClaudeModel } from "./model-tier.ts";
+import type { ModelTier } from "./model-tier.ts";
 // --------------------------------------------------------------------------------
 // INLINED MODULE: Style Blocks
 // --------------------------------------------------------------------------------
@@ -670,7 +672,7 @@ class Logger {
 interface IAIProvider {
   name: string;
   isConfigured(): boolean;
-  generateContent(prompt: string): Promise<string>;
+  generateContent(prompt: string, modelTier: ModelTier): Promise<string>;
 }
 
 class ClaudeProvider implements IAIProvider {
@@ -680,13 +682,13 @@ class ClaudeProvider implements IAIProvider {
     return !!Config.ANTHROPIC_API_KEY;
   }
 
-  async generateContent(prompt: string): Promise<string> {
+  async generateContent(prompt: string, modelTier: ModelTier = 'standard'): Promise<string> {
     const apiKey = Config.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Anthropic API Key missing");
 
-    const model = "claude-sonnet-5";
+    const model = resolveClaudeModel(modelTier);
     const maskedKey = apiKey.substring(0, 4) + "..." + apiKey.substring(apiKey.length - 4);
-    Logger.info(`Calling Claude API: model=${model} | Key: ${maskedKey}`);
+    Logger.info(`Calling Claude API: tier=${modelTier} model=${model} | Key: ${maskedKey}`);
 
     try {
       const client = new Anthropic({
@@ -745,7 +747,7 @@ class AIOrchestrator {
     ];
   }
 
-  async execute(prompt: string): Promise<string> {
+  async execute(prompt: string, modelTier: ModelTier = 'standard'): Promise<string> {
     const errors: string[] = [];
 
     for (const provider of this.providers) {
@@ -755,7 +757,7 @@ class AIOrchestrator {
       }
 
       try {
-        return await provider.generateContent(prompt);
+        return await provider.generateContent(prompt, modelTier);
       } catch (error: any) {
         const errorMsg = `${provider.name} Error: ${error.message}`;
         Logger.error(errorMsg);
@@ -1131,8 +1133,9 @@ function getServiceClient() {
   return createClient(Config.SUPABASE_URL, Config.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-async function hashPrompt(prompt: string): Promise<string> {
-  const bytes = new TextEncoder().encode(prompt);
+async function hashPrompt(prompt: string, modelTier: ModelTier): Promise<string> {
+  const cacheInput = getModelTierCacheInput(prompt, modelTier);
+  const bytes = new TextEncoder().encode(cacheInput);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -1165,8 +1168,13 @@ function cacheResponseFireAndForget(promptHash: string, prompt: string, response
 }
 
 // Helper wrapper for existing business logic with RETRY & CLEANUP
-async function callLLM(prompt: string, language: string = 'ro', isRetry: boolean = false): Promise<string> {
-  const promptHash = await hashPrompt(prompt);
+async function callLLM(
+  prompt: string,
+  language: string = 'ro',
+  modelTier: ModelTier = 'standard',
+  isRetry: boolean = false
+): Promise<string> {
+  const promptHash = await hashPrompt(prompt, modelTier);
   if (!isRetry) {
     const cached = await getCachedResponse(promptHash);
     if (cached) {
@@ -1180,7 +1188,7 @@ async function callLLM(prompt: string, language: string = 'ro', isRetry: boolean
   _lastCallUsage = { inputTokens: 0, outputTokens: 0, model: 'unknown' };
   let response: string;
   try {
-    response = await orchestrator.execute(prompt);
+    response = await orchestrator.execute(prompt, modelTier);
   } finally {
     // Log whatever usage the provider captured for THIS attempt, even if it
     // then threw (e.g. our own text-validation rejected an otherwise-billed
@@ -1201,7 +1209,7 @@ async function callLLM(prompt: string, language: string = 'ro', isRetry: boolean
     }
     Logger.warn(`Banned phrases detected (Static Check - Lang: ${language}). Retrying...`);
     _retryBudget--;
-    return retryWithStrictInstructions(prompt, language, "Contains banned phrases (e.g. English words in Romanian text).");
+    return retryWithStrictInstructions(prompt, language, "Contains banned phrases (e.g. English words in Romanian text).", modelTier);
   }
 
   // Phase 2: Deterministic Language Detector (replaces LLM Judge — zero extra AI calls)
@@ -1212,7 +1220,7 @@ async function callLLM(prompt: string, language: string = 'ro', isRetry: boolean
     } else {
       Logger.warn(`[callLLM] Language mismatch detected (confidence: ${Math.round((langCheck.confidence || 0) * 100)}%): ${langCheck.reason}. Retrying with strict instructions.`);
       _retryBudget--;
-      return retryWithStrictInstructions(prompt, language, langCheck.reason);
+      return retryWithStrictInstructions(prompt, language, langCheck.reason, modelTier);
     }
   } else {
     Logger.info(`[callLLM] Language OK (confidence: ${Math.round((langCheck.confidence || 0.5) * 100)}% ${language}).`);
@@ -1221,7 +1229,12 @@ async function callLLM(prompt: string, language: string = 'ro', isRetry: boolean
   return response;
 }
 
-async function retryWithStrictInstructions(prompt: string, language: string, errorReason?: string): Promise<string> {
+async function retryWithStrictInstructions(
+  prompt: string,
+  language: string,
+  errorReason?: string,
+  modelTier: ModelTier = 'standard'
+): Promise<string> {
     const strictInstruction = `
     \n\n
     *** CRITICAL INSTRUCTION - STRICT MODE ***
@@ -1240,7 +1253,7 @@ async function retryWithStrictInstructions(prompt: string, language: string, err
     GENERATE THE CORRECTED CONTENT NOW.
     `;
 
-    return callLLM(prompt + strictInstruction, language, true);
+    return callLLM(prompt + strictInstruction, language, modelTier, true);
 }
 
 // ==========================================

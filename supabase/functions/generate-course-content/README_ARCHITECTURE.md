@@ -41,6 +41,8 @@ de a crește robustețea, testabilitatea și ușurința de întreținere.
 
 #### `AIOrchestrator`
 -   Iterează prin lista de provideri configurați (azi: doar `ClaudeProvider`).
+-   Propagă `modelTier` (`standard` sau `premium`) până la provider. Ambele tier-uri
+    folosesc momentan `claude-sonnet-5`; escaladarea tier-ului premium se decide la F6.
 -   Dacă toți cad, aruncă o eroare agregată detaliată `[v3.0-MODULAR] AI_ERROR`.
 
 **Istoric.** Până în 2026-09, arhitectura folosea Gemini (`GeminiProvider`, cu fallback pe 3

@@ -11,26 +11,24 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-10-16, sesiunea S18 — F3-T5 aplicat manual de owner)
+## ▶ REIA DE AICI (scris 2026-11-16, sesiunea S19 — F3-T6 implementat)
 
-**Ce s-a făcut în S16–S18:**
-- F3-T4: adăugat `prompts/validate-module-contract.ts` cu faze obligatorii, durată ±5 min și corecție
-  pe ultimul non-break, blocuri 15–25 min, APPLICATION ≥40% la APPLY+, BREAK la module ≥90 min,
-  dicționar Bloom strict RO/EN și un singur retry cu erorile enumerate. Erorile persistente aruncă
-  `ModuleContractValidationError`.
-- Decizia Bloom a fost aprobată prin „ok, treci mai departe”; verb necunoscut/sub nivel este eroare,
-  fără acceptare automată prin fallback.
-- F3-T5: migrația `supabase/migrations/20261016_module_contract_generation_queue.sql` a fost aplicată
-  manual de owner în Supabase Studio (confirmat 2026-10-16). Adaugă contractul și metadata pe
-  `course_modules`, plus job/unit queue, indici pentru claim/cache, FK-uri și RLS de citire pentru
-  owner. Scrierile sunt rezervate workerului server-side.
-- Verificare F3-T4: test focalizat 10/10; typecheck verde; suita completă 27/28, singurul eșec
-  preexistent D-003 (`src/tests/e2e_generation.test.ts`, import lipsă `index_bundled`).
+**Task terminat: F3-T6** — `modelTier` (`standard`/`premium`) este propagat prin `callLLM` și
+`AIOrchestrator` până la providerul Claude. Ambele tier-uri rămân mapate la `claude-sonnet-5`;
+escaladarea la un model mai puternic este amânată pentru decizia owner-ului la F6. Tier-ul premium
+primește un namespace separat de cache, fără a schimba hash-urile cache-ului standard. Retry-urile
+păstrează tier-ul cererii inițiale.
 
-**Așteaptă owner-ul:** smoke-ul manual F1-T4 rămâne nerezolvat.
+**Verificări S19:** `npm run typecheck` verde; `npm test -- --run` 27/28, singurul eșec preexistent
+D-003 (`src/tests/e2e_generation.test.ts`, import lipsă `index_bundled`). Testul Deno nou pentru
+rezolvarea tier-ului nu a putut fi rulat (comanda `deno` nu este instalată în mediul curent);
+smoke-ul echivalent pe Node 24 și `node --check` pe `index.ts` au trecut.
 
-**Următorul pas: F3-T6** — orchestratorul primește `modelTier` per tip de apel. Migrația este deja
-aplicată manual; nicio operație SQL remote nu a fost făcută de aici.
+**Așteaptă owner-ul:** smoke-ul manual F1-T4 rămâne nerezolvat; M4 cere aprobarea owner-ului pentru
+cele 4 contracte pe etalon. F4 nu începe înainte de poarta M4.
+
+**Următorul pas:** owner-ul verifică/aprobă cele 4 contracte valide pe etalon pentru M4. După push-ul
+acestui task, verifică explicit rezultatul workflow-ului CI de deploy Supabase.
 
 ---
 
@@ -505,7 +503,7 @@ rând cu ☐, se postează SQL-ul complet în chat, se bifează doar după confi
 - **F3-T3** [DONE 2026-10-16] Schema `ModuleContract`: tipuri server în `prompts/contract.ts`, Zod client în `src/schemas/moduleContractSchema.ts`; test focalizat 4/4 și typecheck verde.
 - **F3-T4** [DONE 2026-10-16] `validateModuleContract()` în `prompts/validate-module-contract.ts`: faze obligatorii; total durată cu toleranță ±5 și corecție pe ultimul non-break; blocuri 15–25 min; APPLICATION ≥40% la APPLY+; BREAK la module ≥90 min; dicționar Bloom RO/EN strict, eroare pentru verb necunoscut sau sub nivel. Erori trimise la un singur retry, apoi eroare vizibilă. Test focalizat 10/10; typecheck verde.
 - **F3-T5** [DONE 2026-10-16, deploy manual owner confirmat] `supabase/migrations/20261016_module_contract_generation_queue.sql`: `course_modules.contract`/`contract_version`/`contract_hash`, `generation_jobs`, `generation_units`, indici pentru claim/cache și RLS. Cache-ul se caută per curs după același `input_hash` cu `status=done`.
-- **F3-T6** [TODO] Orchestrator: parametru `modelTier` per tip de apel (default: tot Flash)
+- **F3-T6** [DONE 2026-11-16] `modelTier` (`standard`/`premium`) propagat prin `callLLM` și orchestrator; tier-urile folosesc momentan `claude-sonnet-5`, iar premium are cache separat. Escaladarea se decide la F6.
 - **DoD F3:** M3 (prompts/ + preambul + changelog) și M4 (4 contracte valide pe etalon, **aprobate de owner — poarta umană 1**)
 
 ### F4 — Cele 5 livrabile ca randări (4 zile) · Risc: mare, controlat prin flag
@@ -788,6 +786,7 @@ Reprodus și pe HEAD-ul curat (înainte de modificările F0), deci defectul e pr
 | 2026-09-30 | S14 (fix D-018) | Regresie găsită de owner la pregătirea smoke-ului | Cauză rădăcină: checkpoint-urile de generare din `f3cb0f0` (7 aug) numărate de rutare drept materiale. Reparat în `CourseWorkspacePage.tsx` + `GenerationProgressModal.tsx` (aprobat owner). Typecheck verde, vitest 17/18 (D-003). |
 | 2026-09-30 | S14 (continuare) | D-015 + D-016 aprobate · F3-T2 DONE · M3 DONE | Owner a aprobat amendamentul „orchestrare pe server" (F3-T5 extins, F4-T0 nou) și preluarea scheletelor de pe `claude/context-rlv61y`. F3-T2 instalat (commit `1038da2`), D-017 notat și rezolvat parțial. Test nou `promptSkeletons.test.ts`. Typecheck verde, vitest 17/18 (D-003). Instrucțiuni smoke F1-T4 trimise owner-ului. |
 | 2026-09-30 | S14 | Fără cod — analiză de direcție cerută de owner | Comparat planul v2.0 cu 4 comportamente-țintă (fără AI după editor, cache precis, reluare exactă, generare autonomă cu browserul închis). Descoperit și notat **D-015** (orchestrarea e în browser; planul nu o mută pe server) și **D-016** (branch `claude/context-rlv61y` cu F3-T2 deja scris, nemergiat). Propunere de amendament neinvaziv prezentată owner-ului; nimic implementat. |
+| 2026-11-16 | S19 | F3-T6 DONE | `modelTier` (`standard`/`premium`) propagat până la Claude; ambele rămân pe `claude-sonnet-5` până la decizia F6; tier-ul premium izolat în cache, retry-ul păstrează tier-ul. Typecheck verde; Vitest 27/28 (D-003); test Deno focalizat adăugat, runner indisponibil local. M4 owner approval rămâne poarta următoare. |
 
 ### D-012 — Local terminal lacks Node/npm; cannot execute local repro here
 **Notă de renumerotare (2026-08-08, corectată 2026-08-17).** Acest discovery a fost scris inițial cu ID-ul `D-005`, care era deja folosit informal pentru „CI-ul de deploy Supabase eșuează" — cel referit din `CLAUDE.md § Convenții de lucru → CI`. Renumerotat aici la `D-012`. **Corecție S07:** o intrare `### D-005` nu a existat niciodată în acest fișier (ID-urile prezente sunt D-001…D-004, D-007…D-009, D-011…D-014; lipsesc D-005, D-006, D-010), deci trimiterea de mai sus la „`D-005` mai jos" era o referință moartă. Toate referințele la „D-005 = lipsă Node" au fost înlocuite cu D-012, iar cele la „D-005 = CI roșu" cu **D-014**, care documentează subiectul cap-coadă, inclusiv rezolvarea. ID-urile sărite rămân sărite — nu se reciclează.
