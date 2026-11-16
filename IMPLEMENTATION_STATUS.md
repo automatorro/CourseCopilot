@@ -24,11 +24,15 @@ D-003 (`src/tests/e2e_generation.test.ts`, import lipsă `index_bundled`). Testu
 rezolvarea tier-ului nu a putut fi rulat (comanda `deno` nu este instalată în mediul curent);
 smoke-ul echivalent pe Node 24 și `node --check` pe `index.ts` au trecut.
 
+**Deploy blocat:** commitul `a125874` a fost împins pe `main`, dar workflow-ul Supabase run #34 a eșuat
+la pasul de deploy: CLI-ul a cerut confirmarea `--yes` și a raportat „Nothing was changed”. Nu este
+o eroare de secrete; codul nou nu a fost deployat. Owner-ul trebuie să rezolve/confirmă deploy-ul.
+
 **Așteaptă owner-ul:** smoke-ul manual F1-T4 rămâne nerezolvat; M4 cere aprobarea owner-ului pentru
 cele 4 contracte pe etalon. F4 nu începe înainte de poarta M4.
 
-**Următorul pas:** owner-ul verifică/aprobă cele 4 contracte valide pe etalon pentru M4. După push-ul
-acestui task, verifică explicit rezultatul workflow-ului CI de deploy Supabase.
+**Următorul pas:** owner-ul verifică eșecul CI/deploy #34 și asigură deploy-ul, apoi verifică/aprobă
+cele 4 contracte valide pe etalon pentru M4. F4 nu începe înainte de M4.
 
 ---
 
@@ -786,7 +790,7 @@ Reprodus și pe HEAD-ul curat (înainte de modificările F0), deci defectul e pr
 | 2026-09-30 | S14 (fix D-018) | Regresie găsită de owner la pregătirea smoke-ului | Cauză rădăcină: checkpoint-urile de generare din `f3cb0f0` (7 aug) numărate de rutare drept materiale. Reparat în `CourseWorkspacePage.tsx` + `GenerationProgressModal.tsx` (aprobat owner). Typecheck verde, vitest 17/18 (D-003). |
 | 2026-09-30 | S14 (continuare) | D-015 + D-016 aprobate · F3-T2 DONE · M3 DONE | Owner a aprobat amendamentul „orchestrare pe server" (F3-T5 extins, F4-T0 nou) și preluarea scheletelor de pe `claude/context-rlv61y`. F3-T2 instalat (commit `1038da2`), D-017 notat și rezolvat parțial. Test nou `promptSkeletons.test.ts`. Typecheck verde, vitest 17/18 (D-003). Instrucțiuni smoke F1-T4 trimise owner-ului. |
 | 2026-09-30 | S14 | Fără cod — analiză de direcție cerută de owner | Comparat planul v2.0 cu 4 comportamente-țintă (fără AI după editor, cache precis, reluare exactă, generare autonomă cu browserul închis). Descoperit și notat **D-015** (orchestrarea e în browser; planul nu o mută pe server) și **D-016** (branch `claude/context-rlv61y` cu F3-T2 deja scris, nemergiat). Propunere de amendament neinvaziv prezentată owner-ului; nimic implementat. |
-| 2026-11-16 | S19 | F3-T6 DONE | `modelTier` (`standard`/`premium`) propagat până la Claude; ambele rămân pe `claude-sonnet-5` până la decizia F6; tier-ul premium izolat în cache, retry-ul păstrează tier-ul. Typecheck verde; Vitest 27/28 (D-003); test Deno focalizat adăugat, runner indisponibil local. M4 owner approval rămâne poarta următoare. |
+| 2026-11-16 | S19 | F3-T6 DONE · deploy blocat | `modelTier` (`standard`/`premium`) propagat până la Claude; ambele rămân pe `claude-sonnet-5` până la decizia F6; tier-ul premium izolat în cache, retry-ul păstrează tier-ul. Typecheck verde; Vitest 27/28 (D-003); smoke Node 24 și `node --check` verzi; test Deno focalizat adăugat, runner indisponibil local. Commit `a125874` împins pe `main`; workflow #34 failed: Supabase CLI a cerut `--yes`, „Nothing was changed”. Owner-ul trebuie să rezolve/confirmă deploy-ul. M4 owner approval rămâne poarta următoare. |
 
 ### D-012 — Local terminal lacks Node/npm; cannot execute local repro here
 **Notă de renumerotare (2026-08-08, corectată 2026-08-17).** Acest discovery a fost scris inițial cu ID-ul `D-005`, care era deja folosit informal pentru „CI-ul de deploy Supabase eșuează" — cel referit din `CLAUDE.md § Convenții de lucru → CI`. Renumerotat aici la `D-012`. **Corecție S07:** o intrare `### D-005` nu a existat niciodată în acest fișier (ID-urile prezente sunt D-001…D-004, D-007…D-009, D-011…D-014; lipsesc D-005, D-006, D-010), deci trimiterea de mai sus la „`D-005` mai jos" era o referință moartă. Toate referințele la „D-005 = lipsă Node" au fost înlocuite cu D-012, iar cele la „D-005 = CI roșu" cu **D-014**, care documentează subiectul cap-coadă, inclusiv rezolvarea. ID-urile sărite rămân sărite — nu se reciclează.
