@@ -40,11 +40,22 @@ Zod + deterministă, maximum un retry, hash canonic; scrie JSON în `%TEMP%`/cal
 scrieri în Supabase. Teste focalizate 7/7 și typecheck verde; suita Vitest 27/28 cu singurul eșec
 preexistent D-003. Nu am apelat API-ul LLM și nu am scris date remote.
 
+**Analiză Coursebox (2026-11-16):** confirmat că obiectivul owner-ului este o alternativă originală cu
+funcționalități similare, fără LMS și fără SCORM/LTI. În contul free, fluxul observat pornește dintr-un
+prompt, acceptă fișiere PDF/DOCX/PPTX/CSV/TXT și oferă setări pentru interactivitate, evaluări,
+imagini, surse web și tutor AI. Outline-ul de probă a avut 3 secțiuni, 6 pagini și un assessment;
+UI-ul a indicat limita de 5 pagini pentru planul free și a blocat generarea deoarece contul atinsese
+limita de cursuri. Nu s-au generat pagini și nu s-a făcut upgrade sau publicare. **D-020** notează
+diferența de scope: planul curent CourseCopilot produce materiale pentru formator, nu încă experiența
+de curs interactiv pentru cursant. Testul de probă rămâne în contul Coursebox.
+
 **Următorul pas:** owner-ul rulează `npm run m4:contracts` local cu `ANTHROPIC_API_KEY` setat în
-mediu (opțional `ANTHROPIC_WORKSPACE_ID`), apoi trimite JSON-ul rezultat pentru review. După
-aprobarea contractelor, se pregătește SQL-ul complet pentru owner ca să le salveze în `course_modules`;
-M4 rămâne deschis până atunci. F4 nu începe înainte de M4. Înaintea unui viitor push care atinge
-`supabase/functions/**`, trebuie rezolvată și problema confirmării din workflow-ul CI #34.
+mediu (opțional `ANTHROPIC_WORKSPACE_ID`), apoi trimite JSON-ul rezultat pentru review. La poarta M4,
+owner-ul decide și dacă scope-ul funcțional actual al planului acoperă obiectivul Coursebox-like din
+D-020; nu se extinde implementarea ad-hoc. După aprobarea contractelor, se pregătește SQL-ul complet
+pentru owner ca să le salveze în `course_modules`; M4 rămâne deschis până atunci. F4 nu începe înainte
+de M4. Înaintea unui viitor push care atinge `supabase/functions/**`, trebuie rezolvată și problema
+confirmării din workflow-ul CI #34.
 
 ---
 
@@ -613,6 +624,23 @@ generarea celor 4 contracte de gate imposibilă prin fluxul aplicației curente.
 60 min în RO și EN (8 contracte). Harness-ul generează, validează și salvează JSON local; owner-ul
 revizuiește output-ul, apoi execută SQL-ul de persistare furnizat separat. M4 și F4 rămân neînchise
 până la review/aprobare și persistare. Nu se extinde harness-ul în workerul F4.
+
+### D-020 — Scope-ul actual CourseCopilot nu acoperă încă experiența Coursebox observată
+**Severitate:** potențial blocant pentru definiția produsului; nu blochează singur M4.
+**Context (2026-11-16).** Owner-ul a clarificat că dorește o alternativă originală cu funcționalități
+similare Coursebox, fără LMS și fără export SCORM/LTI. În fluxul autentificat de creare Coursebox,
+promptul produce întâi un outline cu secțiuni, pagini, durată și assessment; setările observate includ
+conținut interactiv, tutor AI, evaluări, media și surse. Pe contul free folosit pentru probă, Coursebox
+a afișat 3 secțiuni, 6 pagini și 1 assessment, a anunțat că doar primele 5 pagini sunt incluse, apoi a
+blocat generarea din cauza limitei de cursuri a planului. Prin urmare, paginile generate, editorul și
+comportamentul efectiv al tutorului nu au fost observate.
+
+**Diferența față de plan:** fazele F3–F4 actuale construiesc contracte și cinci materiale pentru
+formator (manual participant, fișe de exerciții, ghidul formatorului, flow și slide-uri). Asta nu este
+echivalent cu autorarea de pagini interactive pentru cursant, assessment-uri și tutor AI. Video-scriptul
+existent nu dovedește generarea de video. **Recomandare:** la poarta M4, owner-ul decide dacă F4 rămâne
+livrabilul imediat și obiectivul Coursebox-like se tratează la M6, ori dacă planul trebuie ajustat la
+poarta permisă; fără extindere ad-hoc înaintea deciziei. LMS și SCORM/LTI rămân în afara scope-ului.
 
 ### D-018 — Regresie: după pauza de la ADN, cursurile noi rămân blocate în editor (reparat, aprobat owner)
 **Simptom (owner, 2026-09-30, la pregătirea smoke-ului F1-T4).** Curs nou → „Generează" → pasul ADN →
