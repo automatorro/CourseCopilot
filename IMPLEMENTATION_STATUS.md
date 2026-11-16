@@ -34,9 +34,17 @@ a rezolvat livrarea curentă, dar nu repară CI pentru viitoarele push-uri de ed
 **Așteaptă owner-ul:** smoke-ul manual F1-T4 rămâne nerezolvat; M4 cere aprobarea owner-ului pentru
 cele 4 contracte pe etalon. F4 nu începe înainte de poarta M4.
 
-**Următorul pas:** owner-ul verifică/aprobă cele 4 contracte valide pe etalon pentru M4. F4 nu începe
-înainte de M4. Înaintea unui viitor push care atinge `supabase/functions/**`, trebuie rezolvată și
-problema confirmării din workflow-ul CI #34.
+**Pregătire M4 aprobată de owner (2026-11-16):** împărțire etalon în 4 module × 60 min și generare
+RO+EN (8 contracte). Harness local în `scripts/m4-contract-harness.mjs`: Claude Sonnet, validare
+Zod + deterministă, maximum un retry, hash canonic; scrie JSON în `%TEMP%`/calea `--out` și nu face
+scrieri în Supabase. Teste focalizate 7/7 și typecheck verde; suita Vitest 27/28 cu singurul eșec
+preexistent D-003. Nu am apelat API-ul LLM și nu am scris date remote.
+
+**Următorul pas:** owner-ul rulează `npm run m4:contracts` local cu `ANTHROPIC_API_KEY` setat în
+mediu (opțional `ANTHROPIC_WORKSPACE_ID`), apoi trimite JSON-ul rezultat pentru review. După
+aprobarea contractelor, se pregătește SQL-ul complet pentru owner ca să le salveze în `course_modules`;
+M4 rămâne deschis până atunci. F4 nu începe înainte de M4. Înaintea unui viitor push care atinge
+`supabase/functions/**`, trebuie rezolvată și problema confirmării din workflow-ul CI #34.
 
 ---
 
@@ -595,6 +603,17 @@ Notă (istorică, rezolvată): CI-ul `Deploy Supabase Functions` eșua consecven
 
 Notează aici orice descoperire sau nelămurire care apare în timpul execuției, cu propunere. Owner-ul decide.
 
+### D-019 — Poarta M4 cere contracte înainte ca fluxul activ să le poată genera
+**Severitate:** blocant pentru M4; ordinea M4/F4 necesită atenție la poarta M4.
+**Context (2026-11-16).** `prompts/module-contract.ts`, schema și validatorul există, dar promptul
+contractului nu este apelat de `index.ts`; wiring-ul din plan este în F4. În plus, planul mapează M4
+la F4 în tabelul de borne, în timp ce DoD-ul F3 numește M4 poarta de final de fază. Asta face
+generarea celor 4 contracte de gate imposibilă prin fluxul aplicației curente.
+**Decizie owner:** aprobat harness local, fără deploy și fără DML remote, pentru 4 module etalon de
+60 min în RO și EN (8 contracte). Harness-ul generează, validează și salvează JSON local; owner-ul
+revizuiește output-ul, apoi execută SQL-ul de persistare furnizat separat. M4 și F4 rămân neînchise
+până la review/aprobare și persistare. Nu se extinde harness-ul în workerul F4.
+
 ### D-018 — Regresie: după pauza de la ADN, cursurile noi rămân blocate în editor (reparat, aprobat owner)
 **Simptom (owner, 2026-09-30, la pregătirea smoke-ului F1-T4).** Curs nou → „Generează" → pasul ADN →
 modalul cere „Închide" pentru revizuirea ADN-ului → după închidere, utilizatorul ajunge în editor cu
@@ -795,6 +814,7 @@ Reprodus și pe HEAD-ul curat (înainte de modificările F0), deci defectul e pr
 | 2026-09-30 | S14 (continuare) | D-015 + D-016 aprobate · F3-T2 DONE · M3 DONE | Owner a aprobat amendamentul „orchestrare pe server" (F3-T5 extins, F4-T0 nou) și preluarea scheletelor de pe `claude/context-rlv61y`. F3-T2 instalat (commit `1038da2`), D-017 notat și rezolvat parțial. Test nou `promptSkeletons.test.ts`. Typecheck verde, vitest 17/18 (D-003). Instrucțiuni smoke F1-T4 trimise owner-ului. |
 | 2026-09-30 | S14 | Fără cod — analiză de direcție cerută de owner | Comparat planul v2.0 cu 4 comportamente-țintă (fără AI după editor, cache precis, reluare exactă, generare autonomă cu browserul închis). Descoperit și notat **D-015** (orchestrarea e în browser; planul nu o mută pe server) și **D-016** (branch `claude/context-rlv61y` cu F3-T2 deja scris, nemergiat). Propunere de amendament neinvaziv prezentată owner-ului; nimic implementat. |
 | 2026-11-16 | S19 | F3-T6 DONE · deploy manual confirmat | `modelTier` (`standard`/`premium`) propagat până la Claude; ambele rămân pe `claude-sonnet-5` până la decizia F6; tier-ul premium izolat în cache, retry-ul păstrează tier-ul. Typecheck verde; Vitest 27/28 (D-003); smoke Node 24 și `node --check` verzi; test Deno focalizat adăugat, runner indisponibil local. Commit `a125874` împins pe `main`; workflow #34 failed (`--yes` cerut, nimic schimbat), apoi owner-ul a confirmat deploy manual reușit din Dashboard cu helper-ele inline. M4 owner approval rămâne poarta următoare; CI automation încă trebuie rezolvat pentru push-uri viitoare. |
+| 2026-11-16 | S19 (M4 prep) | D-019 · harness minimal aprobat owner | Harness local RO+EN pentru 4 module de 60 min (8 contracte), schema Zod + validator determinist și un retry; output JSON local, fără DML remote. Test harness 7/7, typecheck verde; Vitest 27/28 (D-003). Nicio generare live executată. Următorul pas: owner-ul rulează scriptul cu cheia locală și aduce JSON-ul pentru review. |
 
 ### D-012 — Local terminal lacks Node/npm; cannot execute local repro here
 **Notă de renumerotare (2026-08-08, corectată 2026-08-17).** Acest discovery a fost scris inițial cu ID-ul `D-005`, care era deja folosit informal pentru „CI-ul de deploy Supabase eșuează" — cel referit din `CLAUDE.md § Convenții de lucru → CI`. Renumerotat aici la `D-012`. **Corecție S07:** o intrare `### D-005` nu a existat niciodată în acest fișier (ID-urile prezente sunt D-001…D-004, D-007…D-009, D-011…D-014; lipsesc D-005, D-006, D-010), deci trimiterea de mai sus la „`D-005` mai jos" era o referință moartă. Toate referințele la „D-005 = lipsă Node" au fost înlocuite cu D-012, iar cele la „D-005 = CI roșu" cu **D-014**, care documentează subiectul cap-coadă, inclusiv rezolvarea. ID-urile sărite rămân sărite — nu se reciclează.
