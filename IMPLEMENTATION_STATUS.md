@@ -11,42 +11,42 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — hardening schema M4)
+## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — contracte M4 generate, review owner în așteptare)
 
-**Task curent:** Verificarea și îmbunătățirea generării contractelor M4, fără apeluri API în această
-sesiune.
+**Task curent:** Review-ul celor 8 contracte etalon (4 module × RO+EN) înaintea aprobării porții M4.
 
-**Rezultatul generării raportat de owner:** harness-ul a validat primele 3 contracte RO, apoi
-`Gestionarea conflictelor tehnic–business` a rămas invalid după retry:
-`blocks.block-4-aplicare.durationMinutes` sub minimul de 15 minute. Costul Anthropic raportat a fost
-`$0,69`; tokenurile exacte nu au fost consemnate. Codul harness-ului este configurat pentru
-`claude-sonnet-5`, maximum 8192 tokens per răspuns și cel mult un retry per contract.
+**Fix pe `main`:** schema JSON din promptul harness-ului reflectă acum limitele validatorului:
+15–25 minute pentru blocurile non-BREAK și 1–25 pentru BREAK; promptul explică explicit regulile.
+Test focalizat 7/7 și `npm run typecheck` verde; commit `c7e9797` împins pe `main`.
 
-**Constatare și fix pe `main`:** promptul în limbaj natural cerea deja blocuri de 15–25 minute, iar
-validatorul aplica minimul de 15 pentru blocurile non-BREAK. Schema JSON inclusă în prompt era însă
-mai permisivă (`minimum: 1`). Harness-ul trimite acum limite explicite în schema generată:
-15–25 pentru blocurile non-BREAK și 1–25 pentru BREAK, aliniat cu validatorul; promptul precizează
-aceleași limite. Validatorul și contractele deja aprobate nu au fost schimbate.
+**Rulare owner (2026-11-17):** toate cele 8 contracte au trecut schema și validarea deterministă.
+Sumarul local confirmă câte 60 de minute per modul, nicio ajustare de durată și minimum 40% timp
+APPLICATION. JSON-ul a fost salvat în `%TEMP%` (calea completă apare în PowerShell). Harness-ul a
+folosit `claude-sonnet-5`. Costul raportat anterior pentru rularea eșuată a fost `$0,69`; costul acestei
+rulări reușite nu a fost comunicat. În această sesiune nu s-au făcut apeluri API și nu s-a scris în
+Supabase.
 
-**Verificări:** `npx --yes tsx --test scripts/m4-contract-harness.node-test.mjs` → 7/7; `npm run
-typecheck` → verde. `node --test` direct nu poate încărca proprietatea de parametru TypeScript folosită
-de validator pe Node 26; rularea testelor prin `tsx` a trecut. Nu s-a relansat harness-ul și nu s-au
-făcut apeluri API.
+**Observații de review pentru owner, încă neaprobate:**
+- RO, „Identificarea și cartografierea stakeholderilor”: obiectivul/activitatea cer minimum 6
+  stakeholderi, dar scenariul descrie explicit doar 4.
+- RO, „Planificarea comunicării”: titlul „Hartă-ți propriul proiect” necesită corectură lingvistică.
+- EN, „Managing technical–business conflicts”: obiectivul invocă prioritățile sponsorului, dar
+  scenariul nu le precizează.
+- RO, „Gestionarea conflictelor tehnic–business”: exemplul de demonstrație afirmă reduceri de risc
+  de 80% și păstrarea a 60% din scope, fără să explice baza acestor cifre.
+- Contractele RO folosesc frecvent termeni și roluri în engleză; owner-ul trebuie să decidă dacă
+  sunt acceptabili pentru cursul-etalon și convenția terminologică.
 
-**Stare:** M4 rămâne deschis; F4 nu începe înainte de poarta M4. Fixul de prompt nu este validat prin
-generare nouă. Nu s-a scris nimic în Supabase.
+**Stare:** validarea tehnică a trecut, dar aprobarea umană M4 este încă în așteptare. Nu se persistă
+contractele în `course_modules` și F4 nu începe înainte de decizia owner-ului.
+
+**Pasul imediat următor:** owner-ul decide dacă aprobă setul ca atare sau cere corectarea punctelor de
+mai sus. După aprobare, se pregătește SQL-ul complet pentru owner ca să salveze contractele.
 
 **Alte puncte deschise păstrate din S19:** smoke-ul manual F1-T4 este încă nerezolvat. F3-T6 a fost
 deployat manual de owner, dar workflow-ul CI #34 rămâne eșuat și trebuie rezolvat înaintea unui viitor
 push în `supabase/functions/**`. Decizia de scope pentru obiectivul Coursebox-like rămâne la owner
 conform D-020; nu se extinde implementarea ad-hoc.
-
-**Pasul imediat următor:** owner-ul decide dacă aprobă o nouă rulare API a harness-ului cu schema
-întărită; dacă o rulează, trimite JSON-ul rezultat pentru review. La poarta M4, owner-ul decide și
-dacă scope-ul funcțional actual acoperă obiectivul Coursebox-like din D-020. După aprobarea
-contractelor, se pregătește SQL-ul complet pentru owner ca să le salveze în `course_modules`.
-Înaintea unui viitor push care atinge `supabase/functions/**`, trebuie rezolvată problema confirmării
-din workflow-ul CI #34.
 
 ---
 
