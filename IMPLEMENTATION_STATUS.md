@@ -11,9 +11,9 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — contracte M4 generate, review owner în așteptare)
+## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — copia revizuită M4 verificată, aprobarea owner în așteptare)
 
-**Task curent:** Review-ul celor 8 contracte etalon (4 module × RO+EN) înaintea aprobării porții M4.
+**Task curent:** Decizia owner-ului asupra celor 8 contracte etalon revizuite (4 module × RO+EN), înainte de închiderea porții M4.
 
 **Fix pe `main`:** schema JSON din promptul harness-ului reflectă acum limitele validatorului:
 15–25 minute pentru blocurile non-BREAK și 1–25 pentru BREAK; promptul explică explicit regulile.
@@ -26,22 +26,26 @@ folosit `claude-sonnet-5`. Costul raportat anterior pentru rularea eșuată a fo
 rulări reușite nu a fost comunicat. În această sesiune nu s-au făcut apeluri API și nu s-a scris în
 Supabase.
 
-**Observații de review pentru owner, încă neaprobate:**
-- RO, „Identificarea și cartografierea stakeholderilor”: obiectivul/activitatea cer minimum 6
-  stakeholderi, dar scenariul descrie explicit doar 4.
-- RO, „Planificarea comunicării”: titlul „Hartă-ți propriul proiect” necesită corectură lingvistică.
-- EN, „Managing technical–business conflicts”: obiectivul invocă prioritățile sponsorului, dar
-  scenariul nu le precizează.
-- RO, „Gestionarea conflictelor tehnic–business”: exemplul de demonstrație afirmă reduceri de risc
-  de 80% și păstrarea a 60% din scope, fără să explice baza acestor cifre.
-- Contractele RO folosesc frecvent termeni și roluri în engleză; owner-ul trebuie să decidă dacă
-  sunt acceptabili pentru cursul-etalon și convenția terminologică.
+**Copia revizuită local:** `C:\Users\Lenovo\AppData\Local\Temp\coursecopilot-m4-contracts-2026-11-17T08-52-21-240Z-reviewed.json`.
+JSON-ul brut rămâne neatins. În copia revizuită: scenariul RO de cartografiere include șase roluri;
+titlul și formulările RO din planificarea comunicării au fost corectate; scenariul EN despre conflicte
+precizează cele două priorități ale sponsorului; afirmațiile numerice de 80%/60% fără suport au fost
+înlocuite cu o explicație calitativă. Au fost localizate suplimentar câteva roluri și formulări RO.
+
+**Verificare locală fără API:** toate cele 8 contracte din copia revizuită trec schema, validarea
+deterministă și verificarea `contractHash` (8/8). Au fost reparate și verificate greșelile de
+diacritice/formulare descoperite în copie. Nu s-a scris în Supabase.
+
+**Decizie editorială rămasă:** owner-ul să confirme dacă termenii tehnici împrumutați rămași în
+contractele RO sunt potriviți pentru cursul-etalon. Corecturile locale nu închid poarta M4 fără
+aprobarea explicită a owner-ului.
 
 **Stare:** validarea tehnică a trecut, dar aprobarea umană M4 este încă în așteptare. Nu se persistă
 contractele în `course_modules` și F4 nu începe înainte de decizia owner-ului.
 
-**Pasul imediat următor:** owner-ul decide dacă aprobă setul ca atare sau cere corectarea punctelor de
-mai sus. După aprobare, se pregătește SQL-ul complet pentru owner ca să salveze contractele.
+**Pasul imediat următor:** owner-ul verifică fișierul `-reviewed.json` de mai sus și aprobă setul sau
+indică modificările rămase. După aprobarea explicită, se pregătește SQL-ul complet pentru owner;
+aplicarea în Supabase rămâne exclusiv la owner.
 
 **Alte puncte deschise păstrate din S19:** smoke-ul manual F1-T4 este încă nerezolvat. F3-T6 a fost
 deployat manual de owner, dar workflow-ul CI #34 rămâne eșuat și trebuie rezolvat înaintea unui viitor
