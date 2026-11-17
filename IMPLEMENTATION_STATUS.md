@@ -11,9 +11,9 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — copia revizuită M4 verificată, aprobarea owner în așteptare)
+## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — M4 aprobat de owner, F4-T0 pornit)
 
-**Task curent:** Decizia owner-ului asupra celor 8 contracte etalon revizuite (4 module × RO+EN), înainte de închiderea porții M4.
+**Task curent:** F4-T0 — orchestrarea pe server a generării bazate pe contracte, fără a schimba fluxul legacy.
 
 **Fix pe `main`:** schema JSON din promptul harness-ului reflectă acum limitele validatorului:
 15–25 minute pentru blocurile non-BREAK și 1–25 pentru BREAK; promptul explică explicit regulile.
@@ -26,26 +26,28 @@ folosit `claude-sonnet-5`. Costul raportat anterior pentru rularea eșuată a fo
 rulări reușite nu a fost comunicat. În această sesiune nu s-au făcut apeluri API și nu s-a scris în
 Supabase.
 
-**Copia revizuită local:** `C:\Users\Lenovo\AppData\Local\Temp\coursecopilot-m4-contracts-2026-11-17T08-52-21-240Z-reviewed.json`.
-JSON-ul brut rămâne neatins. În copia revizuită: scenariul RO de cartografiere include șase roluri;
-titlul și formulările RO din planificarea comunicării au fost corectate; scenariul EN despre conflicte
-precizează cele două priorități ale sponsorului; afirmațiile numerice de 80%/60% fără suport au fost
-înlocuite cu o explicație calitativă. Au fost localizate suplimentar câteva roluri și formulări RO.
+**M4 — aprobat de owner (2026-11-17):** setul revizuit de 8 contracte (4 module × RO+EN) a fost
+aprobat. Copia verificată este `C:\Users\Lenovo\AppData\Local\Temp\coursecopilot-m4-contracts-2026-11-17T08-52-21-240Z-reviewed.json`;
+JSON-ul brut rămâne neatins. Toate cele 8 trec schema, validarea deterministă și verificarea
+`contractHash`. Conținutul nu a fost încă persistat în `course_modules`; conform regulii owner,
+urmează să fie pregătit SQL-ul complet pentru owner, fără execuție din partea agentului.
 
-**Verificare locală fără API:** toate cele 8 contracte din copia revizuită trec schema, validarea
-deterministă și verificarea `contractHash` (8/8). Au fost reparate și verificate greșelile de
-diacritice/formulare descoperite în copie. Nu s-a scris în Supabase.
+**F4 — început:** inspectarea codului a confirmat că `contractPipeline: true` schimbă momentan doar
+lista de pași din `GenerationProgressModal`; cererile merg în continuare la fluxul vechi
+`generate_step_content` / `handleGoldenStep`. Scheletele de prompt F3 nu sunt încă conectate la
+randarea vie, iar `generation_jobs`/`generation_units` există doar ca schemă DB: edge function-ul nu
+are încă acțiunea `start_generation` sau un worker. Asta este prima lucrare F4, nu un curs separat.
+În această etapă s-a făcut doar verificarea arhitecturii; nu s-a scris cod, nu s-a apelat API și nu
+s-a modificat Supabase.
 
-**Decizie editorială rămasă:** owner-ul să confirme dacă termenii tehnici împrumutați rămași în
-contractele RO sunt potriviți pentru cursul-etalon. Corecturile locale nu închid poarta M4 fără
-aprobarea explicită a owner-ului.
+**Stare:** poarta umană M4 este aprobată; M4 nu se marchează DONE până când owner-ul nu persistă
+contractele. F4-T0 este IN_PROGRESS; generarea de probă și F4-T7 așteaptă contractele în DB și
+configurarea necesară pentru worker. Fluxul legacy trebuie să rămână neatins până la F10.
 
-**Stare:** validarea tehnică a trecut, dar aprobarea umană M4 este încă în așteptare. Nu se persistă
-contractele în `course_modules` și F4 nu începe înainte de decizia owner-ului.
-
-**Pasul imediat următor:** owner-ul verifică fișierul `-reviewed.json` de mai sus și aprobă setul sau
-indică modificările rămase. După aprobarea explicită, se pregătește SQL-ul complet pentru owner;
-aplicarea în Supabase rămâne exclusiv la owner.
+**Pasul imediat următor:** implementarea F4-T0 pe `main`: creare job/unități, claim atomic cu lease,
+procesare și creditare idempotentă per unitate, pornire în fundal și citirea progresului. Orice SQL
+nou necesar va fi livrat complet în chat pentru aplicarea exclusivă de către owner. Înainte de orice
+push care atinge `supabase/functions/**`, CI-ul existent trebuie urmărit; la eșec se raportează owner-ului.
 
 **Alte puncte deschise păstrate din S19:** smoke-ul manual F1-T4 este încă nerezolvat. F3-T6 a fost
 deployat manual de owner, dar workflow-ul CI #34 rămâne eșuat și trebuie rezolvat înaintea unui viitor
@@ -529,7 +531,7 @@ rând cu ☐, se postează SQL-ul complet în chat, se bifează doar după confi
 - **DoD F3:** M3 (prompts/ + preambul + changelog) și M4 (4 contracte valide pe etalon, **aprobate de owner — poarta umană 1**)
 
 ### F4 — Cele 5 livrabile ca randări (4 zile) · Risc: mare, controlat prin flag
-- **F4-T0** [TODO — nou prin D-015, aprobat owner 2026-09-30] Orchestrare pe server pentru fluxul nou (legacy neatins până la F10): acțiune `start_generation` (creează job + unități, răspunde imediat cu `job_id`); worker care preia atomic unități `pending` (și `running` expirate), le execută câte un apel LLM per invocare, se auto-reînlănțuie (`EdgeRuntime.waitUntil`) și e reluat de pg_cron + pg_net la 1 min ca plasă de siguranță (extensiile activate de owner, SQL în chat); creditele se debitează per unitate `done`, idempotent. Clientul (`GenerationProgressModal`, sub flag) doar citește progresul din `generation_units` (Realtime sau poll) — închiderea tab-ului nu oprește nimic; redeschiderea arată starea reală. DoD suplimentar: generare etalon pornită, tab închis după primul modul, redeschis → job terminat fără unități duplicate.
+- **F4-T0** [IN_PROGRESS 2026-11-17 — F4 pornit după aprobarea M4] Orchestrare pe server pentru fluxul nou (legacy neatins până la F10): acțiune `start_generation` (creează job + unități, răspunde imediat cu `job_id`); worker care preia atomic unități `pending` (și `running` expirate), le execută câte un apel LLM per invocare, se auto-reînlănțuie (`EdgeRuntime.waitUntil`) și e reluat de pg_cron + pg_net la 1 min ca plasă de siguranță (extensiile activate de owner, SQL în chat); creditele se debitează per unitate `done`, idempotent. Clientul (`GenerationProgressModal`, sub flag) doar citește progresul din `generation_units` (Realtime sau poll) — închiderea tab-ului nu oprește nimic; redeschiderea arată starea reală. DoD suplimentar: generare etalon pornită, tab închis după primul modul, redeschis → job terminat fără unități duplicate.
 - **F4-T1** [TODO] Feature flag `contractPipeline` (fluxul vechi intact până la F10; A/B + revenire instant)
 - **F4-T2** [TODO] Granularitate: Manual 1 apel/modul (split >6 blocuri); Exercise Sheets 1 apel/exerciseSpec; Trainer Guide 1 apel/modul; Trainer Flow asamblare deterministă + 1 apel finisare; Slides în F7. Țintă etalon: ~25 apeluri
 - **F4-T3** [TODO] Consistență prin cod (P3): renderer-ele construiesc headerele din contract+labels via `BLOCK_HEADER_TOKEN`; LLM scrie doar corpul; ID-urile exercițiilor se propagă programatic
