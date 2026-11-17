@@ -66,8 +66,24 @@ test('builds the selected language and module context into the prompt', () => {
   const prompt = buildContractPrompt({ language: 'ro', module });
   assert.match(prompt, /Required Bloom verb: mapează/);
   assert.match(prompt, /All natural-language strings in Romanian/);
+  assert.match(prompt, /every non-BREAK block must be 15-25 minutes; BREAK blocks may be 1-25 minutes/);
   assert.match(prompt, /"bloomLevel"/);
   assert.doesNotMatch(prompt, /\{\{language\}\}|\{\{schemaJson\}\}/);
+
+  const schemaStart = prompt.indexOf('Return ONLY valid JSON matching this schema. No markdown fences:');
+  const jsonStart = prompt.indexOf('{', schemaStart);
+  const jsonEnd = prompt.indexOf('\n\n- No placeholders', jsonStart);
+  const schema = JSON.parse(prompt.slice(jsonStart, jsonEnd));
+  const phaseSchemas = schema.properties.blocks.items.oneOf;
+
+  for (const phase of ['ACTIVATION', 'DEMONSTRATION', 'APPLICATION', 'BREAK']) {
+    const phaseSchema = phaseSchemas.find(item => item.properties.phase.const === phase);
+    assert.equal(
+      phaseSchema.properties.durationMinutes.minimum,
+      phase === 'BREAK' ? 1 : 15,
+    );
+    assert.equal(phaseSchema.properties.durationMinutes.maximum, 25);
+  }
 });
 
 test('generateValidatedContract retries once with deterministic validation errors', async () => {

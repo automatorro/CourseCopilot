@@ -11,51 +11,42 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-11-16, sesiunea S19 — F3-T6 implementat)
+## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — hardening schema M4)
 
-**Task terminat: F3-T6** — `modelTier` (`standard`/`premium`) este propagat prin `callLLM` și
-`AIOrchestrator` până la providerul Claude. Ambele tier-uri rămân mapate la `claude-sonnet-5`;
-escaladarea la un model mai puternic este amânată pentru decizia owner-ului la F6. Tier-ul premium
-primește un namespace separat de cache, fără a schimba hash-urile cache-ului standard. Retry-urile
-păstrează tier-ul cererii inițiale.
+**Task curent:** Verificarea și îmbunătățirea generării contractelor M4, fără apeluri API în această
+sesiune.
 
-**Verificări S19:** `npm run typecheck` verde; `npm test -- --run` 27/28, singurul eșec preexistent
-D-003 (`src/tests/e2e_generation.test.ts`, import lipsă `index_bundled`). Testul Deno nou pentru
-rezolvarea tier-ului nu a putut fi rulat (comanda `deno` nu este instalată în mediul curent);
-smoke-ul echivalent pe Node 24 și `node --check` pe `index.ts` au trecut.
+**Rezultatul generării raportat de owner:** harness-ul a validat primele 3 contracte RO, apoi
+`Gestionarea conflictelor tehnic–business` a rămas invalid după retry:
+`blocks.block-4-aplicare.durationMinutes` sub minimul de 15 minute. Costul Anthropic raportat a fost
+`$0,69`; tokenurile exacte nu au fost consemnate. Codul harness-ului este configurat pentru
+`claude-sonnet-5`, maximum 8192 tokens per răspuns și cel mult un retry per contract.
 
-**Deploy confirmat de owner (2026-11-16):** F3-T6 a fost deployat manual cu succes din Supabase
-Dashboard. În editor au fost eliminate importurile locale și helper-ele din `model-tier.ts` au fost
-incluse direct în `index.ts`. Repository-ul păstrează varianta modulară (`index.ts` importă
-`model-tier.ts`), funcțional echivalentă și utilizabilă printr-un deploy care include ambele fișiere.
-Workflow-ul automat #34 rămâne eșuat: CLI-ul a cerut `--yes` și nu a schimbat nimic; deploy-ul manual
-a rezolvat livrarea curentă, dar nu repară CI pentru viitoarele push-uri de edge functions.
+**Constatare și fix pe `main`:** promptul în limbaj natural cerea deja blocuri de 15–25 minute, iar
+validatorul aplica minimul de 15 pentru blocurile non-BREAK. Schema JSON inclusă în prompt era însă
+mai permisivă (`minimum: 1`). Harness-ul trimite acum limite explicite în schema generată:
+15–25 pentru blocurile non-BREAK și 1–25 pentru BREAK, aliniat cu validatorul; promptul precizează
+aceleași limite. Validatorul și contractele deja aprobate nu au fost schimbate.
 
-**Așteaptă owner-ul:** smoke-ul manual F1-T4 rămâne nerezolvat; M4 cere aprobarea owner-ului pentru
-cele 4 contracte pe etalon. F4 nu începe înainte de poarta M4.
+**Verificări:** `npx --yes tsx --test scripts/m4-contract-harness.node-test.mjs` → 7/7; `npm run
+typecheck` → verde. `node --test` direct nu poate încărca proprietatea de parametru TypeScript folosită
+de validator pe Node 26; rularea testelor prin `tsx` a trecut. Nu s-a relansat harness-ul și nu s-au
+făcut apeluri API.
 
-**Pregătire M4 aprobată de owner (2026-11-16):** împărțire etalon în 4 module × 60 min și generare
-RO+EN (8 contracte). Harness local în `scripts/m4-contract-harness.mjs`: Claude Sonnet, validare
-Zod + deterministă, maximum un retry, hash canonic; scrie JSON în `%TEMP%`/calea `--out` și nu face
-scrieri în Supabase. Teste focalizate 7/7 și typecheck verde; suita Vitest 27/28 cu singurul eșec
-preexistent D-003. Nu am apelat API-ul LLM și nu am scris date remote.
+**Stare:** M4 rămâne deschis; F4 nu începe înainte de poarta M4. Fixul de prompt nu este validat prin
+generare nouă. Nu s-a scris nimic în Supabase.
 
-**Analiză Coursebox (2026-11-16):** confirmat că obiectivul owner-ului este o alternativă originală cu
-funcționalități similare, fără LMS și fără SCORM/LTI. În contul free, fluxul observat pornește dintr-un
-prompt, acceptă fișiere PDF/DOCX/PPTX/CSV/TXT și oferă setări pentru interactivitate, evaluări,
-imagini, surse web și tutor AI. Outline-ul de probă a avut 3 secțiuni, 6 pagini și un assessment;
-UI-ul a indicat limita de 5 pagini pentru planul free și a blocat generarea deoarece contul atinsese
-limita de cursuri. Nu s-au generat pagini și nu s-a făcut upgrade sau publicare. **D-020** notează
-diferența de scope: planul curent CourseCopilot produce materiale pentru formator, nu încă experiența
-de curs interactiv pentru cursant. Testul de probă rămâne în contul Coursebox.
+**Alte puncte deschise păstrate din S19:** smoke-ul manual F1-T4 este încă nerezolvat. F3-T6 a fost
+deployat manual de owner, dar workflow-ul CI #34 rămâne eșuat și trebuie rezolvat înaintea unui viitor
+push în `supabase/functions/**`. Decizia de scope pentru obiectivul Coursebox-like rămâne la owner
+conform D-020; nu se extinde implementarea ad-hoc.
 
-**Următorul pas:** owner-ul rulează `npm run m4:contracts` local cu `ANTHROPIC_API_KEY` setat în
-mediu (opțional `ANTHROPIC_WORKSPACE_ID`), apoi trimite JSON-ul rezultat pentru review. La poarta M4,
-owner-ul decide și dacă scope-ul funcțional actual al planului acoperă obiectivul Coursebox-like din
-D-020; nu se extinde implementarea ad-hoc. După aprobarea contractelor, se pregătește SQL-ul complet
-pentru owner ca să le salveze în `course_modules`; M4 rămâne deschis până atunci. F4 nu începe înainte
-de M4. Înaintea unui viitor push care atinge `supabase/functions/**`, trebuie rezolvată și problema
-confirmării din workflow-ul CI #34.
+**Pasul imediat următor:** owner-ul decide dacă aprobă o nouă rulare API a harness-ului cu schema
+întărită; dacă o rulează, trimite JSON-ul rezultat pentru review. La poarta M4, owner-ul decide și
+dacă scope-ul funcțional actual acoperă obiectivul Coursebox-like din D-020. După aprobarea
+contractelor, se pregătește SQL-ul complet pentru owner ca să le salveze în `course_modules`.
+Înaintea unui viitor push care atinge `supabase/functions/**`, trebuie rezolvată problema confirmării
+din workflow-ul CI #34.
 
 ---
 

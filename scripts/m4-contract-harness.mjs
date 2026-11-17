@@ -127,7 +127,11 @@ function blockSchema(phase) {
     id: { type: 'string', minLength: 1 },
     phase: { const: phase },
     title: { type: 'string', minLength: 1 },
-    durationMinutes: { type: 'integer', minimum: 1 },
+    durationMinutes: {
+      type: 'integer',
+      minimum: phase === 'BREAK' ? 1 : 15,
+      maximum: 25,
+    },
     keyPoints: {
       type: 'array',
       minItems: 2,
@@ -219,7 +223,11 @@ export function buildContractPrompt({ language, module, retryIssues = [] }) {
   const retryFeedback = retryIssues.length
     ? `\n\nFix every issue from the previous attempt:\n${retryIssues.map(issue => `- ${issue}`).join('\n')}`
     : '';
-  const task = `${CONTRACT_PROMPT_V1.task}${retryFeedback}`;
+  const task = [
+    CONTRACT_PROMPT_V1.task,
+    'Duration limits: every non-BREAK block must be 15-25 minutes; BREAK blocks may be 1-25 minutes.',
+    retryFeedback,
+  ].filter(Boolean).join('\n\n');
   const format = CONTRACT_PROMPT_V1.format.replace(
     '{{schemaJson}}',
     JSON.stringify(CONTRACT_JSON_SCHEMA, null, 2),
