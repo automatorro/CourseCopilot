@@ -43,6 +43,8 @@ de a crește robustețea, testabilitatea și ușurința de întreținere.
 -   Iterează prin lista de provideri configurați (azi: doar `ClaudeProvider`).
 -   Propagă `modelTier` (`standard` sau `premium`) până la provider. Ambele tier-uri
     folosesc momentan `claude-sonnet-5`; escaladarea tier-ului premium se decide la F6.
+-   Entry point-ul ține inline helper-ele model-tier folosite de cache și provider, astfel
+    încât funcția să poată fi copiată complet în Supabase Dashboard fără import local.
 -   Dacă toți cad, aruncă o eroare agregată detaliată `[v3.0-MODULAR] AI_ERROR`.
 
 **Istoric.** Până în 2026-09, arhitectura folosea Gemini (`GeminiProvider`, cu fallback pe 3
