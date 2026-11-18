@@ -15,6 +15,16 @@ Convenții:
 
 **Task curent:** F4-T0 — orchestrarea pe server a generării bazate pe contracte, fără a schimba fluxul legacy.
 
+**Incident runtime separat (2026-11-18):** logul live izolează `getModelTierCacheInput is not defined`
+în `generate-course-content` → `generate_learning_objectives` → `hashPrompt`. Nu indică
+`analyze-slide` sau `unsplash-search`. Sursa urmărită importa helper-ele model-tier dintr-un fișier
+local; la deploy-ul manual prin copy/paste în Dashboard, importul nu a fost inclus. Entry point-ul
+local a fost făcut autonom (helper-ele inline), cu test focalizat 4/4 și `npm run typecheck` verde.
+**Nu este încă deployat live.** Run-ul CI #34 a eșuat deoarece CLI-ul a cerut confirmarea `--yes`;
+workflow-ul rămâne neschimbat la cererea owner-ului. Nu se face push care atinge Edge Functions până
+când owner-ul nu rezolvă acel workflow. Owner-ul va copia corecția doar în `generate-course-content`,
+va face deploy manual și va confirma smoke-ul pentru generarea obiectivelor.
+
 **Fix pe `main`:** schema JSON din promptul harness-ului reflectă acum limitele validatorului:
 15–25 minute pentru blocurile non-BREAK și 1–25 pentru BREAK; promptul explică explicit regulile.
 Test focalizat 7/7 și `npm run typecheck` verde; commit `c7e9797` împins pe `main`.

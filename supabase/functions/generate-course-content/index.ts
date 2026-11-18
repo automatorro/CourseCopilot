@@ -7,8 +7,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Anthropic from "npm:@anthropic-ai/sdk";
-import { getModelTierCacheInput, resolveClaudeModel } from "./model-tier.ts";
-import type { ModelTier } from "./model-tier.ts";
+
+type ModelTier = 'standard' | 'premium';
+
+const CLAUDE_MODEL_BY_TIER: Record<ModelTier, string> = {
+  standard: 'claude-sonnet-5',
+  premium: 'claude-sonnet-5',
+};
+
+function resolveClaudeModel(modelTier: ModelTier = 'standard'): string {
+  return CLAUDE_MODEL_BY_TIER[modelTier];
+}
+
+function getModelTierCacheInput(prompt: string, modelTier: ModelTier): string {
+  return modelTier === 'standard' ? prompt : `${modelTier}\n${prompt}`;
+}
+
 // --------------------------------------------------------------------------------
 // INLINED MODULE: Style Blocks
 // --------------------------------------------------------------------------------
