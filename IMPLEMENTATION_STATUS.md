@@ -11,19 +11,29 @@ Convenții:
 
 ---
 
-## ▶ REIA DE AICI (scris 2026-11-17, sesiunea S20 — M4 aprobat de owner, F4-T0 pornit)
+## ▶ REIA DE AICI (scris 2026-11-18 — F4-T0 activ; fix oprire generare verificat)
 
 **Task curent:** F4-T0 — orchestrarea pe server a generării bazate pe contracte, fără a schimba fluxul legacy.
 
-**Incident runtime separat (2026-11-18):** logul live izolează `getModelTierCacheInput is not defined`
-în `generate-course-content` → `generate_learning_objectives` → `hashPrompt`. Nu indică
-`analyze-slide` sau `unsplash-search`. Sursa urmărită importa helper-ele model-tier dintr-un fișier
-local; la deploy-ul manual prin copy/paste în Dashboard, importul nu a fost inclus. Entry point-ul
-local a fost făcut autonom (helper-ele inline), cu test focalizat 4/4 și `npm run typecheck` verde.
-**Nu este încă deployat live.** Run-ul CI #34 a eșuat deoarece CLI-ul a cerut confirmarea `--yes`;
-workflow-ul rămâne neschimbat la cererea owner-ului. Nu se face push care atinge Edge Functions până
-când owner-ul nu rezolvă acel workflow. Owner-ul va copia corecția doar în `generate-course-content`,
-va face deploy manual și va confirma smoke-ul pentru generarea obiectivelor.
+**Incident runtime `getModelTierCacheInput` (2026-11-18):** fixul a fost inclus în entry point și
+merge-uit pe `main` prin PR #27 (`58e58a2`). Run-ul deploy #35 a eșuat în pasul `Deploy Edge Functions`;
+funcția live nu este confirmată ca actualizată. Run-ul #34 eșuase anterior la confirmarea CLI `--yes`.
+Workflow-ul rămâne neschimbat la cererea owner-ului; nu se fac push-uri care ating
+`supabase/functions/**` până la rezolvarea deploy-ului. Owner-ul va publica manual doar
+`generate-course-content` și va confirma smoke-ul.
+
+**Incident oprire generare (2026-11-18):** logul browserului arată `FunctionsFetchError` repetat în
+iterările pe module, dar nu conține mesajul `User requested stop`, deci captura nu dovedește dacă
+handler-ul Stop a fost apăsat. Codul avea retry-uri care ignorau anularea și cleanup-ul modalului nu
+marca execuția oprită. Owner-ul a aprobat excepția de triaj; fixul client-side e implementat în
+`GenerationProgressModal.tsx`: semnalul oprește retry delay-urile și buclele înaintea următoarei
+cereri, inclusiv la închiderea modalului. `npm run typecheck` și testul focalizat (3/3) au trecut.
+Fixul nu schimbă Edge Functions.
+
+**Eroare separată din aceeași captură:** GET-ul `course_modules` cu selectul `learning_objective`
+primește HTTP 400. Migrarea din repo care definește `course_modules` nu declară această coloană, dar
+lipsește body-ul răspunsului PostgREST și nu s-a verificat schema live; cauza exactă rămâne de
+confirmat. Nu s-a modificat schema și nu s-a rulat SQL.
 
 **Fix pe `main`:** schema JSON din promptul harness-ului reflectă acum limitele validatorului:
 15–25 minute pentru blocurile non-BREAK și 1–25 pentru BREAK; promptul explică explicit regulile.
@@ -54,14 +64,17 @@ s-a modificat Supabase.
 contractele. F4-T0 este IN_PROGRESS; generarea de probă și F4-T7 așteaptă contractele în DB și
 configurarea necesară pentru worker. Fluxul legacy trebuie să rămână neatins până la F10.
 
-**Pasul imediat următor:** implementarea F4-T0 pe `main`: creare job/unități, claim atomic cu lease,
-procesare și creditare idempotentă per unitate, pornire în fundal și citirea progresului. Orice SQL
-nou necesar va fi livrat complet în chat pentru aplicarea exclusivă de către owner. Înainte de orice
-push care atinge `supabase/functions/**`, CI-ul existent trebuie urmărit; la eșec se raportează owner-ului.
+**Pasul imediat următor:** după publicarea fixului client-side, smoke-test în aplicație: pornește
+generarea, oprește în timpul unei cereri și verifică în consolă că nu mai apar retry-uri sau cereri
+pentru module următoare. După smoke, revine F4-T0: job/unități, claim atomic cu lease, procesare și
+creditare idempotentă per unitate, pornire în fundal și citirea progresului. Orice SQL nou necesar va fi
+livrat complet în chat pentru aplicarea exclusivă de către owner.
+Înainte de orice push care atinge `supabase/functions/**`, CI-ul existent trebuie urmărit; la eșec se
+raportează owner-ului.
 
 **Alte puncte deschise păstrate din S19:** smoke-ul manual F1-T4 este încă nerezolvat. F3-T6 a fost
-deployat manual de owner, dar workflow-ul CI #34 rămâne eșuat și trebuie rezolvat înaintea unui viitor
-push în `supabase/functions/**`. Decizia de scope pentru obiectivul Coursebox-like rămâne la owner
+deployat manual de owner, dar workflow-urile CI #34 și #35 au eșuat și trebuie rezolvate înaintea unui
+viitor push în `supabase/functions/**`. Decizia de scope pentru obiectivul Coursebox-like rămâne la owner
 conform D-020; nu se extinde implementarea ad-hoc.
 
 ---
@@ -648,6 +661,28 @@ echivalent cu autorarea de pagini interactive pentru cursant, assessment-uri și
 existent nu dovedește generarea de video. **Recomandare:** la poarta M4, owner-ul decide dacă F4 rămâne
 livrabilul imediat și obiectivul Coursebox-like se tratează la M6, ori dacă planul trebuie ajustat la
 poarta permisă; fără extindere ad-hoc înaintea deciziei. LMS și SCORM/LTI rămân în afara scope-ului.
+
+### D-021 — Oprirea generării nu oprea retry-urile clientului (reparat cu aprobarea owner-ului)
+**Severitate:** ridicată pentru UX și consum inutil de resurse; remediat în componenta client.
+**Context (2026-11-18).** În consola furnizată apar erori `FunctionsFetchError` pentru fiecare modul
+în exerciții, exemple, manual, slide-uri și workbook. Captura nu conține logul `User requested stop`,
+deci nu confirmă dacă apăsarea butonului a ajuns la handler. Inspecția a găsit totuși că retry loops
+nu testau semnalul de oprire, iar cleanup-ul la închiderea modalului anula fetch-ul fără să marcheze
+execuția ca oprită.
+**Fix aprobat de owner:** semnal de oprire verificat în bucle și după await-uri; pauzele de retry sunt
+anulabile; butonul rămâne în starea „processing” până când rularea curentă se încheie, prevenind
+relansarea concurentă. `npm run typecheck` și testele focale 3/3 sunt verzi. Smoke-ul în aplicația
+publicată rămâne de confirmat; nu a fost modificată nicio Edge Function.
+
+### D-022 — Sincronizarea blueprint-ului citește o coloană posibil absentă din `course_modules`
+**Severitate:** medie; poate împiedica detectarea schimbărilor de metadata, dar nu s-a demonstrat că
+blochează generarea.
+**Context (2026-11-18).** Consola raportează HTTP 400 pentru selectul `id,module_index,title,learning_objective`.
+Migrarea repo `20240128000000_add_content_data_to_course_modules.sql` nu definește `learning_objective`;
+nu este disponibil corpul erorii PostgREST și nu este confirmată schema instanței live.
+**Recomandare:** înainte de a pregăti o migrare, owner-ul verifică response body-ul cererii și schema
+live. Dacă lipsește coloana și este necesară, se pregătește SQL pentru aplicarea exclusivă de către owner.
+Nu a fost făcută nicio modificare de schemă; verificați fluxul de sincronizare în F4.
 
 ### D-018 — Regresie: după pauza de la ADN, cursurile noi rămân blocate în editor (reparat, aprobat owner)
 **Simptom (owner, 2026-09-30, la pregătirea smoke-ului F1-T4).** Curs nou → „Generează" → pasul ADN →

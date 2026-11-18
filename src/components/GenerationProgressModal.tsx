@@ -38,6 +38,47 @@ interface GenerationProgressModalProps {
     onComplete: () => void;
 }
 
+const waitForGenerationRetry = (signal: AbortSignal | undefined, delayMs: number): Promise<boolean> => {
+    if (signal?.aborted) return Promise.resolve(false);
+
+    return new Promise(resolve => {
+        const onAbort = () => {
+            clearTimeout(timeoutId);
+            signal?.removeEventListener('abort', onAbort);
+            resolve(false);
+        };
+        const timeoutId = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve(!signal?.aborted);
+        }, delayMs);
+
+        signal?.addEventListener('abort', onAbort, { once: true });
+    });
+};
+
+export const retryGenerationRequest = async <T,>(
+    signal: AbortSignal | undefined,
+    isStopped: () => boolean,
+    maxAttempts: number,
+    delayMs: number | ((attempt: number) => number),
+    operation: (attempt: number) => Promise<T>,
+    onRetry: (error: unknown, attempt: number) => void
+): Promise<T | undefined> => {
+    for (let attempt = 0; attempt < maxAttempts && !signal?.aborted && !isStopped(); attempt++) {
+        try {
+            const result = await operation(attempt);
+            return signal?.aborted || isStopped() ? undefined : result;
+        } catch (error) {
+            if (signal?.aborted || isStopped()) return undefined;
+            onRetry(error, attempt);
+            const retryDelay = typeof delayMs === 'function' ? delayMs(attempt) : delayMs;
+            if (attempt + 1 < maxAttempts && !(await waitForGenerationRetry(signal, retryDelay))) return undefined;
+        }
+    }
+
+    return undefined;
+};
+
 const LEGACY_STEPS_ORDER = [
     { type: TrainerStepType.CourseDNA, key: 'generation.steps.courseDNA' },
     { type: TrainerStepType.PerformanceObjectives, key: 'generation.steps.performanceObjectives' },
@@ -87,6 +128,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [completedSteps, setCompletedSteps] = useState<TrainerStepType[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isStopping, setIsStopping] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [validationReport, setValidationReport] = useState<{ ok: boolean; items: { ok: boolean; message: string; key?: string; type?: string }[] } | null>(null);
     const [regenerateAttempts, setRegenerateAttempts] = useState(0);
@@ -115,8 +157,10 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         }
 
         if (!isOpen) {
+            isStoppedRef.current = true;
             hasStartedRef.current = false;
             setIsGenerating(false);
+            setIsStopping(false);
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
                 abortControllerRef.current = null;
@@ -131,6 +175,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         }
 
         return () => {
+            isStoppedRef.current = true;
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }
@@ -179,11 +224,19 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
     };
 
     const stopGeneration = () => {
+        if (isStoppedRef.current) return;
         console.log('[GenerationProgressModal] User requested stop.');
         isStoppedRef.current = true;
-        setIsGenerating(false);
+        setIsStopping(true);
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
+        }
+    };
+
+    const finishStoppedGeneration = () => {
+        setIsGenerating(false);
+        setIsStopping(false);
+        if (abortControllerRef.current?.signal.aborted) {
             abortControllerRef.current = null;
         }
     };
@@ -423,6 +476,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
     const startGeneration = async () => {
         setIsGenerating(true);
+        setIsStopping(false);
         isStoppedRef.current = false;
         abortControllerRef.current = new AbortController();
 
@@ -431,6 +485,10 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
         // Try to resume from DB first
         const dbCached = await loadProgressFromDb();
+        if (isStoppedRef.current) {
+            finishStoppedGeneration();
+            return;
+        }
         if (dbCached && dbCached.completedSteps.length > 0) {
             console.log('[GenerationProgressModal] Resuming from DB cache:', dbCached.completedSteps.length, 'steps done.');
             // The DNA checkpoint holds the AI's first draft; the user may have edited
@@ -471,6 +529,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             setCompletedSteps(validCompletedSteps);
             setCurrentStepIndex(nextIndex);
             await processStep(nextIndex);
+            if (isStoppedRef.current) finishStoppedGeneration();
             return;
         }
 
@@ -510,6 +569,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             setCurrentStepIndex(nextIndex);
             
             await processStep(nextIndex);
+            if (isStoppedRef.current) finishStoppedGeneration();
             return;
         }
 
@@ -526,6 +586,11 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                  .eq('course_id', course.id)
                  .eq('title_key', 'course.livrables.course_dna')
                  .maybeSingle();
+
+             if (isStoppedRef.current) {
+                 finishStoppedGeneration();
+                 return;
+             }
              
              if (existingDNA && existingDNA.content) {
                  console.log('[GenerationProgressModal] Found existing Course DNA in DB. Resuming from Step 1.');
@@ -540,19 +605,27 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                  
                  // Immediately process Step 1
                  await processStep(1);
+                 if (isStoppedRef.current) finishStoppedGeneration();
                  return;
              }
         } catch (e) {
-             console.warn('[GenerationProgressModal] Failed to check existing DNA:', e);
+            if (!isStoppedRef.current) {
+                console.warn('[GenerationProgressModal] Failed to check existing DNA:', e);
+            }
+        }
+        if (isStoppedRef.current) {
+            finishStoppedGeneration();
+            return;
         }
 
         try {
             // 0. Connection Check (Ping)
             console.log('[GenerationProgressModal] Pinging Edge Function...');
-            const { data: pingData, error: pingError } = await supabase.functions.invoke('generate-course-content', {
-                body: { action: 'ping' },
-                // signal: abortControllerRef.current?.signal // Optional: support abort on ping
-            });
+            const { data: pingData, error: pingError } = await invokeWithTimeout({ action: 'ping' });
+            if (isStoppedRef.current) {
+                finishStoppedGeneration();
+                return;
+            }
 
             if (pingError) {
                 console.error('[GenerationProgressModal] Ping failed:', pingError);
@@ -566,10 +639,17 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
             console.log('[GenerationProgressModal] Ping successful. Starting steps...');
             await processStep(0);
+            if (isStoppedRef.current) finishStoppedGeneration();
         } catch (err: any) {
+            if (isStoppedRef.current) {
+                finishStoppedGeneration();
+                return;
+            }
+
             console.error("Generation failed:", err);
             setError(err.message || "An unexpected error occurred.");
             setIsGenerating(false);
+            setIsStopping(false);
         }
     };
 
@@ -584,6 +664,9 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             }
 
             setIsGenerating(true);
+            setIsStopping(false);
+            isStoppedRef.current = false;
+            abortControllerRef.current = new AbortController();
             setRegenerateAttempts(prev => prev + 1);
 
             const LIVRABLE_MAPPING: { key: string; sources: TrainerStepType[] }[] = [
@@ -614,6 +697,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             if (!userId) throw new Error('User ID is missing.');
 
             for (const s of stepTypesToRegenerate) {
+                if (isStoppedRef.current) return;
                 // Build Context (Identical to processStep)
                 const contextMap: Record<TrainerStepType, TrainerStepType[]> = {
                     [TrainerStepType.CourseDNA]: [],
@@ -645,16 +729,15 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 
                 const summary = buildContextSummary(accumulatedContentRef.current);
 
-                const { data, error: fnError } = await supabase.functions.invoke('generate-course-content', {
-                    body: { 
+                const { data, error: fnError } = await invokeWithTimeout({
                         action: 'generate_step_content', 
                         course, 
                         step_type: s, 
                         previous_steps: prevForContext,
                         context_summary: summary,
                         contractPipeline: isEnabled('contractPipeline')
-                    },
                 });
+                if (isStoppedRef.current) return;
                 if (fnError) {
                     const ctx = (fnError as any)?.context;
                     let msg = (fnError as any)?.message || 'Edge Function error';
@@ -696,11 +779,19 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 saveProgressToCache(completedSteps, accumulatedContentRef.current);
             }
 
+            if (isStoppedRef.current) return;
             await finalizeGeneration();
         } catch (err: any) {
-            console.error('[GenerationProgressModal] Regenerate affected failed:', err);
-            setError(err.message || 'Failed to regenerate affected deliverables.');
+            if (!isStoppedRef.current) {
+                console.error('[GenerationProgressModal] Regenerate affected failed:', err);
+                setError(err.message || 'Failed to regenerate affected deliverables.');
+            }
+        } finally {
             setIsGenerating(false);
+            setIsStopping(false);
+            if (abortControllerRef.current?.signal.aborted) {
+                abortControllerRef.current = null;
+            }
         }
     };
 
@@ -815,43 +906,42 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
                          const results = await Promise.all(batch.map(async (m: any, batchIdx: number) => {
                              const realIdx = i + batchIdx;
-                             let modContent = "";
-                             let retries = 0;
-                             while(retries < 3 && !modContent) {
-                                 try {
-                                     // Build previous context just like for normal steps
-                                    // We need it for context chaining
-                                    const contextMap: Partial<Record<TrainerStepType, TrainerStepType[]>> = {
-                                        [TrainerStepType.Slides]: [TrainerStepType.CourseDNA, TrainerStepType.Structure, TrainerStepType.FacilitatorManual, TrainerStepType.FacilitatorNotes],
-                                        // Fallback map for others not needed here
-                                        [TrainerStepType.CourseDNA]: []
-                                    };
-                                    const allowed = new Set(contextMap[TrainerStepType.Slides] || []);
+                             const modContent = await retryGenerationRequest(
+                                 abortControllerRef.current?.signal,
+                                 () => isStoppedRef.current,
+                                 3,
+                                 1500,
+                                 async () => {
+                                     const contextMap: Partial<Record<TrainerStepType, TrainerStepType[]>> = {
+                                         [TrainerStepType.Slides]: [TrainerStepType.CourseDNA, TrainerStepType.Structure, TrainerStepType.FacilitatorManual, TrainerStepType.FacilitatorNotes],
+                                         [TrainerStepType.CourseDNA]: []
+                                     };
+                                     const allowed = new Set(contextMap[TrainerStepType.Slides] || []);
                                      const prevForContext = (accumulatedContentRef.current || [])
                                          .filter((s: any) => allowed.has(s.step_type))
                                          .map((s: any) => ({ step_type: s.step_type, content: String(s.content || '').slice(0, 2000) }));
 
                                      const { data: modData, error: modErr } = await invokeWithTimeout({
-                                        action: 'generate_slides_part', 
-                                        course: getMinimalCourse(course), 
-                                        module_data: m, 
-                                        module_index: realIdx,
-                                        previous_steps: prevForContext
-                                    });
+                                         action: 'generate_slides_part',
+                                         course: getMinimalCourse(course),
+                                         module_data: m,
+                                         module_index: realIdx,
+                                         previous_steps: prevForContext
+                                     });
                                      if (modErr) throw modErr;
-                                     modContent = modData.content;
-                                     if (!modContent) throw new Error("Received empty content from server");
-                                } catch (e) {
-                                     console.warn(`Error generating slides module ${realIdx}, retry ${retries}`, e);
-                                     retries++;
-                                     await new Promise(r => setTimeout(r, 1500));
-                                 }
-                             }
-                             if (!modContent) {
-                                 modContent = `## Module ${realIdx+1}: ${m.title}\n\n(Slides generation failed for this module.)`;
-                             }
-                             return { index: realIdx, content: modContent };
+                                     if (!modData?.content) throw new Error('Received empty content from server');
+                                     return modData.content;
+                                 },
+                                 (error, attempt) => console.warn(`Error generating slides module ${realIdx}, retry ${attempt}`, error)
+                             );
+                             if (isStoppedRef.current) return { index: realIdx, content: '' };
+                             return {
+                                 index: realIdx,
+                                 content: modContent || `## Module ${realIdx+1}: ${m.title}\n\n(Slides generation failed for this module.)`
+                             };
                          }));
+
+                         if (isStoppedRef.current) break;
 
                          // Push to parts in order
                          results.sort((a, b) => a.index - b.index).forEach(r => {
@@ -871,7 +961,6 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                         localStorage.removeItem(slidesCacheKey);
                      } else {
                         console.log('[Slides] Generation stopped.');
-                        setIsGenerating(false);
                         return;
                      }
 
@@ -940,22 +1029,25 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                      // 1. Intro (only if parts is empty)
                      if (parts.length === 0) {
                         console.log('[Workbook] Generating Intro...');
-                        let introContent = "";
-                        let introRetries = 0;
-                        while(introRetries < 3 && !introContent) {
-                            try {
-                                const { data: introData, error: introError } = await invokeWithTimeout({ action: 'generate_workbook_part', part_type: 'intro', course: getMinimalCourse(course) });
+                        const introContent = await retryGenerationRequest(
+                            abortControllerRef.current?.signal,
+                            () => isStoppedRef.current,
+                            3,
+                            attempt => 1000 * Math.pow(2, attempt + 1),
+                            async () => {
+                                const { data: introData, error: introError } = await invokeWithTimeout({
+                                    action: 'generate_workbook_part',
+                                    part_type: 'intro',
+                                    course: getMinimalCourse(course)
+                                });
                                 if (introError) throw introError;
-                                introContent = introData?.content;
-                                if (!introContent) throw new Error("Received empty intro content from server");
-                            } catch (e) {
-                                console.warn(`Error generating Intro, retry ${introRetries}`, e);
-                                introRetries++;
-                                await new Promise(r => setTimeout(r, 1000 * Math.pow(2, introRetries)));
-                            }
-                        }
-                        if (!introContent) introContent = "# Introducere\n\n(Generarea introducerii a eșuat. Vă rugăm să editați manual.)";
-                        parts.push(introContent);
+                                if (!introData?.content) throw new Error('Received empty intro content from server');
+                                return introData.content;
+                            },
+                            (error, attempt) => console.warn(`Error generating Intro, retry ${attempt}`, error)
+                        );
+                        if (isStoppedRef.current) return;
+                        parts.push(introContent || "# Introducere\n\n(Generarea introducerii a eșuat. Vă rugăm să editați manual.)");
                         try {
                             localStorage.setItem(wbCacheKey, JSON.stringify(parts));
                         } catch (e) {
@@ -978,11 +1070,13 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
                          const results = await Promise.all(batch.map(async (m: any, batchIdx: number) => {
                              const realIdx = i + batchIdx;
-                             let modContent = "";
-                             let retries = 0;
-                             while(retries < 3 && !modContent) {
-                                 try {
-                                     console.log(`[Workbook] Generating module ${realIdx + 1}/${modulesToProcess.length} (attempt ${retries + 1})...`);
+                             const modContent = await retryGenerationRequest(
+                                 abortControllerRef.current?.signal,
+                                 () => isStoppedRef.current,
+                                 3,
+                                 attempt => 1000 * Math.pow(2, attempt + 1),
+                                 async attempt => {
+                                     console.log(`[Workbook] Generating module ${realIdx + 1}/${modulesToProcess.length} (attempt ${attempt + 1})...`);
                                      const { data: modData, error: modErr } = await invokeWithTimeout({
                                         action: 'generate_workbook_part',
                                         part_type: 'module',
@@ -992,18 +1086,19 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                                         context_files: []
                                     });
                                      if (modErr) throw modErr;
-                                     modContent = modData.content;
-                                 } catch (e) {
-                                     console.warn(`Error generating module ${realIdx}, retry ${retries}`, e);
-                                     retries++;
-                                     if (retries < 3) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, retries)));
-                                 }
-                             }
-                             if (!modContent) {
-                                 modContent = `## Module ${realIdx+1}: ${m.title}\n\n(Content generation failed for this module after retries.)`;
-                             }
-                             return { index: realIdx, content: modContent };
+                                     if (!modData?.content) throw new Error('Empty content from server');
+                                     return modData.content;
+                                 },
+                                 (error, attempt) => console.warn(`Error generating module ${realIdx}, retry ${attempt}`, error)
+                             );
+                             if (isStoppedRef.current) return { index: realIdx, content: '' };
+                             return {
+                                 index: realIdx,
+                                 content: modContent || `## Module ${realIdx+1}: ${m.title}\n\n(Content generation failed for this module after retries.)`
+                             };
                          }));
+
+                         if (isStoppedRef.current) break;
 
                          // Push to parts in order
                          results.sort((a, b) => a.index - b.index).forEach(r => {
@@ -1023,21 +1118,25 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                      // If parts.length == modulesToProcess.length + 1, we need Outro.
                      if (parts.length === modulesToProcess.length + 1) {
                          console.log('[Workbook] Generating Outro...');
-                         let outroContent = "";
-                         let outroRetries = 0;
-                         while(outroRetries < 3 && !outroContent) {
-                             try {
-                                const { data: outroData, error: outroError } = await invokeWithTimeout({ action: 'generate_workbook_part', part_type: 'outro', course: getMinimalCourse(course) });
-                                if (outroError) throw outroError;
-                                outroContent = outroData?.content;
-                             } catch (e) {
-                                 console.warn(`Error generating Outro, retry ${outroRetries}`, e);
-                                 outroRetries++;
-                                 if (outroRetries < 3) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, outroRetries)));
-                             }
-                         }
-                         if (!outroContent) outroContent = "# Concluzie\n\n(Generarea concluziei a eșuat. Vă rugăm să editați manual.)";
-                         parts.push(outroContent);
+                         const outroContent = await retryGenerationRequest(
+                             abortControllerRef.current?.signal,
+                             () => isStoppedRef.current,
+                             3,
+                             attempt => 1000 * Math.pow(2, attempt + 1),
+                             async () => {
+                                 const { data: outroData, error: outroError } = await invokeWithTimeout({
+                                     action: 'generate_workbook_part',
+                                     part_type: 'outro',
+                                     course: getMinimalCourse(course)
+                                 });
+                                 if (outroError) throw outroError;
+                                 if (!outroData?.content) throw new Error('Empty outro content from server');
+                                 return outroData.content;
+                             },
+                             (error, attempt) => console.warn(`Error generating Outro, retry ${attempt}`, error)
+                         );
+                         if (isStoppedRef.current) return;
+                         parts.push(outroContent || "# Concluzie\n\n(Generarea concluziei a eșuat. Vă rugăm să editați manual.)");
                          try {
                              localStorage.setItem(wbCacheKey, JSON.stringify(parts));
                          } catch (e) {
@@ -1050,7 +1149,6 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                         localStorage.removeItem(wbCacheKey);
                      } else {
                         console.log('[Workbook] Generation stopped. Keeping partial cache.');
-                        setIsGenerating(false);
                         return;
                      }
 
@@ -1105,10 +1203,12 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
 
                 for (let i = parts.length; i < modulesToProcess.length; i++) {
                     if (isStoppedRef.current) break;
-                    let modContent = '';
-                    let retries = 0;
-                    while (retries < 3 && !modContent) {
-                        try {
+                    const modContent = await retryGenerationRequest(
+                        abortControllerRef.current?.signal,
+                        () => isStoppedRef.current,
+                        3,
+                        1500,
+                        async () => {
                             const { data: modData, error: modErr } = await invokeWithTimeout({
                                 action: actionName,
                                 course: getMinimalCourse(course),
@@ -1117,21 +1217,17 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                                 previous_steps: iterPrevContext
                             });
                             if (modErr) throw modErr;
-                            modContent = modData?.content;
-                            if (!modContent) throw new Error('Empty content from server');
-                        } catch (e) {
-                            console.warn(`[${actionName}] Module ${i} error, retry ${retries}`, e);
-                            retries++;
-                            await new Promise(r => setTimeout(r, 1500));
-                        }
-                    }
-                    if (!modContent) modContent = `## Module ${i + 1}: ${modulesToProcess[i].title}\n\n(Generation failed for this module.)`;
-                    parts.push(modContent);
+                            if (!modData?.content) throw new Error('Empty content from server');
+                            return modData.content;
+                        },
+                        (error, attempt) => console.warn(`[${actionName}] Module ${i} error, retry ${attempt}`, error)
+                    );
+                    if (isStoppedRef.current) break;
+                    parts.push(modContent || `## Module ${i + 1}: ${modulesToProcess[i].title}\n\n(Generation failed for this module.)`);
                     try { localStorage.setItem(cacheKey, JSON.stringify(parts)); } catch (_e) { /* ignore */ }
                 }
 
                 if (isStoppedRef.current) {
-                    setIsGenerating(false);
                     return true;
                 }
                 localStorage.removeItem(cacheKey);
@@ -1212,7 +1308,7 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
             let attempt = 0;
             let data: any = null;
             let fnError: any = null;
-            while (attempt < 2) {
+            while (attempt < 2 && !isStoppedRef.current) {
                 const requestBody = {
                     action: 'generate_step_content',
                     course: course,
@@ -1228,11 +1324,12 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                 } catch (e) { console.warn('Could not calc payload size', e); }
 
                 const resp = await invokeWithTimeout(requestBody);
+                if (isStoppedRef.current) return;
                 data = resp.data;
                 fnError = resp.error;
                 if (!fnError && !data?.error) break;
                 attempt++;
-                await new Promise(r => setTimeout(r, 800));
+                if (attempt < 2 && !(await waitForGenerationRetry(abortControllerRef.current?.signal, 800))) return;
             }
 
             if (fnError) {
@@ -1395,7 +1492,10 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
         } catch (err: any) {
             if (isStoppedRef.current || err.name === 'AbortError') {
                 console.log('Generation paused by user.');
-                setIsGenerating(false);
+                if (!isStoppedRef.current) {
+                    setIsGenerating(false);
+                    setIsStopping(false);
+                }
                 return;
             }
             console.error(`Error processing step ${step.key}:`, err);
@@ -1971,10 +2071,11 @@ export const GenerationProgressModal: React.FC<GenerationProgressModalProps> = (
                             {isGenerating ? (
                                 <button 
                                     onClick={stopGeneration} 
-                                    className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 font-medium transition-colors flex items-center gap-2"
+                                    disabled={isStopping}
+                                    className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <Pause className="w-4 h-4" />
-                                    {safeT('generation.actions.stop', 'Stop')}
+                                    {isStopping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
+                                    {isStopping ? safeT('generation.processing', 'Stopping...') : safeT('generation.actions.stop', 'Stop')}
                                 </button>
                             ) : (
                                 <>
