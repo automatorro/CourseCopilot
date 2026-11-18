@@ -1,7 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { retryGenerationRequest } from '../components/GenerationProgressModal';
+import { runGenerationRequest, sumTokenUsage } from '../components/GenerationProgressModal';
 
-describe('retryGenerationRequest', () => {
+describe('sumTokenUsage', () => {
+    it('totals token counts and estimates current Claude pricing', () => {
+        expect(sumTokenUsage([
+            { input_tokens: 100_000, output_tokens: 10_000 },
+            { input_tokens: 50_000, output_tokens: 5_000 },
+        ])).toEqual({
+            inputTokens: 150_000,
+            outputTokens: 15_000,
+            estimatedCostUsd: 0.45,
+        });
+    });
+
+    it('treats missing token counts as zero', () => {
+        expect(sumTokenUsage([{ input_tokens: null, output_tokens: null }])).toEqual({
+            inputTokens: 0,
+            outputTokens: 0,
+            estimatedCostUsd: 0,
+        });
+    });
+});
+
+describe('runGenerationRequest', () => {
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -13,61 +34,51 @@ describe('retryGenerationRequest', () => {
         const request = vi.fn();
 
         await expect(
-            retryGenerationRequest(controller.signal, () => false, 3, 1000, request, vi.fn())
+            runGenerationRequest(controller.signal, () => false, request, vi.fn())
         ).resolves.toBeUndefined();
         expect(request).not.toHaveBeenCalled();
     });
 
-    it('does not retry after generation is stopped during the retry delay', async () => {
-        vi.useFakeTimers();
+    it('propagates the first failure without retrying', async () => {
         const controller = new AbortController();
-        let reportRetry: () => void = () => undefined;
-        const retryReported = new Promise<void>(resolve => {
-            reportRetry = resolve;
-        });
-        const request = vi.fn().mockRejectedValue(new Error('temporary failure'));
-        const pending = retryGenerationRequest(
+        const error = new Error('provider failed');
+        const request = vi.fn().mockRejectedValue(error);
+        const onFailure = vi.fn();
+
+        await expect(
+            runGenerationRequest(
             controller.signal,
             () => false,
-            3,
-            1000,
             request,
-            reportRetry
-        );
+                onFailure
+            )
+        ).rejects.toBe(error);
 
-        await retryReported;
         expect(request).toHaveBeenCalledTimes(1);
+        expect(onFailure).toHaveBeenCalledWith(error);
+    });
+
+    it('returns successful content after one request', async () => {
+        const request = vi.fn().mockResolvedValue('generated');
+
+        await expect(
+            runGenerationRequest(undefined, () => false, request, vi.fn())
+        ).resolves.toBe('generated');
+        expect(request).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not return content if generation is stopped while the request is in flight', async () => {
+        const controller = new AbortController();
+        let resolveRequest: (value: string) => void = () => undefined;
+        const request = vi.fn(() => new Promise<string>(resolve => {
+            resolveRequest = resolve;
+        }));
+        const pending = runGenerationRequest(controller.signal, () => false, request, vi.fn());
 
         controller.abort();
+        resolveRequest('generated');
 
         await expect(pending).resolves.toBeUndefined();
         expect(request).toHaveBeenCalledTimes(1);
-        expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it('retries transient failures until a request succeeds', async () => {
-        vi.useFakeTimers();
-        const controller = new AbortController();
-        let reportRetry: () => void = () => undefined;
-        const retryReported = new Promise<void>(resolve => {
-            reportRetry = resolve;
-        });
-        const request = vi.fn()
-            .mockRejectedValueOnce(new Error('temporary failure'))
-            .mockResolvedValue('generated');
-        const pending = retryGenerationRequest(
-            controller.signal,
-            () => false,
-            3,
-            1000,
-            request,
-            reportRetry
-        );
-
-        await retryReported;
-        await vi.advanceTimersByTimeAsync(1000);
-
-        await expect(pending).resolves.toBe('generated');
-        expect(request).toHaveBeenCalledTimes(2);
     });
 });

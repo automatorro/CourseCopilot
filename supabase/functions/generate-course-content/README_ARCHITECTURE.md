@@ -32,10 +32,11 @@ de a crește robustețea, testabilitatea și ușurința de întreținere.
 -   Folosește SDK-ul oficial Anthropic (`npm:@anthropic-ai/sdk`, specificator Deno).
 -   Model: `claude-sonnet-5` — ales pentru echilibrul cost/performanță (mai ieftin ȘI mai capabil
     decât generația anterioară Sonnet 4.5/4.6).
--   `max_tokens: 8192` — plafon explicit, obligatoriu la Claude API (spre deosebire de Gemini,
-    unde lipsa lui era un risc de cost neplafonat).
--   Retry-ul pe erori tranzitorii (429/5xx/rețea) e gestionat intern de SDK (`max_retries`
-    implicit 2) — nu mai există un wrapper `fetchWithRetry` custom.
+-   `max_tokens` este rezervat din bugetul rămas al generării (plafon absolut `$0,50` per
+    `generation_run_id`); înaintea fiecărui apel se numără tokenii de intrare și se rezervă
+    tranzacțional costul maxim posibil al apelului.
+-   Retry-urile SDK sunt dezactivate (`maxRetries: 0`). Un eșec oprește cererea; reluarea
+    este exclusiv manuală și folosește cache-ul pentru rezultate deja generate.
 -   Erori tipate din SDK (`Anthropic.AuthenticationError`, `Anthropic.RateLimitError`,
     `Anthropic.APIError`) sunt distinse explicit pentru mesaje de eroare mai clare.
 
@@ -62,6 +63,7 @@ Funcția expune o acțiune specială pentru verificarea sănătății sistemului
 { "action": "test_connection" }
 ```
 Instanțiază `ClaudeProvider` și încearcă un apel "Hi", returnând `results.claude` cu statusul.
+Acest apel este autentificat, contorizat și supus aceluiași plafon de cost ca generarea.
 
 ### Endpoint `provider_status`
 ```json

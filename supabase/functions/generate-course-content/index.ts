@@ -7,8 +7,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Anthropic from "npm:@anthropic-ai/sdk";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 type ModelTier = 'standard' | 'premium';
+
+interface AIRequestContext {
+  userId: string | null;
+  action: string;
+  generationRunId: string | null;
+  failureMessage: string | null;
+  creditCharged: boolean;
+}
+
+interface AICompletion {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  model: string;
+}
+
+const aiRequestContext = new AsyncLocalStorage<AIRequestContext>();
 
 const CLAUDE_MODEL_BY_TIER: Record<ModelTier, string> = {
   standard: 'claude-sonnet-5',
@@ -686,17 +704,43 @@ class Logger {
 interface IAIProvider {
   name: string;
   isConfigured(): boolean;
-  generateContent(prompt: string, modelTier: ModelTier): Promise<string>;
+  countInputTokens(prompt: string, modelTier: ModelTier): Promise<number>;
+  generateContent(prompt: string, modelTier: ModelTier, maxOutputTokens: number): Promise<AICompletion>;
 }
 
 class ClaudeProvider implements IAIProvider {
   name = "Claude";
 
+  private createClient(): Anthropic {
+    const apiKey = Config.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("Anthropic API Key missing");
+    return new Anthropic({
+      apiKey,
+      maxRetries: 0,
+      defaultHeaders: { 'anthropic-workspace-id': Config.ANTHROPIC_WORKSPACE_ID }
+    });
+  }
+
   isConfigured(): boolean {
     return !!Config.ANTHROPIC_API_KEY;
   }
 
-  async generateContent(prompt: string, modelTier: ModelTier = 'standard'): Promise<string> {
+  async countInputTokens(prompt: string, modelTier: ModelTier): Promise<number> {
+    const result = await this.createClient().messages.countTokens({
+      model: resolveClaudeModel(modelTier),
+      messages: [{ role: "user", content: prompt }]
+    });
+    if (!Number.isInteger(result.input_tokens) || result.input_tokens < 0) {
+      throw new Error('Anthropic returned an invalid input token count; generation stopped.');
+    }
+    return result.input_tokens;
+  }
+
+  async generateContent(
+    prompt: string,
+    modelTier: ModelTier,
+    maxOutputTokens: number
+  ): Promise<AICompletion> {
     const apiKey = Config.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Anthropic API Key missing");
 
@@ -705,25 +749,11 @@ class ClaudeProvider implements IAIProvider {
     Logger.info(`Calling Claude API: tier=${modelTier} model=${model} | Key: ${maskedKey}`);
 
     try {
-      const client = new Anthropic({
-        apiKey,
-        defaultHeaders: { 'anthropic-workspace-id': Config.ANTHROPIC_WORKSPACE_ID }
-      });
-      const response = await client.messages.create({
+      const response = await this.createClient().messages.create({
         model,
-        max_tokens: 8192,
+        max_tokens: maxOutputTokens,
         messages: [{ role: "user", content: prompt }]
       });
-
-      // Capture usage immediately — the tokens are billed by Anthropic as soon as
-      // the response comes back, regardless of whether our own text-extraction
-      // check below finds usable content. Setting this after the check would
-      // silently lose real spend whenever a response fails our validation.
-      _lastCallUsage = {
-        inputTokens: response.usage?.input_tokens ?? 0,
-        outputTokens: response.usage?.output_tokens ?? 0,
-        model
-      };
 
       let text = "";
       for (const block of response.content) {
@@ -732,11 +762,12 @@ class ClaudeProvider implements IAIProvider {
         }
       }
 
-      if (!text) {
-        throw new Error(`Invalid response from Claude (${model}): ${JSON.stringify(response)}`);
-      }
-
-      return text;
+      return {
+        text,
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+        model
+      };
     } catch (e: any) {
       if (e instanceof Anthropic.AuthenticationError) {
         throw new Error(`Claude API Key invalid [Key: ${maskedKey}]`);
@@ -761,7 +792,11 @@ class AIOrchestrator {
     ];
   }
 
-  async execute(prompt: string, modelTier: ModelTier = 'standard'): Promise<string> {
+  async execute(
+    prompt: string,
+    modelTier: ModelTier,
+    maxOutputTokens: number
+  ): Promise<AICompletion> {
     const errors: string[] = [];
 
     for (const provider of this.providers) {
@@ -771,7 +806,7 @@ class AIOrchestrator {
       }
 
       try {
-        return await provider.generateContent(prompt, modelTier);
+        return await provider.generateContent(prompt, modelTier, maxOutputTokens);
       } catch (error: any) {
         const errorMsg = `${provider.name} Error: ${error.message}`;
         Logger.error(errorMsg);
@@ -789,18 +824,6 @@ const orchestrator = new AIOrchestrator();
 // ==========================================
 // COST TRACKING
 // ==========================================
-
-// Module-level usage capture — populated by each provider after a successful call.
-let _lastCallUsage = { inputTokens: 0, outputTokens: 0, model: 'unknown' };
-// Set once per request from the auth header; read by callLLM for logging.
-let _requestUserId = '';
-let _requestAction = 'generate';
-// Global retry budget for the CURRENT request (reset in the top-level `serve` handler).
-// callLLM can be invoked many times while handling one action (module context,
-// per-section content, etc.); without a cross-call cap, each of those calls could
-// independently retry on a language-purity failure, compounding cost unboundedly
-// across a single request. Once exhausted, callLLM returns best-effort instead of retrying.
-let _retryBudget = 5;
 
 // Cost in AI operations per action type — derived from actual frontend action names
 const ACTION_OPERATION_COSTS: Record<string, number> = {
@@ -823,35 +846,147 @@ const ACTION_OPERATION_COSTS: Record<string, number> = {
   generate_module_context: 1,
 };
 
-async function logUsageFireAndForget(userId: string, inputTokens: number, outputTokens: number, model: string, action: string): Promise<void> {
-  try {
-    const supabaseUrl = Config.SUPABASE_URL;
-    const serviceKey = Config.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !userId) {
-      Logger.warn('[logUsage] Missing supabaseUrl or userId — skipping');
-      return;
-    }
-    if (!serviceKey) {
-      Logger.warn('[logUsage] SUPABASE_SERVICE_ROLE_KEY is empty — cannot write usage');
-      return;
-    }
-    const client = createClient(supabaseUrl, serviceKey);
-    const { error } = await client.from('user_usage').insert({
-      user_id: userId,
-      model,
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      total_tokens: inputTokens + outputTokens,
-      action,
+async function chargeAIRequest(context: AIRequestContext): Promise<void> {
+  if (context.creditCharged) return;
+  if (!context.userId) throw new Error('Authenticated user is required before an AI call.');
+
+  const supabase = getServiceClient();
+  const opCost = ACTION_OPERATION_COSTS[context.action] ?? 1;
+  if (opCost > 0) {
+    const { data, error } = await supabase.rpc('increment_ai_operations', {
+      p_user_id: context.userId,
+      p_amount: opCost,
     });
-    if (error) {
-      Logger.warn(`[logUsage] Insert failed: ${error.message} (code: ${error.code})`);
-    } else {
-      Logger.info(`[logUsage] Logged ${inputTokens}+${outputTokens} tokens for action=${action}`);
-    }
-  } catch (e) {
-    Logger.warn(`[logUsage] Unexpected error: ${e}`);
+    if (error || !data) throw new Error(`Credit check failed: ${error?.message || 'missing result'}`);
+    if (!data.allowed) throw new Error(`AI operation limit reached (${data.used}/${data.limit}).`);
+  } else {
+    const { data, error } = await supabase.rpc('get_ai_credit_status', { p_user_id: context.userId });
+    if (error || !data) throw new Error(`Credit check failed: ${error?.message || 'missing result'}`);
+    if (data.is_over_limit) throw new Error(`AI operation limit reached (${data.used}/${data.limit}).`);
   }
+  context.creditCharged = true;
+}
+
+type GenerationCostReservation = {
+  id: string;
+  maxOutputTokens: number;
+};
+
+async function reserveGenerationCost(
+  context: AIRequestContext,
+  model: string,
+  estimatedInputTokens: number,
+  requestedOutputTokens: number
+): Promise<GenerationCostReservation> {
+  if (!context.userId || !context.generationRunId) {
+    throw new Error('Authenticated user and generation run ID are required for cost control.');
+  }
+
+  const { data, error } = await getServiceClient().rpc('reserve_generation_ai_cost', {
+    p_user_id: context.userId,
+    p_generation_run_id: context.generationRunId,
+    p_model: model,
+    p_estimated_input_tokens: estimatedInputTokens,
+    p_requested_output_tokens: requestedOutputTokens,
+    p_cost_cap_usd: 0.50,
+  });
+  if (error) throw new Error(`AI cost reservation failed; no provider call was sent: ${error.message}`);
+  if (!data?.allowed) {
+    const spent = Number(data?.used_cost_usd || 0).toFixed(4);
+    throw new Error(`This generation reached its $0.50 AI cost limit (reserved/spent: $${spent}).`);
+  }
+  if (typeof data.reservation_id !== 'string' ||
+      !Number.isInteger(data.max_output_tokens) ||
+      data.max_output_tokens < 256) {
+    throw new Error('AI cost reservation returned invalid data; no provider call was sent.');
+  }
+
+  return { id: data.reservation_id, maxOutputTokens: data.max_output_tokens };
+}
+
+async function settleGenerationCost(
+  context: AIRequestContext,
+  reservationId: string,
+  inputTokens: number,
+  outputTokens: number
+): Promise<void> {
+  if (!context.userId) throw new Error('Authenticated user is required to settle AI cost.');
+  const { error } = await getServiceClient().rpc('settle_generation_ai_cost', {
+    p_reservation_id: reservationId,
+    p_user_id: context.userId,
+    p_actual_input_tokens: inputTokens,
+    p_actual_output_tokens: outputTokens,
+  });
+  if (error) throw new Error(`AI cost settlement failed; generation stopped: ${error.message}`);
+}
+
+async function requestAICompletion(
+  prompt: string,
+  modelTier: ModelTier,
+  context: AIRequestContext
+): Promise<AICompletion> {
+  if (context.failureMessage) {
+    throw new Error(`Generation already failed earlier in this request: ${context.failureMessage}`);
+  }
+
+  try {
+    await chargeAIRequest(context);
+    const provider = new ClaudeProvider();
+    const model = resolveClaudeModel(modelTier);
+    const estimatedInputTokens = await provider.countInputTokens(prompt, modelTier);
+    const reservation = await reserveGenerationCost(context, model, estimatedInputTokens, 8192);
+    const completion = await orchestrator.execute(prompt, modelTier, reservation.maxOutputTokens);
+
+    await logUsage(
+      context.userId,
+      completion.inputTokens,
+      completion.outputTokens,
+      completion.model,
+      context.action,
+      context.generationRunId
+    );
+    await settleGenerationCost(
+      context,
+      reservation.id,
+      completion.inputTokens,
+      completion.outputTokens
+    );
+    return completion;
+  } catch (error) {
+    if (!context.failureMessage) {
+      context.failureMessage = error instanceof Error ? error.message : String(error);
+    }
+    throw error;
+  }
+}
+
+async function logUsage(
+  userId: string | null,
+  inputTokens: number,
+  outputTokens: number,
+  model: string,
+  action: string,
+  generationRunId: string | null
+): Promise<void> {
+  const supabaseUrl = Config.SUPABASE_URL;
+  const serviceKey = Config.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey || !userId) {
+    throw new Error('[logUsage] Missing Supabase configuration or authenticated user; refusing untracked AI usage.');
+  }
+  const client = createClient(supabaseUrl, serviceKey);
+  const { error } = await client.from('user_usage').insert({
+    user_id: userId,
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: inputTokens + outputTokens,
+    action,
+    generation_run_id: generationRunId,
+  });
+  if (error) {
+    throw new Error(`[logUsage] Insert failed: ${error.message} (code: ${error.code})`);
+  }
+  Logger.info(`[logUsage] Logged ${inputTokens}+${outputTokens} tokens for action=${action}`);
 }
 
 // ==========================================
@@ -1148,126 +1283,83 @@ function getServiceClient() {
 }
 
 async function hashPrompt(prompt: string, modelTier: ModelTier): Promise<string> {
-  const cacheInput = getModelTierCacheInput(prompt, modelTier);
+  const cacheInput = `${resolveClaudeModel(modelTier)}\n${getModelTierCacheInput(prompt, modelTier)}`;
   const bytes = new TextEncoder().encode(cacheInput);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function getCachedResponse(promptHash: string): Promise<string | null> {
-  try {
-    const { data, error } = await getServiceClient()
-      .from('ai_cache')
-      .select('response')
-      .eq('prompt_hash', promptHash)
-      .maybeSingle();
-    if (error || !data) return null;
-    return data.response ?? null;
-  } catch (e) {
-    Logger.warn(`[ai_cache] Read failed: ${e}`);
-    return null;
+  const { data, error } = await getServiceClient()
+    .from('ai_cache')
+    .select('response')
+    .eq('prompt_hash', promptHash)
+    .maybeSingle();
+  if (error) throw new Error(`[ai_cache] Read failed; refusing an uncached AI call: ${error.message}`);
+  return data?.response ?? null;
+}
+
+async function cacheResponse(promptHash: string, prompt: string, response: string, model: string): Promise<void> {
+  const { error } = await getServiceClient()
+    .from('ai_cache')
+    .upsert(
+      { prompt_hash: promptHash, prompt: prompt.slice(0, 5000), response, model, provider: 'anthropic' },
+      { onConflict: 'prompt_hash' }
+    );
+  if (error) {
+    throw new Error(`[ai_cache] Write failed after generation: ${error.message}`);
   }
 }
 
-function cacheResponseFireAndForget(promptHash: string, prompt: string, response: string, model: string): void {
-  getServiceClient()
-    .from('ai_cache')
-    .insert({ prompt_hash: promptHash, prompt: prompt.slice(0, 5000), response, model, provider: 'anthropic' })
-    .then(({ error }: { error: any }) => {
-      // 23505 = unique_violation: another concurrent call already cached this prompt — not an error.
-      if (error && error.code !== '23505') {
-        Logger.warn(`[ai_cache] Insert failed: ${error.message}`);
-      }
-    });
-}
-
-// Helper wrapper for existing business logic with RETRY & CLEANUP
 async function callLLM(
   prompt: string,
   language: string = 'ro',
-  modelTier: ModelTier = 'standard',
-  isRetry: boolean = false
-): Promise<string> {
-  const promptHash = await hashPrompt(prompt, modelTier);
-  if (!isRetry) {
-    const cached = await getCachedResponse(promptHash);
-    if (cached) {
-      Logger.info('[ai_cache] Cache hit — skipping LLM call.');
-      return cached;
-    }
-  }
-
-  // Reset before the attempt so a call that fails BEFORE getting any response
-  // (auth/network error) never re-logs a stale usage value from a prior call.
-  _lastCallUsage = { inputTokens: 0, outputTokens: 0, model: 'unknown' };
-  let response: string;
-  try {
-    response = await orchestrator.execute(prompt, modelTier);
-  } finally {
-    // Log whatever usage the provider captured for THIS attempt, even if it
-    // then threw (e.g. our own text-validation rejected an otherwise-billed
-    // response) — real spend must not go untracked just because our own
-    // validation rejected the output.
-    if (_requestUserId && _lastCallUsage.inputTokens > 0) {
-      logUsageFireAndForget(_requestUserId, _lastCallUsage.inputTokens, _lastCallUsage.outputTokens, _lastCallUsage.model, _requestAction);
-    }
-  }
-
-  cacheResponseFireAndForget(promptHash, prompt, response, _lastCallUsage.model);
-
-  // Phase 1: Fast Static Check
-  if (containsBannedPhrases(response, language)) {
-    if (isRetry || _retryBudget <= 0) {
-      Logger.warn("Content still contains banned phrases after retry (or retry budget exhausted). Returning best effort.");
-      return response;
-    }
-    Logger.warn(`Banned phrases detected (Static Check - Lang: ${language}). Retrying...`);
-    _retryBudget--;
-    return retryWithStrictInstructions(prompt, language, "Contains banned phrases (e.g. English words in Romanian text).", modelTier);
-  }
-
-  // Phase 2: Deterministic Language Detector (replaces LLM Judge — zero extra AI calls)
-  const langCheck = detectLanguageDeterministically(response, language);
-  if (!langCheck.valid) {
-    if (isRetry || _retryBudget <= 0) {
-      Logger.warn(`[callLLM] Language check rejected RETRY attempt or retry budget exhausted: ${langCheck.reason}. Returning best effort.`);
-    } else {
-      Logger.warn(`[callLLM] Language mismatch detected (confidence: ${Math.round((langCheck.confidence || 0) * 100)}%): ${langCheck.reason}. Retrying with strict instructions.`);
-      _retryBudget--;
-      return retryWithStrictInstructions(prompt, language, langCheck.reason, modelTier);
-    }
-  } else {
-    Logger.info(`[callLLM] Language OK (confidence: ${Math.round((langCheck.confidence || 0.5) * 100)}% ${language}).`);
-  }
-
-  return response;
-}
-
-async function retryWithStrictInstructions(
-  prompt: string,
-  language: string,
-  errorReason?: string,
   modelTier: ModelTier = 'standard'
 ): Promise<string> {
-    const strictInstruction = `
-    \n\n
-    *** CRITICAL INSTRUCTION - STRICT MODE ***
-    The previous output was REJECTED because: ${errorReason || "It contained apologetic or meta-conversational phrases."}
+  const context = aiRequestContext.getStore();
+  try {
+    if (!context) throw new Error('AI request context is unavailable; refusing an untracked AI call.');
+    if (context?.failureMessage) {
+      throw new Error(`Generation already failed earlier in this request: ${context.failureMessage}`);
+    }
 
-    YOU MUST FOLLOW THESE RULES:
-    1. **LANGUAGE FIX**: Ensure ALL content is in **${language}**. Do NOT mix languages.
-       - If ${language} is Romanian, NO English sentences allowed.
-    2. **STYLE FIX**:
-       - DO NOT apologize.
-       - DO NOT ask for more context.
-       - DO NOT say "I hope this helps".
-       - DO NOT provide a "skeleton".
-    3. **IMPERATIVE ONLY**: For instructions, use commands ("Do this"), not descriptions ("The user should do this").
+    const promptHash = await hashPrompt(prompt, modelTier);
+    const cached = await getCachedResponse(promptHash);
+    let response: string;
+    let model = resolveClaudeModel(modelTier);
 
-    GENERATE THE CORRECTED CONTENT NOW.
-    `;
+    if (cached !== null) {
+      Logger.info('[ai_cache] Cache hit — skipping LLM call.');
+      response = cached;
+    } else {
+      const completion = await requestAICompletion(prompt, modelTier, context);
+      model = completion.model;
+      response = completion.text;
+    }
 
-    return callLLM(prompt + strictInstruction, language, modelTier, true);
+    if (!response.trim()) {
+      throw new Error(`Invalid empty response from Claude (${model}).`);
+    }
+    if (containsBannedPhrases(response, language)) {
+      throw new Error(`Generated content failed the banned-phrase check for language ${language}; generation stopped without retry.`);
+    }
+
+    const langCheck = detectLanguageDeterministically(response, language);
+    if (!langCheck.valid) {
+      throw new Error(`Generated content failed language validation: ${langCheck.reason}; generation stopped without retry.`);
+    }
+
+    if (cached === null) {
+      await cacheResponse(promptHash, prompt, response, model);
+    }
+
+    return response;
+  } catch (error) {
+    if (context && !context.failureMessage) {
+      context.failureMessage = error instanceof Error ? error.message : String(error);
+    }
+    throw error;
+  }
 }
 
 // ==========================================
@@ -2472,53 +2564,6 @@ const renderManualSection = (section: GoldenSection, protagonistName: string, la
 };
 
 
-/** Build a fallback ModuleContext when LLM generation fails */
-function buildFallbackModuleContext(
-  course: Course,
-  moduleData: any,
-): ModuleContext {
-  const modules = (course.blueprint && Array.isArray(course.blueprint.modules)) ? course.blueprint.modules : [];
-  const moduleIndex = moduleData.module_index ?? 0;
-  const duration = moduleData.duration_minutes || 60;
-  // Only Romanian gets Romanian section titles; every other language falls back to
-  // English rather than silently defaulting to Romanian (same fix as COST_ZERO_SLIDES_LABELS).
-  const isRoFallback = (course.language || '').toLowerCase().startsWith('ro');
-  const fallbackTitles = isRoFallback
-    ? { intro: 'Introducere', theory: 'Concepte Cheie', exercise: 'Aplicare Practică', debrief: 'Debrief & Concluzii' }
-    : { intro: 'Introduction', theory: 'Key Concepts', exercise: 'Practical Application', debrief: 'Debrief & Conclusions' };
-
-  return {
-    contextVersion: 'v4.0',
-    moduleId: moduleData.id,
-    moduleTitle: moduleData.title,
-    moduleDurationMinutes: duration,
-    environment: course.environment as CourseEnvironment || 'LIVE',
-    language: course.language || 'ro',
-    targetAudience: course.target_audience || 'General',
-    keyConcepts: [{
-      id: 'c1',
-      name: moduleData.title,
-      durationMinutes: Math.round(duration * 0.6),
-      type: 'THEORY',
-      coreIdea: `Core concepts for ${moduleData.title}`,
-      keyTerms: [],
-    }],
-    macroPosition: {
-      isFirstModule: moduleIndex === 0,
-      isLastModule: moduleIndex === modules.length - 1,
-      previousModuleTitle: moduleIndex > 0 ? (modules[moduleIndex - 1]?.title || null) : null,
-      nextModuleTitle: moduleIndex < modules.length - 1 ? (modules[moduleIndex + 1]?.title || null) : null,
-      transitionNote: 'Continues from previous module concepts.',
-    },
-    timingPlan: [
-      { sectionTitle: fallbackTitles.intro, durationMinutes: 10, type: 'INTRO', conceptRef: null },
-      { sectionTitle: fallbackTitles.theory, durationMinutes: Math.round(duration * 0.4), type: 'THEORY', conceptRef: 'c1' },
-      { sectionTitle: fallbackTitles.exercise, durationMinutes: Math.round(duration * 0.35), type: 'EXERCISE', conceptRef: 'c1' },
-      { sectionTitle: fallbackTitles.debrief, durationMinutes: Math.round(duration * 0.15), type: 'DEBRIEF', conceptRef: null },
-    ],
-  };
-}
-
 /** Generate (or regenerate) the ModuleContext JSON and save it to course_modules.content_data */
 async function generateModuleContext(
   supabase: any,
@@ -2579,8 +2624,8 @@ async function generateModuleContext(
     ctx.environment = course.environment as CourseEnvironment || 'LIVE';
     return ctx;
   } catch (e: any) {
-    Logger.error('Failed to generate ModuleContext, using fallback.', e);
-    return buildFallbackModuleContext(course, moduleData);
+    Logger.error('Failed to generate ModuleContext; stopping generation.', e);
+    throw e;
   }
 }
 
@@ -3080,79 +3125,71 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  try {
+  const requestContext: AIRequestContext = {
+    userId: null,
+    action: 'unknown',
+    generationRunId: null,
+    failureMessage: null,
+    creditCharged: false,
+  };
+  const response = await aiRequestContext.run(requestContext, async () => {
+    try {
     const supabase = createClient(Config.SUPABASE_URL, Config.SUPABASE_SERVICE_ROLE_KEY);
 
     const body = await req.json();
     const { action } = body;
-
-    // Reset the per-request retry budget so a prior (warm-isolate) request's
-    // leftover count can never affect this one.
-    _retryBudget = 5;
+    requestContext.action = typeof action === 'string' ? action : 'unknown';
+    const generationRunId = body.generation_run_id;
+    if (generationRunId !== undefined && generationRunId !== null) {
+      if (typeof generationRunId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(generationRunId)) {
+        return new Response(JSON.stringify({ error: 'Invalid generation_run_id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      requestContext.generationRunId = generationRunId;
+    } else {
+      requestContext.generationRunId = crypto.randomUUID();
+    }
 
     Logger.info(`Request received. Action: ${action}`);
 
     // ==========================================
-    // AI CREDIT GATE
-    // Blocks AI generation if user is over their monthly limit.
-    // Non-AI actions, health checks, and credit_status queries bypass this.
-    // FAIL-OPEN: if the credit system errors, generation proceeds normally.
+    // Authenticate AI actions here; operation credits are charged only on cache misses.
     // ==========================================
     const NON_AI_ACTIONS = [
-      'ping', 'provider_status', 'test_connection', 'credit_status',
+      'ping', 'provider_status', 'credit_status',
     ];
-    const isDryRunBackfill = action === 'backfill_key_takeaways' && body.dry_run !== false;
 
-    if (!NON_AI_ACTIONS.includes(action) && !isDryRunBackfill) {
+    if (!NON_AI_ACTIONS.includes(action)) {
       try {
         // Get user from JWT
         const authHeader = req.headers.get('Authorization');
-        if (authHeader) {
-          const { data: { user: authUser } } = await supabase.auth.getUser(
-            authHeader.replace('Bearer ', '')
-          );
-          if (authUser?.id) {
-            _requestUserId = authUser.id;
-            _requestAction = action;
-            const opCost = ACTION_OPERATION_COSTS[action] ?? 1;
-            if (opCost > 0) {
-              const { data: creditResult } = await supabase.rpc('increment_ai_operations', {
-                p_user_id: authUser.id,
-                p_amount: opCost,
-              });
-              if (creditResult && !creditResult.allowed) {
-                Logger.warn(`[CreditGate] User ${authUser.id} is over limit: ${creditResult.used}/${creditResult.limit}`);
-                return new Response(JSON.stringify({
-                  error: 'credit_limit_exceeded',
-                  message: `Ai atins limita lunară de ${creditResult.limit} operații AI. Utilizate: ${creditResult.used}. Te rugăm să aștepți resetarea lunară sau să upgradezi planul.`,
-                  credit_status: creditResult,
-                }), {
-                  status: 402,
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                });
-              }
-            } else {
-              // Cost-zero action — just verify user hasn't exceeded limit without consuming
-              const { data: creditStatus } = await supabase.rpc('get_ai_credit_status', {
-                p_user_id: authUser.id,
-              });
-              if (creditStatus && creditStatus.is_over_limit) {
-                Logger.warn(`[CreditGate] User ${authUser.id} is over limit (cost-zero action): ${creditStatus.used}/${creditStatus.limit}`);
-                return new Response(JSON.stringify({
-                  error: 'credit_limit_exceeded',
-                  message: `Ai atins limita lunară de ${creditStatus.limit} operații AI. Utilizate: ${creditStatus.used}. Te rugăm să aștepți resetarea lunară sau să upgradezi planul.`,
-                  credit_status: creditStatus,
-                }), {
-                  status: 402,
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                });
-              }
-            }
-          }
+        if (!authHeader) {
+          return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(
+          authHeader.replace('Bearer ', '')
+        );
+        if (authError || !authUser?.id) {
+          return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        requestContext.userId = authUser.id;
       } catch (creditErr) {
-        // Fail open — don't block generation if credit system has an error
-        Logger.warn('[CreditGate] Credit check failed (fail-open):', creditErr);
+        Logger.error('[CreditGate] Credit check failed; blocking AI request.', creditErr);
+        return new Response(JSON.stringify({
+          error: 'credit_check_failed',
+          message: 'Verificarea limitei AI a eșuat. Nicio cerere AI nu a fost trimisă.',
+        }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
     }
 
@@ -3161,7 +3198,12 @@ serve(async (req) => {
     // ==========================================
 
     if (action === 'ping') {
-      return new Response(JSON.stringify({ message: 'pong', version: '3.0-MODULAR' }), {
+      return new Response(JSON.stringify({
+        message: 'pong',
+        version: '4.0-COST-CONTROL',
+        costControlVersion: 1,
+        tokenAccounting: true,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -3212,8 +3254,8 @@ serve(async (req) => {
        try {
          const claude = new ClaudeProvider();
          if (claude.isConfigured()) {
-            const resp = await claude.generateContent("Hi");
-            results.claude = { status: 200, ok: true, body: resp };
+            const completion = await requestAICompletion("Hi", 'standard', requestContext);
+            results.claude = { status: 200, ok: true, body: completion.text };
          } else {
             results.claude = { status: "missing_key" };
          }
@@ -3391,27 +3433,23 @@ Format: JSON array of strings. Example: ["Takeaway 1", "Takeaway 2", "Takeaway 3
 
 OUTPUT JSON ONLY. No markdown, no explanation.`;
 
-        try {
-          const raw = await orchestrator.execute(extractPrompt);
-          const takeaways = repairAndParseJson<string[]>(raw);
+        const raw = await callLLM(extractPrompt, lang);
+        const takeaways = repairAndParseJson<string[]>(raw);
 
-          if (Array.isArray(takeaways) && takeaways.length > 0) {
-            results.push({ lesson_id: lesson.id, title: lesson.title, takeaways, committed: false });
+        if (!Array.isArray(takeaways) || takeaways.length === 0) {
+          throw new Error(`Invalid key_takeaways response for lesson ${lesson.id}; backfill stopped.`);
+        }
 
-            if (!dry_run) {
-              // Commit to DB
-              await supabase
-                .from('course_lessons')
-                .update({ key_takeaways: takeaways })
-                .eq('id', lesson.id);
-              results[results.length - 1].committed = true;
-              Logger.info(`[backfill] Committed takeaways for lesson: ${lesson.title}`);
-            }
-          } else {
-            Logger.warn(`[backfill] Failed to extract takeaways for lesson: ${lesson.title}`);
-          }
-        } catch (err) {
-          Logger.error(`[backfill] Error for lesson ${lesson.id}:`, err);
+        results.push({ lesson_id: lesson.id, title: lesson.title, takeaways, committed: false });
+
+        if (!dry_run) {
+          const { error: updateError } = await supabase
+            .from('course_lessons')
+            .update({ key_takeaways: takeaways })
+            .eq('id', lesson.id);
+          if (updateError) throw new Error(`Failed to save key_takeaways for lesson ${lesson.id}: ${updateError.message}`);
+          results[results.length - 1].committed = true;
+          Logger.info(`[backfill] Committed takeaways for lesson: ${lesson.title}`);
         }
       }
 
@@ -3551,20 +3589,31 @@ OUTPUT JSON ONLY. No markdown, no explanation.`;
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error: any) {
-    Logger.error("Main Handler Error", error);
-    
-    // Return 200 with error details to allow client to display the message
-    // instead of a generic 500 FunctionsHttpError
-    return new Response(JSON.stringify({ 
-      error: error.message || "An unexpected error occurred",
-      details: error.stack,
-      context: "Main Handler Catch"
+    } catch (error: any) {
+      Logger.error("Main Handler Error", error);
+      if (!requestContext.failureMessage) {
+        requestContext.failureMessage = error instanceof Error ? error.message : String(error);
+      }
+      return new Response(JSON.stringify({ 
+        error: error.message || "An unexpected error occurred",
+        context: "Main Handler Catch"
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  });
+
+  if (requestContext.failureMessage) {
+    return new Response(JSON.stringify({
+      error: requestContext.failureMessage,
+      context: 'AI generation failed; no automatic retry was made.',
     }), {
-      status: 200, // Intentional 200 to bypass Edge Function 500 trap
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
+  return response;
 });
 
 // ==========================================
@@ -3934,26 +3983,7 @@ async function handleLegacyStep(
         return response;
       } catch (e: any) {
         Logger.error(`[LegacyStep] CourseDNA LLM Failed:`, e);
-        
-        // Soft Fallback to prevent Edge Function timeout/crash from killing the UI flow
-        const isRo = (course.language || 'ro').toLowerCase().startsWith('ro');
-        return JSON.stringify({
-          terminology: {
-            participant: isRo ? "Participant" : "Participant",
-            exercise: isRo ? "Exercițiu" : "Exercise",
-            trainer: isRo ? "Trainer" : "Trainer",
-            mandatoryTerms: {},
-            forbiddenPhrases: []
-          },
-          toneFreeText: isRo ? "Profesional, clar și încurajator." : "Professional, clear and encouraging.",
-          domainContext: {
-            industryTerms: {},
-            clientProfiles: [],
-            productCatalog: [],
-            competitorIntelligence: [],
-            negotiationFrameworks: []
-          }
-        });
+        throw e;
       }
   }
 
@@ -4101,8 +4131,7 @@ async function handleLegacyStep(
       return result;
     } catch (error) {
        Logger.error("Failed to generate performance objectives", error);
-       // Fallback to prevent runtime crash
-       return `- Identify key components of the subject\n- Apply core principles in daily tasks\n- Demonstrate understanding of safety protocols\n- Evaluate process efficiency\n- Create actionable improvement plans`;
+       throw error;
     }
   }
 
@@ -4278,7 +4307,7 @@ async function handleLegacyStep(
         return JSON.stringify(json, null, 2);
       } catch (e) {
           Logger.error("Failed to generate/parse macro structure", e);
-          return JSON.stringify({ error: "Failed to generate macro structure" });
+          throw e;
       }
   }
 
@@ -4598,8 +4627,10 @@ async function handleAnalyzeUpload(content: string, fileName: string, environmen
     Logger.warn(`Document extremely large. Sampling ${selectedChunks.length} chunks out of ${chunks.length}.`);
   }
 
-  // Step 1: Summarize Chunks (Parallel)
-  const summarizePromises = selectedChunks.map(async (chunk, index) => {
+  // Process one chunk at a time so a failed request cannot leave sibling calls running.
+  const summaries: string[] = [];
+  for (let index = 0; index < selectedChunks.length; index++) {
+    const chunk = selectedChunks[index];
     const chunkPrompt = `
       **TASK**: Analyze this segment (Part ${index + 1}) of a large course document.
       **GOAL**: Extract key pedagogical topics, potential module titles, and specific learning points.
@@ -4608,14 +4639,12 @@ async function handleAnalyzeUpload(content: string, fileName: string, environmen
       **OUTPUT**: A concise bulleted summary. Focus on STRUCTURE and KEY CONCEPTS.
     `;
     try {
-      return await callLLM(chunkPrompt);
+      summaries.push(await callLLM(chunkPrompt));
     } catch (e) {
       Logger.error(`Failed to summarize chunk ${index}`, e);
-      return ""; // Skip failed chunks
+      throw e;
     }
-  });
-
-  const summaries = await Promise.all(summarizePromises);
+  }
   const masterSummary = summaries.join("\n\n=== NEXT SEGMENT ===\n\n");
 
   // Step 2: Final Blueprint Generation from Summaries
@@ -4739,7 +4768,6 @@ function getDefaultEnglishLabels(): LocalizedLabels {
 }
 
 async function handleGenerateLocalizedLabels(course: any, language: string = 'en'): Promise<LocalizedLabels> {
-  const fallback = getDefaultEnglishLabels();
   const prompt = `
 You are a localization editor for training materials.
 Translate the 18 UI and heading labels below into ${language}.
@@ -4756,11 +4784,11 @@ Subject: ${course?.subject || 'General training'}
     const parsed = repairAndParseJson<Partial<LocalizedLabels>>(raw);
     const valid = LOCALIZED_LABEL_KEYS.every(key => typeof parsed?.[key] === 'string' && parsed[key]!.trim().length > 0);
     if (valid) return parsed as LocalizedLabels;
-    Logger.warn('[LocalizedLabels] Invalid label set; using English fallback.');
+    throw new Error('[LocalizedLabels] Invalid label set; generation stopped.');
   } catch (error) {
-    Logger.warn('[LocalizedLabels] Generation failed; using English fallback.', error);
+    Logger.error('[LocalizedLabels] Generation failed; stopping.', error);
+    throw error;
   }
-  return fallback;
 }
 
 async function handleGenerateLearningObjectives(course: any): Promise<string> {
@@ -4800,42 +4828,13 @@ async function handleGenerateLearningObjectives(course: any): Promise<string> {
     Logger.info(`[Objectives] Generating learning objectives for course: ${title}`);
     const rawResponse = await callLLM(prompt, lang);
     
-    // Clean up any possible markdown wrappers
-    let cleaned = rawResponse.replace(/```json/gi, '').replace(/```/gi, '').trim();
-    
-    // Validate if it's parsable
-    try {
-        const parsed = JSON.parse(cleaned);
-        if (parsed && Array.isArray(parsed.objectives)) {
-            return JSON.stringify(parsed);
-        }
-    } catch (e) {
-        Logger.warn(`[Objectives] Failed to parse generated objectives as JSON: ${e.message}. Raw response: ${rawResponse}`);
+    const cleaned = rawResponse.replace(/```json/gi, '').replace(/```/gi, '').trim();
+    const parsed = repairAndParseJson<{ objectives?: unknown }>(cleaned);
+    if (!Array.isArray(parsed?.objectives) || parsed.objectives.length < 3 || parsed.objectives.length > 5 ||
+        parsed.objectives.some(objective => typeof objective !== 'string' || !objective.trim())) {
+      throw new Error('[Objectives] Invalid objective response; generation stopped.');
     }
-    
-    // Fallback: If not valid JSON, split by line and clean
-    const lines = cleaned.split('\n')
-        .map(l => l.replace(/^\d+[\.\)]\s*/, '').replace(/^[-*•]\s*/, '').trim())
-        .filter(l => l.length > 5 && !l.startsWith('{') && !l.startsWith('}') && !l.startsWith('"') && !l.startsWith('['));
-    
-    if (lines.length > 0) {
-        return JSON.stringify({ objectives: lines });
-    }
-    
-    // Final fallback. Only Romanian gets Romanian objectives; every other language
-    // falls back to English rather than silently defaulting to Romanian.
-    const isRoObjectives = (lang || '').toLowerCase().startsWith('ro');
-    return JSON.stringify({
-        objectives: isRoObjectives ? [
-            `Definirea conceptelor de bază din ${title}`,
-            `Aplicarea tehnicilor practice specifice audienței: ${targetAudience}`,
-            `Evaluarea rezultatelor și optimizarea fluxului de lucru`
-        ] : [
-            `Define the core concepts of ${title}`,
-            `Apply practical techniques specific to the audience: ${targetAudience}`,
-            `Evaluate results and optimize the workflow`
-        ]
-    });
+    return JSON.stringify(parsed);
 }
 
 async function handleChatOnboarding(chat_history: any[], course: any): Promise<string> {
@@ -4893,15 +4892,7 @@ async function handleChatOnboarding(chat_history: any[], course: any): Promise<s
         Logger.info("Step 1: Parsed Analyst Data", analystData);
     } catch (e) {
         Logger.error("Failed to parse Analyst response", e);
-        // Fallback: Assume we need more info if AI failed to format correctly.
-        // Only Romanian gets the Romanian message; every other language falls back to English.
-        const isRoChat = (lang || '').toLowerCase().startsWith('ro');
-        return JSON.stringify({
-            message: isRoChat
-                ? "Îmi poți da te rog mai multe detalii despre audiența țintă și obiective?"
-                : "Could you give me a bit more detail about the target audience and objectives?",
-            blueprint: null
-        });
+        throw e;
     }
 
     if (analystData?.status !== 'READY') {
@@ -4957,13 +4948,7 @@ async function handleChatOnboarding(chat_history: any[], course: any): Promise<s
         blueprintData = repairAndParseJson(rawBlueprint);
     } catch (e) {
         Logger.error("Failed to parse Blueprint", e);
-        const isRoBlueprint = (lang || '').toLowerCase().startsWith('ro');
-        return JSON.stringify({
-            message: isRoBlueprint
-                ? "Am întâmpinat o eroare tehnică la generarea structurii. Te rog să mai încerci o dată."
-                : "I ran into a technical error generating the structure. Please try again.",
-            blueprint: null
-        });
+        throw e;
     }
 
     // Combine for the final return
@@ -5029,7 +5014,7 @@ async function handleRefineBlueprint(course: any, blueprint: any, language: stri
         return JSON.stringify(parsed);
     } catch (e) {
         Logger.error("[RefineBlueprint] Failed to parse refined blueprint", e);
-        return JSON.stringify(blueprint);
+        throw e;
     }
 }
 
@@ -5307,13 +5292,8 @@ RULES:
     const introData = repairAndParseJson<WorkbookIntroData>(raw);
     return renderWorkbookIntroHtml(introData);
   } catch (e) {
-    Logger.error('[generateWorkbookIntro] Failed to parse JSON or render HTML', e);
-    // Fallback: minimal HTML intro. Only Romanian gets the Romanian text; every other
-    // language falls back to English rather than silently defaulting to Romanian.
-    const isRoIntro = (course.language || '').toLowerCase().startsWith('ro');
-    return isRoIntro
-      ? `<h2 style="font-family:Arial,sans-serif;color:#1a1a2e;">Bun venit la ${course.title || 'Curs'}</h2><p style="font-family:Arial,sans-serif;">Acest caiet este instrumentul tău de lucru pe parcursul cursului. Notează, reflectează și completează exercițiile.</p>`
-      : `<h2 style="font-family:Arial,sans-serif;color:#1a1a2e;">Welcome to ${course.title || 'the Course'}</h2><p style="font-family:Arial,sans-serif;">This workbook is your working tool throughout the course. Take notes, reflect, and complete the exercises.</p>`;
+    Logger.error('[generateWorkbookIntro] Failed; stopping generation.', e);
+    throw e;
   }
 }
 
@@ -5344,11 +5324,7 @@ RULES:
     const outroData = repairAndParseJson<WorkbookOutroData>(raw);
     return renderWorkbookOutroHtml(outroData);
   } catch (e) {
-    Logger.error('[generateWorkbookOutro] Failed to parse JSON or render HTML', e);
-    // Only Romanian gets the Romanian text; every other language falls back to English.
-    const isRoOutro = (course.language || '').toLowerCase().startsWith('ro');
-    return isRoOutro
-      ? `<h2 style="font-family:Arial,sans-serif;color:#1a1a2e;">Pași următori</h2><p style="font-family:Arial,sans-serif;">Aplică ce ai învățat! Identifică 3 acțiuni concrete pe care le vei lua în următoarele 30 de zile.</p>`
-      : `<h2 style="font-family:Arial,sans-serif;color:#1a1a2e;">Next Steps</h2><p style="font-family:Arial,sans-serif;">Apply what you've learned! Identify 3 concrete actions you'll take in the next 30 days.</p>`;
+    Logger.error('[generateWorkbookOutro] Failed; stopping generation.', e);
+    throw e;
   }
 }
